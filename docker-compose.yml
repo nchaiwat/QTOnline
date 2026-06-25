@@ -1,0 +1,81 @@
+services:
+  db:
+    image: postgres:15
+    container_name: qt-online-db
+    restart: always
+    environment:
+      POSTGRES_USER: WAUser
+      POSTGRES_PASSWORD: Wa@!0302$$
+      POSTGRES_DB: qt_online_db
+    volumes:
+      - qt_db_data:/var/lib/postgresql/data
+    networks:
+      - qt-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U WAUser -d qt_online_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    image: qt-online-web
+    container_name: qt-online-web
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - POSTGRES_USER=WAUser
+      - POSTGRES_PASSWORD=Wa@!0302$$
+      - POSTGRES_DB=qt_online_db
+      - FLASK_APP=app.py
+      - FLASK_ENV=production
+      - SECRET_KEY=your_production_secret_key_change_this_in_production
+      - TELEGRAM_API_BASE_URL=${TELEGRAM_API_BASE_URL:-https://api.telegram.org}
+      - TELEGRAM_BOT_TOKEN=8214911655:AAG5RKU6m75AOc3Wws0FqVBqn1CicDLsVWI
+      - TELEGRAM_GROUP_ID=-5241471050
+      - ENCRYPTION_KEY=Z7wQp9L2Xn5R8vA3mJ6kH1yT4gF0cB9dE5sS8xV2N1M=
+    volumes:
+      - ./instance:/app/instance
+      - ./uploads:/app/uploads
+    networks:
+      - qt-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  nginx:
+    image: nginx:alpine
+    container_name: qt-online-nginx
+    restart: always
+    depends_on:
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.qt-online.rule=Host(`qol.windowasia.com`)"
+      - "traefik.http.routers.qt-online.entrypoints=websecure"
+      - "traefik.http.routers.qt-online.tls=true"
+      - "traefik.http.routers.qt-online.tls.certresolver=mytlschallenge"
+      - "traefik.http.services.qt-online.loadbalancer.server.port=80"
+      - "traefik.docker.network=root_default" # แก้ปัญหา Gateway Timeout
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - qt-network
+      - root_default
+
+networks:
+  qt-network:
+  root_default:
+    external: true
+
+volumes:
+  qt_db_data:
+    external: true
+    name: qt-online_qt_db_data # เปลี่ยนชื่อให้ไปดึงข้อมูลจาก Volume เดิมมาใช้

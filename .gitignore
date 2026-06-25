@@ -1,0 +1,23 @@
+# python
+venv/
+__pycache__/
+*.py[cod]
+# Database backups and Excel dumps
+*.db
+*.sqlite
+*.sqlite3
+*.sql
+*.xlsx
+# Environment Variables (Secrets)
+.env
+.env.local
+.env.production
+# Uploads & Logs
+uploads/
+instance/
+logs/
+*.log
+# QR code texts and scratch codes
+qr_fb.txt
+qr_line.txt
+scratch/

@@ -1,0 +1,12 @@
+[Unit]
+Description=PO-Online Service
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/var/www/po-online
+ExecStart=/var/www/po-online/venv/bin/gunicorn --workers 4 --bind 0.0.0.0:8080 main:app
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
