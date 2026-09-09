@@ -2,8 +2,10 @@
 
 > ⚠️ **CRITICAL REMINDER FOR AI ASSISTANT (อ่านทุกครั้งเมื่อเริ่ม Session ใหม่):**
 > 1. **โปรเจกต์นี้ใช้งาน Git:** Remote คือ `https://github.com/nchaiwat/QTOnline.git` (Branch: `main`)
-> 2. **เมื่อเริ่ม Session หรือก่อนเริ่มเขียนโค้ด:** ต้องทักทายและแจ้งสถานะ Git ให้ผู้ใช้ทราบเสมอ (เช่น `git status`, ตรวจสอบว่าโค้ดล่าสุดดึงมาจาก `origin/main` หรือยัง)
-> 3. **เมื่อจบงานหรือเตรียมนำขึ้น Server:** ต้องสรุปคำสั่ง `git add`, `git commit`, `git push origin main` ให้ผู้ใช้เสมอ
+> 2. **โปรเจกต์นี้มีระบบ CIAM (Centralized Identity Management):** มี Directory API (`/api/v1/directory/...`) เชื่อมต่อกับระบบจัดการตัวตนส่วนกลางขององค์กร และมีหน้า System Settings (`#page-settings`)
+> 3. **เมื่อเริ่ม Session หรือก่อนเริ่มเขียนโค้ด:** ต้องทักทายและ**แจ้งให้ผู้ใช้ทราบเสมอว่าเราใช้ Git และมีระบบ CIAM เชื่อมต่ออยู่** พร้อมตรวจสอบสถานะ Git (`git status`, ตรวจสอบว่าโค้ดล่าสุดดึงมาจาก `origin/main` หรือยัง)
+> 4. **การสั่งคำสั่งบน VPS:** ก่อนสั่ง `git pull` หรือคำสั่งใดๆ บน VPS **ต้องแจ้งให้ `cd /var/www/QT-Online` ก่อนทุกครั้ง** และต้องใส่ Flag `--build` ในคำสั่ง `docker compose up -d --no-deps --build web` เสมอ
+> 5. **เมื่อจบงานหรือเตรียมนำขึ้น Server:** ต้องสรุปคำสั่ง `git add`, `git commit`, `git push origin main` ให้ผู้ใช้เสมอ
 
 ---
 
