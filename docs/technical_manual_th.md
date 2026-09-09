@@ -133,7 +133,31 @@
 - `GET /api/notifications`: ดึงรายการแจ้งเตือนสำหรับผู้ใช้
 - `POST /api/notifications/<id>/read`: ทำเครื่องหมายแจ้งเตือนว่าอ่านแล้ว
 
+### 6.7 Centralized Identity Management (CIAM) M2M APIs
+รองรับการเชื่อมต่อกับระบบจัดการตัวตนส่วนกลางตาม [CENTRAL_IDENTITY_MANAGEMENT_API_SPEC.md](CENTRAL_IDENTITY_MANAGEMENT_API_SPEC.md) โดยต้องส่ง Header `X-Management-API-Key` และมาจาก IP Whitelist:
+- `GET /api/v1/directory/accounts`: ดึงรายการบัญชีผู้ใช้ทั้งหมดสำหรับ Directory Synchronization
+- `PATCH /api/v1/directory/accounts/<username>/status`: เปิดหรือปิดการใช้งานบัญชีผู้ใช้ (JSON: `is_active: bool`, `reason: str`)
+- `POST /api/v1/directory/accounts`: สร้างบัญชีผู้ใช้ใหม่เข้าสู่ระบบ
+
+### 6.8 System Administration & Audit Log APIs (Administrator Only)
+- `GET /api/admin/ciam/settings`: ดึงการตั้งค่า CIAM (API Key, Allowed IPs, Is Enabled)
+- `PUT /api/admin/ciam/settings`: อัปเดตการตั้งค่า CIAM
+- `GET /api/admin/ciam/logs`: ดึงประวัติ Audit Logs การเชื่อมต่อจากระบบ CIAM
+- `GET /api/admin/login-logs`: ดึงประวัติการ Login เข้าสู่ระบบของผู้ใช้ทั้งหมด
+
 ---
 
 ## 7. กระบวนการอัปโหลดเอกสาร (Document Handling)
 ไฟล์ที่อัปโหลดเข้าสู่ระบบจะถูกเก็บไว้เป็นไฟล์บนหน่วยความจำของเซิร์ฟเวอร์ (Folder: `uploads/`) โดยมีการบันทึก Path และ Metadata ลงในฐานข้อมูล เพื่อให้สามารถเรียกดูผ่าน URL และตรวจสอบย้อนกลับได้เมื่อมีการลบหรือแก้ไข
+
+---
+
+## 8. การปรับปรุงประสิทธิภาพฐานข้อมูล (Performance Indexes)
+ตาราง `purchase_orders` มีการสร้าง PostgreSQL Indexes เพื่อรองรับข้อมูลขนาดใหญ่และการค้นหาที่รวดเร็ว:
+- `idx_po_sale_user_id` บน `sale_user_id`
+- `idx_po_status` บน `status`
+- `idx_po_created` บน `created`
+- `idx_po_updated_at` บน `updatedAt`
+- `idx_po_sale_created` บน `(sale_user_id, created)`
+- ตารางรายการ `GET /api/pos` รองรับพารามิเตอร์ `summary=true` เพื่อดึงข้อมูลเฉพาะฟิลด์ที่จำเป็นผ่าน `PurchaseOrder.to_summary_dict()` ลด Payload ได้กว่า 90% และ Default ตัวกรองเดือนปัจจุบัน (`YYYY-MM`) เสมอเพื่อลด Load บนเซิร์ฟเวอร์
+
