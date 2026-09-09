@@ -1814,7 +1814,7 @@
 
                                 <!-- Save Button -->
                                 <div class="flex justify-end pt-2 border-t">
-                                    <button type="button" onclick="saveCiamSettings()"
+                                    <button type="button" id="btn-save-ciam-settings" onclick="saveCiamSettings()"
                                         class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-6 rounded-lg shadow flex items-center transition-colors">
                                         <i data-lucide="save" class="w-4 h-4 mr-2"></i> Save Settings
                                     </button>
@@ -7359,25 +7359,44 @@
         }
 
         async function saveCiamSettings() {
+            const btn = document.getElementById('btn-save-ciam-settings');
+            const origHtml = btn ? btn.innerHTML : '';
             try {
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerHTML = '<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg> Saving...';
+                }
+
                 const isEnabled = document.getElementById('ciam-is-enabled')?.checked || false;
                 const apiKey = document.getElementById('ciam-api-key')?.value.trim() || '';
                 const allowedIps = document.getElementById('ciam-allowed-ips')?.value.trim() || '';
 
                 const payload = {
+                    isEnabled: isEnabled,
                     is_enabled: isEnabled,
+                    apiKey: apiKey,
                     api_key: apiKey,
+                    allowedIps: allowedIps,
                     allowed_ips: allowedIps
                 };
 
                 const res = await fetchApi('/api/admin/ciam/settings', 'PUT', payload);
                 if (res) {
+                    if (res.setting) {
+                        currentCiamSettings = res.setting;
+                    }
                     showToast('CIAM Settings saved successfully!', 'success');
                     updateCiamBadge(isEnabled);
                 }
             } catch (err) {
                 console.error('Failed to save CIAM settings:', err);
                 showToast('Failed to save CIAM settings', 'error');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = origHtml;
+                    if (window.lucide) lucide.createIcons();
+                }
             }
         }
 

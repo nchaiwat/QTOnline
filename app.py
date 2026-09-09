@@ -3229,7 +3229,7 @@ def verify_ciam_access():
         for ip in allowed_ips_raw.replace("\n", ",").split(",")
         if ip.strip()
     ]
-    if allowed_ips and client_ip not in allowed_ips:
+    if allowed_ips and "*" not in allowed_ips and client_ip not in allowed_ips:
         return False, 403, f"Origin IP '{client_ip}' is not permitted.", client_ip
 
     return True, 200, None, client_ip
@@ -3556,13 +3556,26 @@ def manage_ciam_settings():
         data = request.json or {}
         if "isEnabled" in data:
             setting.is_enabled = bool(data["isEnabled"])
+        elif "is_enabled" in data:
+            setting.is_enabled = bool(data["is_enabled"])
+
         if "allowedIps" in data:
             setting.allowed_ips = str(data["allowedIps"]).strip()
+        elif "allowed_ips" in data:
+            setting.allowed_ips = str(data["allowed_ips"]).strip()
+
         if "defaultRole" in data:
             setting.default_role = str(data["defaultRole"]).strip()
+        elif "default_role" in data:
+            setting.default_role = str(data["default_role"]).strip()
+
         if data.get("regenerateKey"):
             token = secrets.token_hex(16)
             setting.api_key = f"sec_po_mgmt_{token}"
+        elif "apiKey" in data and data["apiKey"]:
+            setting.api_key = str(data["apiKey"]).strip()
+        elif "api_key" in data and data["api_key"]:
+            setting.api_key = str(data["api_key"]).strip()
 
         setting.updated_at = now_bangkok()
         db.session.commit()
