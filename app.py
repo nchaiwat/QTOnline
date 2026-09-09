@@ -3537,7 +3537,7 @@ def ciam_create_account():
 @app.route("/api/admin/ciam/settings", methods=["GET", "PUT"])
 @roles_required("Administrator")
 def manage_ciam_settings():
-    setting = CiamSetting.query.first()
+    setting = CiamSetting.query.order_by(CiamSetting.id.asc()).first()
     if not setting:
         token = secrets.token_hex(16)
         setting = CiamSetting(
@@ -3550,7 +3550,11 @@ def manage_ciam_settings():
         db.session.commit()
 
     if request.method == "GET":
-        return jsonify(setting.to_dict())
+        resp = jsonify(setting.to_dict())
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
+        return resp
 
     if request.method == "PUT":
         data = request.json or {}

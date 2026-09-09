@@ -33,14 +33,15 @@
   mkdir -p backups
   docker exec -t 9ed884bd8e40_qt-online-db pg_dumpall -U WAUser > backups/db_full_backup_$(date +%Y%m%d_%H%M%S).sql
   ```
-- **ขั้นตอนการ Deploy อัปเดตบน VPS:**
+- **ขั้นตอนการ Deploy อัปเดตบน VPS (ต้อง cd เข้า /var/www/QT-Online ทุกครั้ง):**
   ```bash
-  # 1. เคลียร์ไฟล์ค้างและดึงโค้ดล่าสุด
+  # 1. เข้าสู่โฟลเดอร์โปรเจกต์ เคลียร์ไฟล์ค้าง และดึงโค้ดล่าสุด
+  cd /var/www/QT-Online
   git stash -u
   git pull origin main
 
-  # 2. เริ่มทำงาน Container web ด้วยโค้ดใหม่ (ไม่ต้องรีสตาร์ท DB)
-  docker compose up -d --no-deps web
+  # 2. บิลด์อิมเมจใหม่และเริ่มทำงาน Container web (ต้องใส่ --build เพื่อให้โค้ดใหม่ถูก compile เข้า container)
+  docker compose up -d --no-deps --build web
 
   # 3. รัน Migration ฐานข้อมูล (หากมีตารางหรือ index ใหม่)
   docker exec -it qt-online-web python scripts/migrate_performance_and_ciam.py

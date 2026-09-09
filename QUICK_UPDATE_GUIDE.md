@@ -47,11 +47,13 @@ tar -czf backups/files_backup_$(date +%Y%m%d_%H%M%S).tar.gz .env uploads/
 ## 🚀 ขั้นตอนการ Deploy บน VPS (อัปเดตโค้ดล่าสุด)
 
 ```bash
-# 1. ดึงโค้ดล่าสุดจาก GitHub (หากมีไฟล์ค้างให้ใช้ git stash -u ก่อน)
+# 1. เข้าโฟลเดอร์โปรเจกต์ เคลียร์ไฟล์ค้าง และดึงโค้ดล่าสุด
+cd /var/www/QT-Online
+git stash -u
 git pull origin main
 
-# 2. เริ่มทำงาน Container web ด้วยโค้ดใหม่ (ไม่ต้องรีสตาร์ท DB)
-docker compose up -d --no-deps web
+# 2. Rebuild Image และเริ่มทำงาน Container web ด้วยโค้ดใหม่ (ต้องมี --build เพื่อให้ไฟล์โค้ดใหม่เข้า Image)
+docker compose up -d --no-deps --build web
 
 # 3. รัน Migration ฐานข้อมูล
 docker exec -it qt-online-web python scripts/migrate_performance_and_ciam.py

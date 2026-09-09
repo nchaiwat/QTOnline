@@ -7274,7 +7274,7 @@
 
         async function loadCiamSettings() {
             try {
-                const data = await fetchApi('/api/admin/ciam/settings');
+                const data = await fetchApi(`/api/admin/ciam/settings?_t=${Date.now()}`);
                 if (!data) return;
                 currentCiamSettings = data;
 
