@@ -20,6 +20,10 @@
     <!-- Signature Pad -->
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
 
+    <!-- Flatpickr for formatting date inputs as dd/mm/yyyy -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
     <!-- 3. Inter Font -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
@@ -415,6 +419,8 @@
                     <li id="nav-user-management" class="nav-role-admin"><a href="#" class="top-nav-link"
                             onclick="showPage('page-user-list')"><i data-lucide="users" class="mr-2 w-5 h-5"></i>User
                             Management</a></li>
+                    <li id="nav-settings" class="nav-role-admin"><a href="#" class="top-nav-link"
+                            onclick="showPage('page-settings')"><i data-lucide="settings" class="mr-2 w-5 h-5"></i>Settings</a></li>
                 </ul>
             </nav>
 
@@ -436,6 +442,9 @@
                     <li id="mobile-nav-user-management" class="nav-role-admin"><a href="#" class="top-nav-link"
                             onclick="showPage('page-user-list'); toggleMobileMenu();"><i data-lucide="users"
                                 class="mr-2 w-5 h-5"></i>User Management</a></li>
+                    <li id="mobile-nav-settings" class="nav-role-admin"><a href="#" class="top-nav-link"
+                            onclick="showPage('page-settings'); toggleMobileMenu();"><i data-lucide="settings"
+                                class="mr-2 w-5 h-5"></i>Settings</a></li>
                 </ul>
             </div>
         </header>
@@ -581,13 +590,8 @@
                         <div class="flex flex-wrap gap-2">
                             <!-- This is correct: ONLY Sale_Admin and Admin -->
                             <button
-                                class="nav-role-sale_admin nav-role-admin bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center shadow"
-                                onclick="mockExportPDF()">
-                                <i data-lucide="file-text" class="w-5 h-5 mr-2"></i> Export PDF
-                            </button>
-                            <!-- This is correct: ONLY Sale_Admin and Admin -->
-                            <button
-                                class="nav-role-sale_admin nav-role-admin bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg flex items-center shadow">
+                                class="nav-role-sale_admin nav-role-admin bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg flex items-center shadow"
+                                onclick="exportPOExcel()">
                                 <i data-lucide="download" class="w-5 h-5 mr-2"></i> Export Excel
                             </button>
                             <!-- This is correct: ONLY Sale and Admin -->
@@ -612,14 +616,24 @@
                             <input id="po-search-input" type="text" placeholder="Search QT..."
                                 class="w-full md:w-1/3 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 oninput="handlePOSearch(event)">
-                            <!-- Month Filter -->
-                            <div class="w-full md:w-1/4 flex gap-2">
-                                <input id="po-month-filter" type="month"
-                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    onchange="handlePOMonthChange(event)">
+                            <!-- Date/Month Filter -->
+                            <div class="w-full md:w-1/3 flex gap-2">
+                                <select id="po-filter-type" onchange="toggleFilterType(this.value)"
+                                    class="px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                                    <option value="month">Month</option>
+                                    <option value="date">Date</option>
+                                </select>
+                                <div class="relative w-full">
+                                    <input id="po-month-filter" type="month"
+                                        class="w-full pl-4 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        onchange="handlePOMonthChange(event)">
+                                    <div id="calendar-icon-container" class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-gray-400" style="display: none;">
+                                        <i data-lucide="calendar" class="w-4 h-4"></i>
+                                    </div>
+                                </div>
                                 <button onclick="clearMonthFilter()"
                                     class="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg border border-gray-300 text-gray-600"
-                                    title="Clear Month Filter">
+                                    title="Clear Filter">
                                     <i data-lucide="x" class="w-4 h-4"></i>
                                 </button>
                             </div>
@@ -936,8 +950,14 @@
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Delivery Date</label>
-                                    <input type="date" id="po-delivery-date"
-                                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <div class="relative">
+                                        <input type="text" id="po-delivery-date"
+                                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                                            placeholder="dd/mm/yyyy">
+                                        <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-gray-400">
+                                            <i data-lucide="calendar" class="w-5 h-5"></i>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                             <!-- Right Column -->
@@ -1701,6 +1721,226 @@
                     </div>
                 </div>
 
+                <!-- ========================================== -->
+                <!-- SYSTEM SETTINGS & CIAM MANAGEMENT PAGE -->
+                <!-- ========================================== -->
+                <div id="page-settings" class="page-content">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 sm:gap-0">
+                        <div>
+                            <h3 class="text-2xl font-bold text-gray-800 flex items-center">
+                                <i data-lucide="settings" class="w-7 h-7 mr-2 text-blue-600"></i>
+                                System Settings & Central Identity Management (CIAM)
+                            </h3>
+                            <p class="text-sm text-gray-500 mt-1">Configure Central Identity Management integration parameters, security keys, and inspect connection & authentication audit logs.</p>
+                        </div>
+                    </div>
+
+                    <!-- Navigation Tabs -->
+                    <div class="flex border-b border-gray-200 mb-6 bg-white rounded-t-lg px-4 pt-2 shadow-sm">
+                        <button id="tab-btn-ciam-config" onclick="switchSettingsTab('config')"
+                            class="settings-tab-btn flex items-center py-3 px-5 border-b-2 font-semibold text-sm transition-colors border-blue-600 text-blue-600">
+                            <i data-lucide="shield-check" class="w-4 h-4 mr-2"></i>
+                            CIAM Parameters
+                        </button>
+                        <button id="tab-btn-ciam-logs" onclick="switchSettingsTab('ciam-logs')"
+                            class="settings-tab-btn flex items-center py-3 px-5 border-b-2 font-medium text-sm transition-colors border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                            <i data-lucide="activity" class="w-4 h-4 mr-2"></i>
+                            CIAM Connection Logs
+                        </button>
+                        <button id="tab-btn-login-logs" onclick="switchSettingsTab('login-logs')"
+                            class="settings-tab-btn flex items-center py-3 px-5 border-b-2 font-medium text-sm transition-colors border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                            <i data-lucide="log-in" class="w-4 h-4 mr-2"></i>
+                            Login Activity Logs
+                        </button>
+                    </div>
+
+                    <!-- TAB 1: CIAM Integration Settings -->
+                    <div id="settings-tab-content-config" class="settings-tab-pane space-y-6">
+                        <!-- Card 1: Parameters -->
+                        <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                            <div class="flex items-center justify-between border-b pb-4 mb-6">
+                                <div>
+                                    <h4 class="text-lg font-semibold text-gray-800">Integration Configuration</h4>
+                                    <p class="text-sm text-gray-500">M2M REST API credentials for Centralized Directory & Identity synchronization</p>
+                                </div>
+                                <div class="flex items-center space-x-3">
+                                    <span id="ciam-status-badge" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                        Active
+                                    </span>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" id="ciam-is-enabled" class="sr-only peer" checked onchange="handleCiamToggleChange()">
+                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="space-y-6">
+                                <!-- API Key -->
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-1">
+                                        Security API Key (<code class="text-xs bg-gray-100 px-1 py-0.5 rounded text-blue-700 font-mono">X-Management-API-Key</code>)
+                                    </label>
+                                    <p class="text-xs text-gray-500 mb-2">Used by the Central Identity system to authenticate all Directory API requests.</p>
+                                    <div class="flex items-center space-x-2">
+                                        <div class="relative flex-1">
+                                            <input type="password" id="ciam-api-key" readonly
+                                                class="w-full font-mono text-sm bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none cursor-text">
+                                            <button type="button" onclick="toggleCiamApiKeyVisibility()"
+                                                class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700">
+                                                <i id="ciam-eye-icon" data-lucide="eye" class="w-4 h-4"></i>
+                                            </button>
+                                        </div>
+                                        <button type="button" onclick="copyCiamApiKey()"
+                                            class="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium text-sm rounded-lg flex items-center border border-gray-300 shadow-sm transition-colors">
+                                            <i data-lucide="copy" class="w-4 h-4 mr-1.5"></i> Copy
+                                        </button>
+                                        <button type="button" onclick="confirmRegenerateCiamApiKey()"
+                                            class="px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-700 font-medium text-sm rounded-lg flex items-center border border-red-200 shadow-sm transition-colors">
+                                            <i data-lucide="refresh-cw" class="w-4 h-4 mr-1.5"></i> Regenerate
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Allowed IPs -->
+                                <div>
+                                    <label for="ciam-allowed-ips" class="block text-sm font-semibold text-gray-700 mb-1">
+                                        Allowed Client IPs / CIDR
+                                    </label>
+                                    <p class="text-xs text-gray-500 mb-2">Only incoming requests from these IP addresses will be accepted. Comma or newline separated (e.g. <code class="text-xs bg-gray-100 px-1 py-0.5 rounded font-mono">127.0.0.1, 10.0.0.0/8</code>). Leave empty or <code class="text-xs bg-gray-100 px-1 py-0.5 rounded font-mono">*</code> to allow all.</p>
+                                    <textarea id="ciam-allowed-ips" rows="3"
+                                        class="w-full font-mono text-sm border border-gray-300 rounded-lg p-3 text-gray-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                        placeholder="127.0.0.1, ::1"></textarea>
+                                </div>
+
+                                <!-- Save Button -->
+                                <div class="flex justify-end pt-2 border-t">
+                                    <button type="button" onclick="saveCiamSettings()"
+                                        class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-6 rounded-lg shadow flex items-center transition-colors">
+                                        <i data-lucide="save" class="w-4 h-4 mr-2"></i> Save Settings
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 2: API Specification Quick Reference -->
+                        <div class="bg-gradient-to-br from-slate-50 to-blue-50/30 p-6 rounded-lg border border-slate-200">
+                            <h4 class="text-base font-semibold text-slate-800 flex items-center mb-3">
+                                <i data-lucide="code" class="w-5 h-5 mr-2 text-blue-600"></i> Supported CIAM Directory Endpoints
+                            </h4>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
+                                <div class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+                                    <span class="inline-block px-2 py-0.5 bg-blue-100 text-blue-800 font-bold rounded mb-1">GET</span>
+                                    <div class="text-gray-700 font-bold">/api/v1/directory/accounts</div>
+                                    <div class="text-gray-500 font-sans mt-1">List all accounts for sync</div>
+                                </div>
+                                <div class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+                                    <span class="inline-block px-2 py-0.5 bg-amber-100 text-amber-800 font-bold rounded mb-1">PATCH</span>
+                                    <div class="text-gray-700 font-bold">/api/v1/directory/accounts/{username}/status</div>
+                                    <div class="text-gray-500 font-sans mt-1">Enable or disable user</div>
+                                </div>
+                                <div class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+                                    <span class="inline-block px-2 py-0.5 bg-green-100 text-green-800 font-bold rounded mb-1">POST</span>
+                                    <div class="text-gray-700 font-bold">/api/v1/directory/accounts</div>
+                                    <div class="text-gray-500 font-sans mt-1">Provision new account</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB 2: CIAM Connection Logs -->
+                    <div id="settings-tab-content-ciam-logs" class="settings-tab-pane hidden space-y-4">
+                        <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-wrap items-center justify-between gap-3">
+                            <div class="flex items-center space-x-3 flex-1 min-w-[280px]">
+                                <div class="relative flex-1">
+                                    <input type="text" id="ciam-logs-search" placeholder="Search IP, endpoint, or username..."
+                                        class="w-full text-sm pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        oninput="filterCiamLogs()">
+                                    <i data-lucide="search" class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+                                </div>
+                                <select id="ciam-logs-status-filter" onchange="filterCiamLogs()"
+                                    class="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <option value="">All Statuses</option>
+                                    <option value="200">200 OK</option>
+                                    <option value="201">201 Created</option>
+                                    <option value="401">401 Unauthorized</option>
+                                    <option value="403">403 Forbidden</option>
+                                    <option value="404">404 Not Found</option>
+                                    <option value="500">500 Server Error</option>
+                                </select>
+                            </div>
+                            <button type="button" onclick="loadCiamLogs()"
+                                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg flex items-center border border-gray-300 shadow-sm transition-colors">
+                                <i data-lucide="refresh-cw" class="w-4 h-4 mr-1.5"></i> Refresh Logs
+                            </button>
+                        </div>
+
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-sm whitespace-nowrap">
+                                    <thead class="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
+                                        <tr>
+                                            <th class="px-4 py-3">Timestamp</th>
+                                            <th class="px-4 py-3">Client IP</th>
+                                            <th class="px-4 py-3">Action</th>
+                                            <th class="px-4 py-3">Target User</th>
+                                            <th class="px-4 py-3 text-center">Status</th>
+                                            <th class="px-4 py-3">Details / Reason</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="ciam-logs-table-body" class="divide-y divide-gray-200">
+                                        <tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">Loading audit logs...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB 3: User Login Activity Logs -->
+                    <div id="settings-tab-content-login-logs" class="settings-tab-pane hidden space-y-4">
+                        <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-wrap items-center justify-between gap-3">
+                            <div class="flex items-center space-x-3 flex-1 min-w-[280px]">
+                                <div class="relative flex-1">
+                                    <input type="text" id="login-logs-search" placeholder="Search username or IP address..."
+                                        class="w-full text-sm pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        oninput="filterLoginLogs()">
+                                    <i data-lucide="search" class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+                                </div>
+                                <select id="login-logs-status-filter" onchange="filterLoginLogs()"
+                                    class="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <option value="">All Statuses</option>
+                                    <option value="SUCCESS">SUCCESS</option>
+                                    <option value="FAILED_CREDENTIALS">FAILED_CREDENTIALS</option>
+                                    <option value="ACCOUNT_DISABLED">ACCOUNT_DISABLED</option>
+                                    <option value="USER_NOT_FOUND">USER_NOT_FOUND</option>
+                                </select>
+                            </div>
+                            <button type="button" onclick="loadLoginLogs()"
+                                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg flex items-center border border-gray-300 shadow-sm transition-colors">
+                                <i data-lucide="refresh-cw" class="w-4 h-4 mr-1.5"></i> Refresh Logs
+                            </button>
+                        </div>
+
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-sm whitespace-nowrap">
+                                    <thead class="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
+                                        <tr>
+                                            <th class="px-4 py-3">Timestamp</th>
+                                            <th class="px-4 py-3">Username</th>
+                                            <th class="px-4 py-3 text-center">Status</th>
+                                            <th class="px-4 py-3">IP Address</th>
+                                            <th class="px-4 py-3">Failure Reason / Note</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="login-logs-table-body" class="divide-y divide-gray-200">
+                                        <tr><td colspan="5" class="px-4 py-8 text-center text-gray-500">Loading login logs...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </main>
         </div>
     </div>
@@ -1829,8 +2069,7 @@
                             placeholder="e.g. 081-234-5678">
                     </div>
                     <div id="password-field">
-                        <label for="user-password" class="block text-sm font-medium text-gray-700 mb-1">Password
-                            </Tlabel>
+                        <label for="user-password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
                             <input type="password" id="user-password"
                                 class="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                             <p id="password-help" class="text-xs text-gray-500 mt-1">Leave blank if you don't want to
@@ -2268,8 +2507,14 @@
                             <div>
                                 <label for="customer-form-creationDate"
                                     class="block text-sm font-medium text-gray-700 mb-1">Creation Date</label>
-                                <input id="customer-form-creationDate" type="date"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <div class="relative">
+                                    <input id="customer-form-creationDate" type="text"
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                                        placeholder="dd/mm/yyyy">
+                                    <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-gray-400">
+                                        <i data-lucide="calendar" class="w-5 h-5"></i>
+                                    </div>
+                                </div>
                             </div>
                             <div class="flex items-center space-x-2">
                                 <input id="customer-form-selfEmployed" type="checkbox"
@@ -2495,12 +2740,21 @@
         let currentPOId = null; // *** FIX: Added this variable for QR Code ***
         let currentPOAccessToken = null; // *** FIX: Store Access Token for Link ***
         let currentCustomerDetail = null; // Current customer detail payload in modal
+        let deliveryDatePicker = null;
+        let customerCreationDatePicker = null;
+
+        function getCurrentMonthYear() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            return `${year}-${month}`;
+        }
 
         // QT list filters
         let poRows = [];
         let poFilterKeyword = '';
         let poFilterStatus = '';
-        let poFilterMonth = ''; // NEW: Month Filter
+        let poFilterMonth = getCurrentMonthYear(); // Default to current month (e.g. 2026-09)
 
         // --- NEW: Sort State ---
         let poSortBy = 'created';
@@ -2765,6 +3019,9 @@
                 if (pageId === 'page-product-list') {
                     loadProductList(productCurrentPage || 1);
                 }
+                if (pageId === 'page-settings') {
+                    loadCiamSettings();
+                }
 
                 // BUG FIX: Call setUIVisibility() *every time* a page loads
                 // This ensures top-level buttons (like Create QT) are correct
@@ -2821,8 +3078,8 @@
             if (currentUser.role === 'Uploader') {
                 // Hide everything except Products
                 const idsToHide = [
-                    'nav-dashboard', 'nav-po-list', 'nav-customer-list', 'nav-user-management',
-                    'mobile-nav-dashboard', 'mobile-nav-po-list', 'mobile-nav-customer-list', 'mobile-nav-user-management'
+                    'nav-dashboard', 'nav-po-list', 'nav-customer-list', 'nav-user-management', 'nav-settings',
+                    'mobile-nav-dashboard', 'mobile-nav-po-list', 'mobile-nav-customer-list', 'mobile-nav-user-management', 'mobile-nav-settings'
                 ];
                 idsToHide.forEach(id => {
                     const el = document.getElementById(id);
@@ -2852,7 +3109,7 @@
 
         // --- DASHBOARD FUNCTIONS (Content 1) ---
         async function loadDashboardStats() {
-            const pos = await fetchApi('/api/pos');
+            const pos = await fetchApi('/api/pos?summary=false');
             if (!pos) return;
 
             let scopedPOs = Array.isArray(pos) ? pos : [];
@@ -3474,7 +3731,9 @@
 
             await ensureCustomerCache();
             setSelectedCustomer(null);
-            if (deliveryDate) {
+            if (deliveryDatePicker) {
+                deliveryDatePicker.clear();
+            } else if (deliveryDate) {
                 deliveryDate.value = '';
             }
             if (customerHidden) {
@@ -3495,7 +3754,9 @@
                 const po = await fetchApi(`/api/pos/${poId}`);
                 if (po) {
                     title.textContent = `Edit Quotation (${po.poNumber})`;
-                    if (deliveryDate) {
+                    if (deliveryDatePicker) {
+                        deliveryDatePicker.setDate(po.deliveryDateIso || '');
+                    } else if (deliveryDate) {
                         deliveryDate.value = po.deliveryDateIso || '';
                     }
                     if (shipToInput) {
@@ -3992,7 +4253,8 @@
             poListLoading = true;
             tableBody.innerHTML = '<tr><td colspan="9" class="px-6 py-4 text-center">Loading...</td></tr>';
 
-            const pos = await fetchApi(`/api/pos?_t=${Date.now()}`);
+            const monthParam = poFilterMonth ? `&month=${encodeURIComponent(poFilterMonth)}` : '';
+            const pos = await fetchApi(`/api/pos?summary=true${monthParam}&_t=${Date.now()}`);
             console.log('Fetched POs (Count):', pos ? pos.length : 0, pos);
 
             poListLoading = false;
@@ -4015,12 +4277,9 @@
                 statusSelect.value = poFilterStatus;
             }
 
-            // NEW: Initialize Month Filter (Always ensure Gregorian year)
+            // Initialize Month Filter (Always ensure Gregorian year)
             const monthInput = document.getElementById('po-month-filter');
             if (monthInput) {
-                // REMOVED: Auto-default to current month. Users want to see all POs by default.
-                // If they want to filter, they can select a month manually.
-
                 if (poFilterMonth && monthInput.value !== poFilterMonth) {
                     monthInput.value = poFilterMonth;
                 } else if (!poFilterMonth) {
@@ -4045,42 +4304,62 @@
             const keyword = poFilterKeyword.trim().toLowerCase();
             const statusFilter = (poFilterStatus || '').toLowerCase();
 
-            // Normalize Month Filter (Handle Buddhist Year)
-            let monthFilter = poFilterMonth; // YYYY-MM
+            // Normalize Month/Date Filter (Handle Buddhist Year)
+            let monthFilter = poFilterMonth; // YYYY-MM or YYYY-MM-DD
             if (monthFilter) {
                 const parts = monthFilter.split('-');
                 let year = parseInt(parts[0]);
                 if (year > 2500) year -= 543; // Convert BE (2569) to AD (2026)
-                monthFilter = `${year}-${parts[1]}`;
+                if (parts.length === 3) {
+                    monthFilter = `${year}-${parts[1]}-${parts[2]}`; // YYYY-MM-DD
+                } else {
+                    monthFilter = `${year}-${parts[1]}`; // YYYY-MM
+                }
             }
 
-            console.log("Filtering POs. Month:", monthFilter, "Status:", statusFilter, "Keyword:", keyword);
+            console.log("Filtering POs. Date/Month:", monthFilter, "Status:", statusFilter, "Keyword:", keyword);
 
             const filtered = poRows.filter(po => {
-                // Month Filter (Improved Robust check)
+                // Month/Date Filter (Improved Robust check)
                 if (monthFilter) {
-                    const createdIso = po.createdIso || '';
-                    const createdDisplay = po.created || ''; // format: "DD-MM-YYYY"
-
-                    const [fYear, fMonth] = monthFilter.split('-').map(Number); // [2026, 3]
+                    const updatedAtIso = po.updatedAtIso || '';
+                    const updatedAtDisplay = po.updatedAt || ''; // format: "DD-MM-YYYY HH:MM"
 
                     let matchFound = false;
 
-                    // Try matching from ISO string (YYYY-MM-DD...)
-                    if (createdIso.startsWith(monthFilter)) {
-                        matchFound = true;
-                    }
-                    // Try matching from display string (DD-MM-YYYY)
-                    else if (createdDisplay) {
-                        const dParts = createdDisplay.split('-');
-                        if (dParts.length >= 3) {
-                            const dDay = parseInt(dParts[0]);
-                            const dMonth = parseInt(dParts[1]);
-                            const dYear = parseInt(dParts[2]);
+                    if (monthFilter.split('-').length === 3) {
+                        // Matching YYYY-MM-DD
+                        if (updatedAtIso.startsWith(monthFilter)) {
+                            matchFound = true;
+                        } else if (updatedAtDisplay) {
+                            const dateOnly = updatedAtDisplay.split(' ')[0]; // "DD-MM-YYYY"
+                            const [fYear, fMonth, fDay] = monthFilter.split('-').map(Number);
+                            const dParts = dateOnly.split('-');
+                            if (dParts.length >= 3) {
+                                const dDay = parseInt(dParts[0]);
+                                const dMonth = parseInt(dParts[1]);
+                                const dYear = parseInt(dParts[2]);
 
-                            // Check for Gregorian or Buddhist year match
-                            if (dMonth === fMonth && (dYear === fYear || dYear === (fYear + 543))) {
-                                matchFound = true;
+                                if (dDay === fDay && dMonth === fMonth && (dYear === fYear || dYear === (fYear + 543))) {
+                                    matchFound = true;
+                                }
+                            }
+                        }
+                    } else {
+                        // Matching YYYY-MM
+                        const [fYear, fMonth] = monthFilter.split('-').map(Number);
+                        if (updatedAtIso.startsWith(monthFilter)) {
+                            matchFound = true;
+                        } else if (updatedAtDisplay) {
+                            const dateOnly = updatedAtDisplay.split(' ')[0];
+                            const dParts = dateOnly.split('-');
+                            if (dParts.length >= 3) {
+                                const dMonth = parseInt(dParts[1]);
+                                const dYear = parseInt(dParts[2]);
+
+                                if (dMonth === fMonth && (dYear === fYear || dYear === (fYear + 543))) {
+                                    matchFound = true;
+                                }
                             }
                         }
                     }
@@ -4206,16 +4485,68 @@
             renderFilteredPOList();
         }
 
+        let filterDatePicker = null;
+
+        function toggleFilterType(type) {
+            const input = document.getElementById('po-month-filter');
+            const icon = document.getElementById('calendar-icon-container');
+            if (!input) return;
+            
+            // Destroy existing flatpickr instance if it exists
+            if (filterDatePicker) {
+                filterDatePicker.destroy();
+                filterDatePicker = null;
+            }
+            
+            // Clear current filter value
+            input.value = '';
+            poFilterMonth = '';
+            
+            if (type === 'date') {
+                input.type = 'text'; // Flatpickr works best on text inputs
+                input.placeholder = 'dd/mm/yyyy';
+                if (icon) icon.style.display = 'flex'; // Show custom calendar icon
+                filterDatePicker = flatpickr("#po-month-filter", {
+                    dateFormat: "d/m/Y",
+                    allowInput: true,
+                    onChange: function(selectedDates, dateStr, instance) {
+                        if (selectedDates.length > 0) {
+                            const d = selectedDates[0];
+                            const year = d.getFullYear();
+                            const month = String(d.getMonth() + 1).padStart(2, '0');
+                            const day = String(d.getDate()).padStart(2, '0');
+                            poFilterMonth = `${year}-${month}-${day}`;
+                        } else {
+                            poFilterMonth = '';
+                        }
+                        renderPOTableList();
+                    }
+                });
+            } else {
+                input.type = 'month';
+                input.placeholder = '';
+                if (icon) icon.style.display = 'none'; // Hide custom calendar icon (native month picker has its own)
+            }
+            renderPOTableList();
+        }
+
         function handlePOMonthChange(event) {
+            const filterType = document.getElementById('po-filter-type')?.value;
+            if (filterType === 'date') return; // Skip because Flatpickr's onChange handles this
             poFilterMonth = event?.target?.value || '';
-            renderFilteredPOList();
+            renderPOTableList();
         }
 
         function clearMonthFilter() {
             poFilterMonth = '';
             const monthInput = document.getElementById('po-month-filter');
-            if (monthInput) monthInput.value = '';
-            renderFilteredPOList();
+            if (monthInput) {
+                monthInput.value = '';
+                if (monthInput._flatpickr) {
+                    monthInput._flatpickr.clear();
+                }
+            }
+            renderPOTableList();
         }
 
         function clearPOListFilters() {
@@ -4230,9 +4561,14 @@
             if (statusSelect) statusSelect.value = '';
 
             const monthInput = document.getElementById('po-month-filter');
-            if (monthInput) monthInput.value = '';
+            if (monthInput) {
+                monthInput.value = '';
+                if (monthInput._flatpickr) {
+                    monthInput._flatpickr.clear();
+                }
+            }
 
-            renderFilteredPOList();
+            renderPOTableList();
         }
 
         function handlePOStatusChange(event) {
@@ -4824,8 +5160,15 @@
             console.log("Mock: Downloading PDF for SAP..." + currentViewPOId);
         }
 
-        function mockExportPDF() {
-            console.log("Mock: Exporting QT List to PDF...");
+        function exportPOExcel() {
+            const params = new URLSearchParams();
+            if (poFilterKeyword) params.append('keyword', poFilterKeyword);
+            if (poFilterStatus) params.append('status', poFilterStatus);
+            if (poFilterMonth) params.append('month', poFilterMonth);
+
+            const downloadUrl = `/api/pos/export-excel?${params.toString()}`;
+            console.log("Exporting QTs to Excel with URL:", downloadUrl);
+            window.location.href = downloadUrl;
         }
 
         async function downloadTemplate(type) {
@@ -6005,7 +6348,9 @@
                 if (!input) return;
 
                 const value = data[key];
-                if (input.type === 'date') {
+                if (input._flatpickr) {
+                    input._flatpickr.setDate(value || '', false);
+                } else if (input.type === 'date') {
                     input.value = value || '';
                 } else {
                     input.value = value ?? '';
@@ -6891,6 +7236,306 @@
             }
         }
 
+        // ========================================================
+        // SYSTEM SETTINGS & CIAM MANAGEMENT FUNCTIONS
+        // ========================================================
+        let currentCiamSettings = null;
+        let ciamLogsData = [];
+        let loginLogsData = [];
+
+        function switchSettingsTab(tabName) {
+            const tabs = ['config', 'ciam-logs', 'login-logs'];
+            tabs.forEach(t => {
+                const btn = document.getElementById(`tab-btn-${t}`);
+                const pane = document.getElementById(`settings-tab-content-${t}`);
+                if (t === tabName) {
+                    if (btn) {
+                        btn.className = 'settings-tab-btn flex items-center py-3 px-5 border-b-2 font-semibold text-sm transition-colors border-blue-600 text-blue-600';
+                    }
+                    if (pane) pane.classList.remove('hidden');
+                } else {
+                    if (btn) {
+                        btn.className = 'settings-tab-btn flex items-center py-3 px-5 border-b-2 font-medium text-sm transition-colors border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300';
+                    }
+                    if (pane) pane.classList.add('hidden');
+                }
+            });
+
+            if (tabName === 'config') {
+                loadCiamSettings();
+            } else if (tabName === 'ciam-logs') {
+                loadCiamLogs();
+            } else if (tabName === 'login-logs') {
+                loadLoginLogs();
+            }
+
+            if (window.lucide) lucide.createIcons();
+        }
+
+        async function loadCiamSettings() {
+            try {
+                const data = await fetchApi('/api/admin/ciam/settings');
+                if (!data) return;
+                currentCiamSettings = data;
+
+                const isEnabledInput = document.getElementById('ciam-is-enabled');
+                const apiKeyInput = document.getElementById('ciam-api-key');
+                const allowedIpsInput = document.getElementById('ciam-allowed-ips');
+
+                const isEnabled = (data.isEnabled !== undefined) ? data.isEnabled : (data.is_enabled !== undefined ? data.is_enabled : true);
+                const apiKey = data.apiKey || data.api_key || '';
+                const allowedIps = data.allowedIps || data.allowed_ips || '';
+
+                if (isEnabledInput) isEnabledInput.checked = !!isEnabled;
+                if (apiKeyInput) apiKeyInput.value = apiKey;
+                if (allowedIpsInput) allowedIpsInput.value = allowedIps;
+
+                updateCiamBadge(isEnabled);
+            } catch (err) {
+                console.error('Failed to load CIAM settings:', err);
+                showToast('Failed to load CIAM settings', 'error');
+            }
+        }
+
+        function updateCiamBadge(isEnabled) {
+            const badge = document.getElementById('ciam-status-badge');
+            if (!badge) return;
+            if (isEnabled) {
+                badge.textContent = 'Active';
+                badge.className = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800';
+            } else {
+                badge.textContent = 'Disabled';
+                badge.className = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800';
+            }
+        }
+
+        function handleCiamToggleChange() {
+            const isEnabled = document.getElementById('ciam-is-enabled')?.checked;
+            updateCiamBadge(isEnabled);
+        }
+
+        function toggleCiamApiKeyVisibility() {
+            const input = document.getElementById('ciam-api-key');
+            const icon = document.getElementById('ciam-eye-icon');
+            if (!input) return;
+            if (input.type === 'password') {
+                input.type = 'text';
+                if (icon) icon.setAttribute('data-lucide', 'eye-off');
+            } else {
+                input.type = 'password';
+                if (icon) icon.setAttribute('data-lucide', 'eye');
+            }
+            if (window.lucide) lucide.createIcons();
+        }
+
+        async function copyCiamApiKey() {
+            const input = document.getElementById('ciam-api-key');
+            if (!input || !input.value) return;
+            try {
+                await navigator.clipboard.writeText(input.value);
+                showToast('API Key copied to clipboard!', 'success');
+            } catch (err) {
+                input.select();
+                document.execCommand('copy');
+                showToast('API Key copied to clipboard!', 'success');
+            }
+        }
+
+        function generateRandomApiKey() {
+            const arr = new Uint8Array(16);
+            window.crypto.getRandomValues(arr);
+            const hex = Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
+            return `sec_po_mgmt_${hex}`;
+        }
+
+        async function confirmRegenerateCiamApiKey() {
+            if (!confirm('Are you sure you want to regenerate the CIAM API Key? The existing key will immediately stop working and the new key will be saved.')) {
+                return;
+            }
+            const newKey = generateRandomApiKey();
+            const apiKeyInput = document.getElementById('ciam-api-key');
+            if (apiKeyInput) apiKeyInput.value = newKey;
+            await saveCiamSettings();
+        }
+
+        async function saveCiamSettings() {
+            try {
+                const isEnabled = document.getElementById('ciam-is-enabled')?.checked || false;
+                const apiKey = document.getElementById('ciam-api-key')?.value.trim() || '';
+                const allowedIps = document.getElementById('ciam-allowed-ips')?.value.trim() || '';
+
+                const payload = {
+                    is_enabled: isEnabled,
+                    api_key: apiKey,
+                    allowed_ips: allowedIps
+                };
+
+                const res = await fetchApi('/api/admin/ciam/settings', 'PUT', payload);
+                if (res) {
+                    showToast('CIAM Settings saved successfully!', 'success');
+                    updateCiamBadge(isEnabled);
+                }
+            } catch (err) {
+                console.error('Failed to save CIAM settings:', err);
+                showToast('Failed to save CIAM settings', 'error');
+            }
+        }
+
+        async function loadCiamLogs() {
+            const tbody = document.getElementById('ciam-logs-table-body');
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Loading audit logs...</td></tr>';
+            }
+            try {
+                const logs = await fetchApi('/api/admin/ciam/logs?limit=100');
+                ciamLogsData = Array.isArray(logs) ? logs : [];
+                filterCiamLogs();
+            } catch (err) {
+                console.error('Failed to load CIAM logs:', err);
+                if (tbody) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-red-500">Failed to load CIAM logs</td></tr>';
+                }
+            }
+        }
+
+        function filterCiamLogs() {
+            const tbody = document.getElementById('ciam-logs-table-body');
+            if (!tbody) return;
+
+            const q = (document.getElementById('ciam-logs-search')?.value || '').toLowerCase().trim();
+            const statusFilter = document.getElementById('ciam-logs-status-filter')?.value || '';
+
+            const filtered = ciamLogsData.filter(log => {
+                const sc = String(log.statusCode || log.status_code || '');
+                if (statusFilter && sc !== statusFilter) {
+                    return false;
+                }
+                if (q) {
+                    const ip = (log.clientIp || log.ip_address || '').toLowerCase();
+                    const user = (log.targetUsername || log.target_username || '').toLowerCase();
+                    const action = (log.action || '').toLowerCase();
+                    const msg = (log.message || log.details || log.reason || '').toLowerCase();
+                    if (!ip.includes(q) && !user.includes(q) && !action.includes(q) && !msg.includes(q)) {
+                        return false;
+                    }
+                }
+                return true;
+            });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">No CIAM connection logs found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(log => {
+                const sc = log.statusCode || log.status_code || 200;
+                const createdAt = log.createdAt || log.created_at || '';
+                const clientIp = log.clientIp || log.ip_address || '';
+                const action = log.action || '';
+                const targetUser = log.targetUsername || log.target_username || '-';
+                const details = log.message || log.details || log.reason || '-';
+
+                let badgeClass = 'bg-gray-100 text-gray-800';
+                if (sc >= 200 && sc < 300) {
+                    badgeClass = 'bg-green-100 text-green-800';
+                } else if (sc === 401 || sc === 403) {
+                    badgeClass = 'bg-red-100 text-red-800';
+                } else if (sc >= 400) {
+                    badgeClass = 'bg-amber-100 text-amber-800';
+                }
+
+                return `
+                    <tr class="hover:bg-gray-50 font-mono text-xs">
+                        <td class="px-4 py-3 text-gray-600">${escapeHtml(createdAt)}</td>
+                        <td class="px-4 py-3 text-gray-800 font-semibold">${escapeHtml(clientIp)}</td>
+                        <td class="px-4 py-3 font-sans text-gray-700 font-medium">${escapeHtml(action)}</td>
+                        <td class="px-4 py-3 font-semibold text-gray-800">${escapeHtml(targetUser)}</td>
+                        <td class="px-4 py-3 text-center">
+                            <span class="px-2.5 py-0.5 rounded-full font-bold text-xs ${badgeClass}">${sc}</span>
+                        </td>
+                        <td class="px-4 py-3 font-sans text-gray-500 max-w-xs truncate" title="${escapeHtml(details)}">${escapeHtml(details)}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function loadLoginLogs() {
+            const tbody = document.getElementById('login-logs-table-body');
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-500">Loading login logs...</td></tr>';
+            }
+            try {
+                const logs = await fetchApi('/api/admin/login-logs?limit=100');
+                loginLogsData = Array.isArray(logs) ? logs : [];
+                filterLoginLogs();
+            } catch (err) {
+                console.error('Failed to load login logs:', err);
+                if (tbody) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-red-500">Failed to load login logs</td></tr>';
+                }
+            }
+        }
+
+        function filterLoginLogs() {
+            const tbody = document.getElementById('login-logs-table-body');
+            if (!tbody) return;
+
+            const q = (document.getElementById('login-logs-search')?.value || '').toLowerCase().trim();
+            const statusFilter = document.getElementById('login-logs-status-filter')?.value || '';
+
+            const filtered = loginLogsData.filter(log => {
+                const st = log.status || '';
+                if (statusFilter && st !== statusFilter) {
+                    return false;
+                }
+                if (q) {
+                    const user = (log.username || '').toLowerCase();
+                    const ip = (log.ipAddress || log.ip_address || '').toLowerCase();
+                    const reason = (log.failureReason || log.failure_reason || '').toLowerCase();
+                    if (!user.includes(q) && !ip.includes(q) && !reason.includes(q)) {
+                        return false;
+                    }
+                }
+                return true;
+            });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">No login activity logs found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(log => {
+                const createdAt = log.createdAt || log.created_at || '';
+                const username = log.username || '';
+                const st = log.status || '';
+                const ip = log.ipAddress || log.ip_address || '-';
+                const reason = log.failureReason || log.failure_reason || '-';
+
+                let badgeClass = 'bg-gray-100 text-gray-800';
+                if (st === 'SUCCESS') {
+                    badgeClass = 'bg-green-100 text-green-800';
+                } else if (st === 'FAILED_CREDENTIALS') {
+                    badgeClass = 'bg-red-100 text-red-800';
+                } else if (st === 'ACCOUNT_DISABLED') {
+                    badgeClass = 'bg-amber-100 text-amber-800';
+                } else if (st === 'USER_NOT_FOUND') {
+                    badgeClass = 'bg-gray-100 text-gray-600';
+                }
+
+                return `
+                    <tr class="hover:bg-gray-50 text-xs">
+                        <td class="px-4 py-3 font-mono text-gray-600">${escapeHtml(createdAt)}</td>
+                        <td class="px-4 py-3 font-semibold text-gray-800">${escapeHtml(username)}</td>
+                        <td class="px-4 py-3 text-center">
+                            <span class="px-2.5 py-0.5 rounded-full font-bold text-xs ${badgeClass}">${escapeHtml(st)}</span>
+                        </td>
+                        <td class="px-4 py-3 font-mono text-gray-700">${escapeHtml(ip)}</td>
+                        <td class="px-4 py-3 text-gray-500">${escapeHtml(reason)}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
         function openChangePasswordModal() {
             const modal = document.getElementById('change-password-modal');
             if (!modal) return;
@@ -7423,6 +8068,27 @@
             }
 
             initIcons();
+
+            // Initialize Flatpickr for delivery date
+            if (document.getElementById('po-delivery-date')) {
+                deliveryDatePicker = flatpickr("#po-delivery-date", {
+                    altInput: true,
+                    altFormat: "d/m/Y",
+                    dateFormat: "Y-m-d",
+                    allowInput: true
+                });
+            }
+
+            // Initialize Flatpickr for customer creation date
+            if (document.getElementById('customer-form-creationDate')) {
+                customerCreationDatePicker = flatpickr("#customer-form-creationDate", {
+                    altInput: true,
+                    altFormat: "d/m/Y",
+                    dateFormat: "Y-m-d",
+                    allowInput: true
+                });
+            }
+
             initApp(); // Start the app
         });
 

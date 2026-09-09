@@ -47,10 +47,27 @@ def upload_customer_location(id):
                 os.remove(old_path)
                 app.logger.info(f"Deleted old location file: {po.customerLocationFile}")
         
-        # Save new file
-        filename = secure_filename(f"location_{po.poNumber}_{int(datetime.now().timestamp())}.{ext}")
+        # Determine output extension and path
+        save_ext = "jpg" if ext in {"jpg", "jpeg", "png", "gif"} else ext
+        filename = secure_filename(
+            f"location_{po.poNumber}_{int(datetime.now().timestamp())}.{save_ext}"
+        )
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
+
+        # Save to temp file first, then compress
+        temp_filename = f"temp_{filename}"
+        temp_filepath = os.path.join(app.config['UPLOAD_FOLDER'], temp_filename)
+        file.save(temp_filepath)
+
+        from utils import compress_image, compress_pdf
+        if save_ext == "pdf":
+            compress_pdf(temp_filepath, filepath)
+        else:
+            compress_image(temp_filepath, filepath)
+
+        # Remove temp file
+        if os.path.exists(temp_filepath):
+            os.remove(temp_filepath)
         
         # Update database
         po.customerLocationFile = filename
@@ -128,10 +145,27 @@ def upload_customer_po_file(id):
                 os.remove(old_path)
                 app.logger.info(f"Deleted old customer PO file: {po.customerPoFile}")
         
-        # Save new file
-        filename = secure_filename(f"customer_po_{po.poNumber}_{int(datetime.now().timestamp())}.{ext}")
+        # Determine output extension and path
+        save_ext = "jpg" if ext in {"jpg", "jpeg", "png", "gif"} else ext
+        filename = secure_filename(
+            f"customer_po_{po.poNumber}_{int(datetime.now().timestamp())}.{save_ext}"
+        )
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
+
+        # Save to temp file first, then compress
+        temp_filename = f"temp_{filename}"
+        temp_filepath = os.path.join(app.config['UPLOAD_FOLDER'], temp_filename)
+        file.save(temp_filepath)
+
+        from utils import compress_image, compress_pdf
+        if save_ext == "pdf":
+            compress_pdf(temp_filepath, filepath)
+        else:
+            compress_image(temp_filepath, filepath)
+
+        # Remove temp file
+        if os.path.exists(temp_filepath):
+            os.remove(temp_filepath)
         
         # Update database
         po.customerPoFile = filename

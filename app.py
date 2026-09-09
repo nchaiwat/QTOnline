@@ -26,12 +26,16 @@
 from datetime import datetime, date, timedelta
 import os
 import sys
+from dotenv import load_dotenv
+load_dotenv()
+
 import base64
 import mimetypes
 import uuid
 import re
+import secrets
 
-APP_VERSION = "1.7.3"  # Added change_password API
+APP_VERSION = "1.7.4"  # Performance optimization and CIAM integration
 from flask import (
     Flask,
     render_template,
@@ -46,7 +50,7 @@ from flask import (
 )
 from flask import Response
 from extensions import db, bcrypt, login_manager, limiter
-from sqlalchemy import or_, text, func
+from sqlalchemy import or_, and_, text, func
 from sqlalchemy.orm import (
     joinedload,
     foreign,
@@ -84,6 +88,9 @@ from models import (
     POItem,
     Comment,
     Notification,
+    CiamSetting,
+    CiamAuditLog,
+    LoginLog,
     COMPANY_DATA,
     MOCK_CUSTOMER_DATA,
     CUSTOMER_CSV_COLUMNS,
@@ -364,7 +371,7 @@ def login():
         return redirect(url_for("app_shell"))
 
     if request.method == "POST":
-        data = request.json
+        data = request.get_json(silent=True) or request.form or {}
         # Honeypot
         if data.get("website"):
             return jsonify({"success": False, "error": "Spam detected"}), 400
@@ -372,15 +379,65 @@ def login():
         username = data.get("username", "").strip()
         password = data.get("password", "")
 
+        client_ip = (
+            request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+            or request.remote_addr
+            or "127.0.0.1"
+        )
+        user_agent = request.headers.get("User-Agent", "-")
+
         user = User.query.filter(func.lower(User.username) == username.lower()).first()
 
         if user and bcrypt.check_password_hash(user.password, password):
             if getattr(user, "status", "active") != "active":
+                try:
+                    db.session.add(
+                        LoginLog(
+                            username=username,
+                            user_id=user.id,
+                            ip_address=client_ip,
+                            user_agent=user_agent,
+                            status="ACCOUNT_DISABLED",
+                            failure_reason="Account is disabled",
+                        )
+                    )
+                    db.session.commit()
+                except Exception as log_err:
+                    print(f"Error writing login log: {log_err}")
                 return jsonify({"success": False, "error": "Account disabled"}), 403
+
             login_user(user, remember=True)
             user.lastLogin = now_bangkok()
-            db.session.commit()
+            try:
+                db.session.add(
+                    LoginLog(
+                        username=username,
+                        user_id=user.id,
+                        ip_address=client_ip,
+                        user_agent=user_agent,
+                        status="SUCCESS",
+                    )
+                )
+                db.session.commit()
+            except Exception as log_err:
+                print(f"Error writing login log: {log_err}")
             return jsonify({"success": True})
+
+        # Login failed
+        try:
+            db.session.add(
+                LoginLog(
+                    username=username,
+                    user_id=user.id if user else None,
+                    ip_address=client_ip,
+                    user_agent=user_agent,
+                    status="FAILED_CREDENTIALS" if user else "USER_NOT_FOUND",
+                    failure_reason="Invalid password" if user else "Username not found",
+                )
+            )
+            db.session.commit()
+        except Exception as log_err:
+            print(f"Error writing login log: {log_err}")
 
         return jsonify({"success": False, "error": "Invalid username or password"}), 401
 
@@ -693,6 +750,203 @@ def reject_cancel_po(id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/pos/export-excel", methods=["GET"])
+@login_required
+def export_pos_excel():
+    keyword = request.args.get("keyword", "").strip()
+    status_filter = request.args.get("status", "").strip()
+    month_filter = request.args.get("month", "").strip()  # YYYY-MM
+
+    # Base query based on user roles (Same security logic as manage_pos)
+    query = PurchaseOrder.query
+    if current_user.role in ["Administrator", "Sale Admin"]:
+        # Admins/Sale Admins see all POs EXCEPT other people's Drafts
+        query = query.filter(
+            or_(
+                PurchaseOrder.status != "Draft",
+                PurchaseOrder.sale_user_id == current_user.id,
+            )
+        )
+    else:
+        # Sale users see only their own POs
+        query = query.filter_by(sale_user_id=current_user.id)
+
+    # Apply Month Filter (with BE -> CE conversion)
+    if month_filter:
+        try:
+            parts = month_filter.split('-')
+            year = int(parts[0])
+            month = int(parts[1])
+            if year > 2500:
+                year -= 543
+            from sqlalchemy import extract
+            query = query.filter(extract('year', PurchaseOrder.updatedAt) == year)
+            query = query.filter(extract('month', PurchaseOrder.updatedAt) == month)
+        except Exception as e:
+            app.logger.error(f"Error filtering month in export: {e}")
+
+    # Apply Status Filter
+    if status_filter:
+        query = query.filter(PurchaseOrder.status == status_filter)
+
+    # Apply Keyword Filter (Replicating frontend searchable fields)
+    if keyword:
+        keyword_like = f"%{keyword}%"
+        query = query.join(User, PurchaseOrder.sale_user_id == User.id, isouter=True)
+        query = query.filter(
+            or_(
+                PurchaseOrder.poNumber.ilike(keyword_like),
+                PurchaseOrder.customerId.ilike(keyword_like),
+                PurchaseOrder.customerName.ilike(keyword_like),
+                PurchaseOrder.status.ilike(keyword_like),
+                User.fullName.ilike(keyword_like),
+                PurchaseOrder.saleId.ilike(keyword_like)
+            )
+        )
+
+    # Fetch data ordered by ID desc
+    pos = (
+        query.options(
+            joinedload(PurchaseOrder.creator),
+            joinedload(PurchaseOrder.customer_rel),
+            selectinload(PurchaseOrder.items).joinedload(POItem.product)
+        )
+        .order_by(PurchaseOrder.id.desc())
+        .all()
+    )
+
+    import csv
+    import io
+
+    output = io.StringIO()
+    # Write BOM for Microsoft Excel character encoding compatibility
+    output.write(u'\ufeff')
+    writer = csv.writer(output, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+
+    # Detailed report headers
+    headers = [
+        "เลขที่ QT (QT Number)",
+        "สถานะ (Status)",
+        "วันที่สร้าง (Created Date)",
+        "กำหนดส่งสินค้า (Delivery Date)",
+        "รหัสลูกค้า (Customer Code)",
+        "ชื่อลูกค้า (Customer Name)",
+        "ที่อยู่จัดส่ง (Ship To)",
+        "ชื่อพนักงานขาย (Sale Name)",
+        "รหัสสินค้า (Product Code)",
+        "ชื่อสินค้า (Product Name)",
+        "จำนวน (Quantity)",
+        "ราคาต่อหน่วย (Unit Price)",
+        "ราคาแนะนำ (Recommended Price)",
+        "ส่วนลดรายการ (Item Discount)",
+        "ราคารวมรายการ (Item Total)",
+        "ส่วนลดท้ายบิล 1 (%) (QT Discount 1 %)",
+        "ส่วนลดท้ายบิล 2 (%) (QT Discount 2 %)",
+        "มูลค่ารวมทั้งใบ QT (QT Total Amount)",
+        "วันที่แก้ไขล่าสุด (Updated Date)",
+        "เหตุผลการยกเลิก (Cancel Reason)"
+    ]
+    writer.writerow(headers)
+
+    for po in pos:
+        sale_name = po.creator.fullName if po.creator else (po.saleId or "Unknown")
+        customer_name = po.get_customer_name()
+
+        created_str = ensure_bangkok(po.created).strftime("%d/%m/%Y %H:%M") if po.created else ""
+        delivery_str = po.deliveryDate.strftime("%d/%m/%Y") if po.deliveryDate else ""
+        updated_str = ensure_bangkok(po.updatedAt).strftime("%d/%m/%Y %H:%M") if po.updatedAt else ""
+
+        # Build detailed shipping address
+        ship_to = po.poShipTo or ""
+        if not ship_to and po.customer_rel:
+            cust_name = po.customer_rel.name
+            s_build = po.customer_rel.shipToBuilding
+            if s_build and cust_name and s_build.strip() == cust_name.strip():
+                s_build = None
+            ship_parts = [
+                s_build,
+                po.customer_rel.shipToStreet,
+                po.customer_rel.shipToCity,
+                po.customer_rel.shipToCounty,
+                po.customer_rel.shipToCountry,
+                po.customer_rel.shipToZipCode,
+            ]
+            ship_to = " ".join(filter(None, ship_parts))
+            if not ship_to.strip():
+                b_build = po.customer_rel.billToBuilding
+                if b_build and cust_name and b_build.strip() == cust_name.strip():
+                    b_build = None
+                bill_parts = [
+                    b_build,
+                    po.customer_rel.billToStreet,
+                    po.customer_rel.billToCity,
+                    po.customer_rel.billToCounty,
+                    po.customer_rel.billToCountry,
+                    po.customer_rel.billToZipCode,
+                ]
+                ship_to = " ".join(filter(None, bill_parts))
+
+        # Write each item as a separate row to provide item-level granularity
+        if po.items:
+            for item in po.items:
+                prod_code = item.productCode or ""
+                if not prod_code and item.product:
+                    prod_code = item.product.productCode or ""
+
+                row = [
+                    po.poNumber,
+                    po.status,
+                    created_str,
+                    delivery_str,
+                    po.customerId,
+                    customer_name,
+                    ship_to,
+                    sale_name,
+                    prod_code,
+                    item.name or "",
+                    item.qty or 0,
+                    item.price or 0.0,
+                    item.recommendedPrice or 0.0,
+                    item.discount or 0.0,
+                    item.total or 0.0,
+                    po.discount_percent_1 or 0.0,
+                    po.discount_percent_2 or 0.0,
+                    po.amount or 0.0,
+                    updated_str,
+                    po.cancelReason or ""
+                ]
+                writer.writerow(row)
+        else:
+            row = [
+                po.poNumber,
+                po.status,
+                created_str,
+                delivery_str,
+                po.customerId,
+                customer_name,
+                ship_to,
+                sale_name,
+                "", "", 0, 0.0, 0.0, 0.0, 0.0,
+                po.discount_percent_1 or 0.0,
+                po.discount_percent_2 or 0.0,
+                po.amount or 0.0,
+                updated_str,
+                po.cancelReason or ""
+            ]
+            writer.writerow(row)
+
+    response_data = output.getvalue()
+    output.close()
+
+    filename = f"qt_export_{ensure_bangkok(now_bangkok()).strftime('%Y%m%d_%H%M%S')}.csv"
+
+    return Response(
+        response_data.encode('utf-8-sig'),
+        mimetype="text/csv",
+        headers={"Content-disposition": f"attachment; filename={filename}"}
+    )
+
+
 @app.route("/api/pos", methods=["GET", "POST"])
 @login_required
 def manage_pos():
@@ -710,31 +964,70 @@ def manage_pos():
             # Sale users see only their own POs
             query = query.filter_by(sale_user_id=current_user.id)
 
+        # Month or Date Filtering
+        month_param = request.args.get("month", "").strip()
+        if month_param and month_param.lower() != "all":
+            try:
+                parts = [int(p) for p in month_param.split("-")]
+                if parts[0] > 2500:
+                    parts[0] -= 543  # Convert Buddhist year to Gregorian
+                if len(parts) == 2:
+                    y, m = parts[0], parts[1]
+                    start_dt = datetime(y, m, 1, 0, 0, 0)
+                    if m == 12:
+                        end_dt = datetime(y + 1, 1, 1, 0, 0, 0)
+                    else:
+                        end_dt = datetime(y, m + 1, 1, 0, 0, 0)
+                    query = query.filter(
+                        or_(
+                            and_(PurchaseOrder.created >= start_dt, PurchaseOrder.created < end_dt),
+                            and_(PurchaseOrder.updatedAt >= start_dt, PurchaseOrder.updatedAt < end_dt),
+                        )
+                    )
+                elif len(parts) == 3:
+                    y, m, d = parts[0], parts[1], parts[2]
+                    start_dt = datetime(y, m, d, 0, 0, 0)
+                    end_dt = start_dt + timedelta(days=1)
+                    query = query.filter(
+                        or_(
+                            and_(PurchaseOrder.created >= start_dt, PurchaseOrder.created < end_dt),
+                            and_(PurchaseOrder.updatedAt >= start_dt, PurchaseOrder.updatedAt < end_dt),
+                        )
+                    )
+            except Exception as ex:
+                app.logger.warning(f"Invalid month filter format: {month_param}, error: {ex}")
+
+        is_summary = request.args.get("summary", "true").lower() != "false"
+
         try:
-            pos = (
-                query.options(
-                    joinedload(PurchaseOrder.creator),
-                    joinedload(PurchaseOrder.customer_rel),
-                    joinedload(
-                        PurchaseOrder.requester
-                    ),  # NEW: For cancelRequestBy name
-                    joinedload(PurchaseOrder.canceller),  # NEW: For cancelledBy name
-                    joinedload(
-                        PurchaseOrder.location_uploader
-                    ),  # NEW: For customerLocationUploadedBy
-                    joinedload(
-                        PurchaseOrder.po_uploader
-                    ),  # NEW: For customerPoUploadedBy
-                    selectinload(
-                        PurchaseOrder.comments
-                    ),  # NEW: Efficiently load comments
-                    joinedload(PurchaseOrder.items).joinedload(POItem.product),
+            if is_summary:
+                # Fast summary query without heavy items/comments joins
+                pos = (
+                    query.options(
+                        joinedload(PurchaseOrder.creator),
+                        joinedload(PurchaseOrder.customer_rel),
+                    )
+                    .order_by(PurchaseOrder.id.desc())
+                    .all()
                 )
-                .order_by(PurchaseOrder.id.desc())
-                .limit(300)
-                .all()
-            )
-            return jsonify([po.to_dict() for po in pos])
+                return jsonify([po.to_summary_dict() for po in pos])
+            else:
+                pos = (
+                    query.options(
+                        joinedload(PurchaseOrder.creator),
+                        joinedload(PurchaseOrder.customer_rel),
+                        joinedload(PurchaseOrder.requester),
+                        joinedload(PurchaseOrder.canceller),
+                        joinedload(PurchaseOrder.location_uploader),
+                        joinedload(PurchaseOrder.po_uploader),
+                        selectinload(PurchaseOrder.comments),
+                        joinedload(PurchaseOrder.items).joinedload(POItem.product),
+                    )
+                    .order_by(PurchaseOrder.id.desc())
+                    .limit(500)
+                    .all()
+                )
+                return jsonify([po.to_dict() for po in pos])
         except Exception as e:
             print(f"ERROR in manage_pos: {e}")
             import traceback
@@ -1010,12 +1303,27 @@ def upload_customer_location(id):
                 os.remove(old_path)
                 app.logger.info(f"Deleted old location file: {po.customerLocationFile}")
 
-        # Save new file
+        # Determine output extension and path
+        save_ext = "jpg" if ext in {"jpg", "jpeg", "png", "gif"} else ext
         filename = secure_filename(
-            f"location_{po.poNumber}_{int(datetime.now().timestamp())}.{ext}"
+            f"location_{po.poNumber}_{int(datetime.now().timestamp())}.{save_ext}"
         )
         filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-        file.save(filepath)
+
+        # Save to temp file first, then compress
+        temp_filename = f"temp_{filename}"
+        temp_filepath = os.path.join(app.config["UPLOAD_FOLDER"], temp_filename)
+        file.save(temp_filepath)
+
+        from utils import compress_image, compress_pdf
+        if save_ext == "pdf":
+            compress_pdf(temp_filepath, filepath)
+        else:
+            compress_image(temp_filepath, filepath)
+
+        # Remove temp file
+        if os.path.exists(temp_filepath):
+            os.remove(temp_filepath)
 
         # Update database
         po.customerLocationFile = filename
@@ -1103,12 +1411,27 @@ def upload_customer_po_file(id):
                 os.remove(old_path)
                 app.logger.info(f"Deleted old customer QT file: {po.customerPoFile}")
 
-        # Save new file
+        # Determine output extension and path
+        save_ext = "jpg" if ext in {"jpg", "jpeg", "png", "gif"} else ext
         filename = secure_filename(
-            f"customer_po_{po.poNumber}_{int(datetime.now().timestamp())}.{ext}"
+            f"customer_po_{po.poNumber}_{int(datetime.now().timestamp())}.{save_ext}"
         )
         filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-        file.save(filepath)
+
+        # Save to temp file first, then compress
+        temp_filename = f"temp_{filename}"
+        temp_filepath = os.path.join(app.config["UPLOAD_FOLDER"], temp_filename)
+        file.save(temp_filepath)
+
+        from utils import compress_image, compress_pdf
+        if save_ext == "pdf":
+            compress_pdf(temp_filepath, filepath)
+        else:
+            compress_image(temp_filepath, filepath)
+
+        # Remove temp file
+        if os.path.exists(temp_filepath):
+            os.remove(temp_filepath)
 
         # Update database
         po.customerPoFile = filename
@@ -1313,7 +1636,16 @@ def upload_product_image(key):
         new_filename = secure_filename(f"{prod.productCode}.{ext}")
 
         # บันทึกลงโฟลเดอร์ product_images ใน instance path
-        file.save(os.path.join(PRODUCT_IMAGE_FOLDER, new_filename))
+        filepath = os.path.join(PRODUCT_IMAGE_FOLDER, new_filename)
+        temp_filepath = os.path.join(PRODUCT_IMAGE_FOLDER, f"temp_{new_filename}")
+        file.save(temp_filepath)
+
+        # Compress product image (max 1024px, keep format)
+        from utils import compress_image
+        compress_image(temp_filepath, filepath, max_dimension=1024, quality=75, keep_format=True)
+
+        if os.path.exists(temp_filepath):
+            os.remove(temp_filepath)
 
         # อัปเดต URL ในฐานข้อมูล (เก็บเป็น Path สั้นๆ)
         prod.imageUrl = f"/product-images/{new_filename}"
@@ -2074,6 +2406,36 @@ def customer_portal_view(token):
 
         po = PurchaseOrder.query.filter_by(accessToken=token).first_or_404()
 
+        # Check link expiration (15 days)
+        from utils import ensure_bangkok, now_bangkok
+        expired = False
+        is_signed_expired = False
+        target_dt = None
+
+        if po.status == "Completed" or po.signedAt:
+            target_dt = ensure_bangkok(po.signedAt)
+            if target_dt and (now_bangkok() - target_dt > timedelta(days=15)):
+                expired = True
+                is_signed_expired = True
+        else:
+            target_dt = ensure_bangkok(po.created)
+            if target_dt and (now_bangkok() - target_dt > timedelta(days=15)):
+                expired = True
+
+        if expired:
+            sale_user = po.creator
+            sale_name = sale_user.fullName if sale_user else (po.saleId or "ไม่ระบุ")
+            sale_phone = sale_user.phoneNumber if (sale_user and sale_user.phoneNumber) else ""
+            created_date_str = ensure_bangkok(po.created).strftime("%d/%m/%Y")
+            return render_template(
+                "expired.html",
+                po_number=po.poNumber,
+                created_date=created_date_str,
+                sale_name=sale_name,
+                sale_phone=sale_phone,
+                is_signed_expired=is_signed_expired
+            )
+
         # Pre-calculate totals safely (prices are VAT-inclusive)
         # Resolve Sale Info
         sale_user = po.creator
@@ -2158,9 +2520,61 @@ def customer_portal_view(token):
         )
 
 
+@app.route("/p/<token>/pdf")
+def customer_download_pdf(token):
+    try:
+        po = PurchaseOrder.query.filter_by(accessToken=token).first_or_404()
+        
+        # Check link expiration (15 days)
+        from utils import ensure_bangkok, now_bangkok
+        expired = False
+        if po.status == "Completed" or po.signedAt:
+            target_dt = ensure_bangkok(po.signedAt)
+            if target_dt and (now_bangkok() - target_dt > timedelta(days=15)):
+                expired = True
+        else:
+            target_dt = ensure_bangkok(po.created)
+            if target_dt and (now_bangkok() - target_dt > timedelta(days=15)):
+                expired = True
+
+        if expired:
+            return "Link expired / ลิงก์หมดอายุแล้ว", 403
+
+        # Generate the PDF dynamically ensuring the same output as Print Official QT
+        pdf_bytes = _generate_pdf_bytes(po, is_draft=False)
+        if not pdf_bytes:
+            return "Failed to generate PDF", 500
+
+        response = make_response(pdf_bytes)
+        response.headers["Content-Type"] = "application/pdf"
+        fname = f"signed_po_{po.id}_{po.poNumber}.pdf"
+        response.headers["Content-Disposition"] = f"attachment; filename={fname}"
+        return response
+
+    except Exception as e:
+        print(f"[PDF Dynamic Download Error] {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        return f"Error: {str(e)}", 500
+
+
 @app.route("/api/p/<token>")
 def get_customer_po(token):
     po = PurchaseOrder.query.filter_by(accessToken=token).first_or_404()
+    # Check link expiration (15 days)
+    from utils import ensure_bangkok, now_bangkok
+    expired = False
+    if po.status == "Completed" or po.signedAt:
+        target_dt = ensure_bangkok(po.signedAt)
+        if target_dt and (now_bangkok() - target_dt > timedelta(days=15)):
+            expired = True
+    else:
+        target_dt = ensure_bangkok(po.created)
+        if target_dt and (now_bangkok() - target_dt > timedelta(days=15)):
+            expired = True
+
+    if expired:
+        return jsonify({"error": "Link expired / ลิงก์หมดอายุแล้ว"}), 403
     return jsonify(po.to_dict())
 
 
@@ -2175,6 +2589,21 @@ def sign_customer_po(token):
         .filter_by(accessToken=token)
         .first_or_404()
     )
+
+    # Check link expiration (15 days)
+    from utils import ensure_bangkok, now_bangkok
+    expired = False
+    if po.status == "Completed" or po.signedAt:
+        target_dt = ensure_bangkok(po.signedAt)
+        if target_dt and (now_bangkok() - target_dt > timedelta(days=15)):
+            expired = True
+    else:
+        target_dt = ensure_bangkok(po.created)
+        if target_dt and (now_bangkok() - target_dt > timedelta(days=15)):
+            expired = True
+
+    if expired:
+        return jsonify({"error": "Link expired / ลิงก์หมดอายุแล้ว"}), 403
 
     data = request.json
     signature_data = data.get("signature")
@@ -2754,6 +3183,409 @@ def bulk_delete_customers():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+
+# =================================================================================
+# [START] Centralized Identity Management (CIAM) & System Settings APIs
+# Corporate Standard: Centralized Identity Management API Specification
+# Base URL Prefix: /api/v1/directory
+# =================================================================================
+
+def get_client_ip():
+    """Extract client IP address, safely handling X-Forwarded-For reverse proxy header."""
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.remote_addr or "127.0.0.1"
+
+
+def verify_ciam_access():
+    """
+    Validates Machine-to-Machine (M2M) API Key and IP Whitelisting according to Corporate CIAM Spec.
+    Returns: (is_valid: bool, status_code: int, error_detail: str, client_ip: str)
+    """
+    client_ip = get_client_ip()
+    try:
+        setting = CiamSetting.query.first()
+    except Exception as e:
+        app.logger.error(f"Error querying CiamSetting: {e}")
+        return False, 500, "Internal server error reading configuration.", client_ip
+
+    if not setting or not setting.is_enabled:
+        return False, 403, "Central Identity Management API is currently disabled.", client_ip
+
+    api_key_header = request.headers.get("X-Management-API-Key", "").strip()
+    if not api_key_header:
+        return False, 401, "Invalid or missing X-Management-API-Key header.", client_ip
+
+    # Constant-time comparison to prevent timing attacks
+    if not secrets.compare_digest(api_key_header, setting.api_key):
+        return False, 401, "Invalid or missing X-Management-API-Key header.", client_ip
+
+    # IP Whitelisting check
+    allowed_ips_raw = setting.allowed_ips or ""
+    allowed_ips = [
+        ip.strip()
+        for ip in allowed_ips_raw.replace("\n", ",").split(",")
+        if ip.strip()
+    ]
+    if allowed_ips and client_ip not in allowed_ips:
+        return False, 403, f"Origin IP '{client_ip}' is not permitted.", client_ip
+
+    return True, 200, None, client_ip
+
+
+@app.route("/api/v1/directory/accounts", methods=["GET"])
+def ciam_list_accounts():
+    """
+    Endpoint 1: ดึงรายชื่อบัญชีผู้ใช้ทั้งหมด (Account Inventory / Reconciliation)
+    Spec: GET /api/v1/directory/accounts
+    """
+    is_valid, code, err, client_ip = verify_ciam_access()
+    if not is_valid:
+        try:
+            db.session.add(
+                CiamAuditLog(
+                    client_ip=client_ip,
+                    action="list_accounts",
+                    status_code=code,
+                    message=err,
+                )
+            )
+            db.session.commit()
+        except Exception:
+            pass
+        return jsonify({"detail": err}), code
+
+    status_filter = request.args.get("status", "all").lower()
+    dept_filter = request.args.get("department", "").strip()
+    search_query = request.args.get("search", "").strip().lower()
+
+    query = User.query
+    if status_filter == "active":
+        query = query.filter(func.lower(User.status) == "active")
+    elif status_filter == "inactive":
+        query = query.filter(func.lower(User.status) == "inactive")
+
+    if dept_filter:
+        query = query.filter(func.lower(User.role) == dept_filter.lower())
+
+    if search_query:
+        query = query.filter(
+            or_(
+                func.lower(User.username).like(f"%{search_query}%"),
+                func.lower(User.fullName).like(f"%{search_query}%"),
+            )
+        )
+
+    users = query.order_by(User.id.asc()).all()
+
+    accounts_list = []
+    active_count = 0
+    inactive_count = 0
+
+    for u in users:
+        is_active = getattr(u, "status", "active") == "active"
+        if is_active:
+            active_count += 1
+        else:
+            inactive_count += 1
+
+        created_local = ensure_bangkok(u.createdAt)
+        last_login_local = ensure_bangkok(u.lastLogin)
+        accounts_list.append(
+            {
+                "id": u.id,
+                "username": u.username,
+                "full_name": u.fullName or u.username,
+                "email": f"{u.username}@windowasia.com",
+                "department": u.role or "General",
+                "telegram_chat_id": None,
+                "group_name": u.role or "Sale",
+                "use_ad_auth": False,
+                "is_active": is_active,
+                "last_login_at": (
+                    last_login_local.strftime("%Y-%m-%dT%H:%M:%SZ")
+                    if last_login_local
+                    else None
+                ),
+                "created_at": (
+                    created_local.strftime("%Y-%m-%dT%H:%M:%SZ")
+                    if created_local
+                    else None
+                ),
+                "updated_at": (
+                    created_local.strftime("%Y-%m-%dT%H:%M:%SZ")
+                    if created_local
+                    else None
+                ),
+            }
+        )
+
+    try:
+        db.session.add(
+            CiamAuditLog(
+                client_ip=client_ip,
+                action="list_accounts",
+                status_code=200,
+                message=f"Fetched {len(accounts_list)} accounts successfully.",
+            )
+        )
+        db.session.commit()
+    except Exception:
+        pass
+
+    return (
+        jsonify(
+            {
+                "application_name": "PO-Online (QT-Online)",
+                "total_accounts": len(accounts_list),
+                "active_accounts": active_count,
+                "inactive_accounts": inactive_count,
+                "accounts": accounts_list,
+            }
+        ),
+        200,
+    )
+
+
+@app.route("/api/v1/directory/accounts/<string:username>/status", methods=["PATCH"])
+def ciam_update_account_status(username):
+    """
+    Endpoint 2: สั่งเปิดหรือระงับการใช้งานบัญชี (Status Provisioning / Instant Offboarding)
+    Spec: PATCH /api/v1/directory/accounts/{username}/status
+    """
+    is_valid, code, err, client_ip = verify_ciam_access()
+    if not is_valid:
+        try:
+            db.session.add(
+                CiamAuditLog(
+                    client_ip=client_ip,
+                    action="update_account_status",
+                    target_username=username,
+                    status_code=code,
+                    message=err,
+                )
+            )
+            db.session.commit()
+        except Exception:
+            pass
+        return jsonify({"detail": err}), code
+
+    data = request.json or {}
+    if "is_active" not in data:
+        return jsonify({"detail": "Validation error: 'is_active' field is required."}), 400
+
+    new_is_active = bool(data.get("is_active"))
+    reason = data.get("reason", "Status updated by Central IAM")
+    updated_by = data.get("updated_by", "Central-IAM-Service")
+
+    user = User.query.filter(func.lower(User.username) == username.strip().lower()).first()
+    if not user:
+        try:
+            db.session.add(
+                CiamAuditLog(
+                    client_ip=client_ip,
+                    action="update_account_status",
+                    target_username=username,
+                    status_code=404,
+                    reason=reason,
+                    updated_by=updated_by,
+                    message=f"User account '{username}' does not exist.",
+                )
+            )
+            db.session.commit()
+        except Exception:
+            pass
+        return jsonify({"detail": f"User account '{username}' does not exist."}), 404
+
+    prev_status = getattr(user, "status", "active")
+    new_status = "active" if new_is_active else "inactive"
+    user.status = new_status
+
+    try:
+        db.session.commit()
+
+        audit = CiamAuditLog(
+            client_ip=client_ip,
+            action="update_account_status",
+            target_username=user.username,
+            previous_status=prev_status,
+            new_status=new_status,
+            reason=reason,
+            updated_by=updated_by,
+            status_code=200,
+            message=f"Status changed from {prev_status} to {new_status}",
+        )
+        db.session.add(audit)
+        db.session.commit()
+
+        status_text = "ACTIVE" if new_is_active else "INACTIVE"
+        return (
+            jsonify(
+                {
+                    "username": user.username,
+                    "is_active": new_is_active,
+                    "message": f"Account '{user.username}' status has been successfully updated to {status_text}.",
+                    "updated_at": now_bangkok().isoformat(),
+                }
+            ),
+            200,
+        )
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"detail": f"Internal server error: {str(e)}"}), 500
+
+
+@app.route("/api/v1/directory/accounts", methods=["POST"])
+def ciam_create_account():
+    """
+    Endpoint 3: สร้างบัญชีผู้ใช้งานใหม่ (Account Provisioning)
+    Spec: POST /api/v1/directory/accounts
+    """
+    is_valid, code, err, client_ip = verify_ciam_access()
+    if not is_valid:
+        try:
+            db.session.add(
+                CiamAuditLog(
+                    client_ip=client_ip,
+                    action="create_account",
+                    status_code=code,
+                    message=err,
+                )
+            )
+            db.session.commit()
+        except Exception:
+            pass
+        return jsonify({"detail": err}), code
+
+    data = request.json or {}
+    username = data.get("username", "").strip()
+    full_name = data.get("full_name", "").strip()
+    email = data.get("email", "").strip()
+    department = data.get("department", "").strip()
+    group_name = data.get("group_name", "").strip()
+    created_by = data.get("created_by", "Central-IAM-Service")
+
+    if not username or not full_name:
+        return (
+            jsonify({"detail": "Validation error: username and full_name are required"}),
+            400,
+        )
+
+    existing_user = User.query.filter(func.lower(User.username) == username.lower()).first()
+    if existing_user:
+        return jsonify({"detail": f"User account '{username}' already exists."}), 409
+
+    role = "Sale"
+    if group_name in ["Administrator", "Sale Admin", "Sale"]:
+        role = group_name
+    elif department in ["Administrator", "Sale Admin", "Sale"]:
+        role = department
+
+    # Generate random initial password
+    random_temp_pass = secrets.token_urlsafe(12)
+    hashed_pw = bcrypt.generate_password_hash(random_temp_pass).decode("utf-8")
+
+    new_user = User(
+        username=username,
+        fullName=full_name,
+        password=hashed_pw,
+        role=role,
+        status="active",
+        createdAt=now_bangkok(),
+    )
+
+    try:
+        db.session.add(new_user)
+        db.session.commit()
+
+        audit = CiamAuditLog(
+            client_ip=client_ip,
+            action="create_account",
+            target_username=new_user.username,
+            new_status="active",
+            reason="Account created via CIAM provisioning",
+            updated_by=created_by,
+            status_code=201,
+            message=f"User {new_user.username} created with role {role}",
+        )
+        db.session.add(audit)
+        db.session.commit()
+
+        return (
+            jsonify(
+                {
+                    "success": True,
+                    "id": new_user.id,
+                    "username": new_user.username,
+                    "message": f"Account '{new_user.username}' created successfully.",
+                    "group_name": new_user.role,
+                    "is_active": True,
+                    "created_at": now_bangkok().isoformat(),
+                }
+            ),
+            201,
+        )
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"detail": f"Internal server error: {str(e)}"}), 500
+
+
+# --- Admin System Settings & Logs Endpoints ---
+
+@app.route("/api/admin/ciam/settings", methods=["GET", "PUT"])
+@roles_required("Administrator")
+def manage_ciam_settings():
+    setting = CiamSetting.query.first()
+    if not setting:
+        token = secrets.token_hex(16)
+        setting = CiamSetting(
+            is_enabled=True,
+            api_key=f"sec_po_mgmt_{token}",
+            allowed_ips="157.173.219.153, 192.168.12.11, 127.0.0.1",
+            default_role="Sale",
+        )
+        db.session.add(setting)
+        db.session.commit()
+
+    if request.method == "GET":
+        return jsonify(setting.to_dict())
+
+    if request.method == "PUT":
+        data = request.json or {}
+        if "isEnabled" in data:
+            setting.is_enabled = bool(data["isEnabled"])
+        if "allowedIps" in data:
+            setting.allowed_ips = str(data["allowedIps"]).strip()
+        if "defaultRole" in data:
+            setting.default_role = str(data["defaultRole"]).strip()
+        if data.get("regenerateKey"):
+            token = secrets.token_hex(16)
+            setting.api_key = f"sec_po_mgmt_{token}"
+
+        setting.updated_at = now_bangkok()
+        db.session.commit()
+        return jsonify({"success": True, "setting": setting.to_dict()})
+
+
+@app.route("/api/admin/ciam/logs", methods=["GET"])
+@roles_required("Administrator")
+def get_ciam_logs():
+    logs = CiamAuditLog.query.order_by(CiamAuditLog.id.desc()).limit(100).all()
+    return jsonify([log.to_dict() for log in logs])
+
+
+@app.route("/api/admin/login-logs", methods=["GET"])
+@roles_required("Administrator")
+def get_login_logs():
+    logs = LoginLog.query.order_by(LoginLog.id.desc()).limit(100).all()
+    return jsonify([log.to_dict() for log in logs])
+
+
+# =================================================================================
+# [END] Centralized Identity Management (CIAM) & System Settings APIs
+# =================================================================================
 
 
 # จุดเริ่มต้นโปรแกรมสำหรับ Local Development (python app.py)

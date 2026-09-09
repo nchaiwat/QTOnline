@@ -11,6 +11,15 @@
         @page {
             size: A4;
             margin: 1.0cm;
+            margin-bottom: 1.8cm; /* Expanded to make space for page footer */
+
+            @bottom-right {
+                content: "Page " counter(page) " of " counter(pages);
+                font-family: 'Sarabun', sans-serif;
+                font-size: 10px;
+                color: #000;
+                padding-right: 0.5cm;
+            }
         }
 
         body {
@@ -108,6 +117,11 @@
             vertical-align: middle;
         }
 
+        table.tbl-items tr {
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+
         .col-c {
             text-align: center;
         }
@@ -190,6 +204,11 @@
             font-weight: bold;
             pointer-events: none;
             text-transform: uppercase;
+        }
+
+        .summary-sig-container {
+            page-break-inside: avoid;
+            break-inside: avoid;
         }
     </style>
 </head>
@@ -344,100 +363,121 @@
         </tbody>
     </table>
 
-    <!-- Totals Table -->
-    <table class="tbl-total">
-        <!-- 1. Subtotal -->
-        <tr>
-            <td style="border: none !important; width: 50%;"></td>
-            <td style="width: 35%; text-align: right; border-left: 2px solid #000; border-top: 2px solid #000;">
-                รวมเป็นเงิน (Subtotal)</td>
-            <td style="width: 15%; text-align: right; border-right: 2px solid #000; border-top: 2px solid #000;">
-                {{ "{:,.2f}".format(totals_summary.subtotal_recommended) }}</td>
-        </tr>
-        
-        <!-- 2. Price Diff Discount -->
-        <tr>
-            <td style="border: none !important;"></td>
-            <td style="text-align: right; font-style: italic; color: red; border-left: 2px solid #000;">
-                หักส่วนลดสินค้า</td>
-            <td style="text-align: right; font-style: italic; color: red; border-right: 2px solid #000;">
-                -{{ "{:,.2f}".format(totals_summary.price_diff_discount) }}</td>
-        </tr>
+    <!-- Wrapper to keep totals and signature section together on the same page -->
+    <div class="summary-sig-container">
+        <!-- Totals Table -->
+        <table class="tbl-total">
+            <!-- 1. Subtotal -->
+            <tr>
+                <td style="border: none !important; width: 50%;"></td>
+                <td style="width: 35%; text-align: right; border-left: 2px solid #000; border-top: 2px solid #000;">
+                    รวมเป็นเงิน (Subtotal)</td>
+                <td style="width: 15%; text-align: right; border-right: 2px solid #000; border-top: 2px solid #000;">
+                    {{ "{:,.2f}".format(totals_summary.subtotal_recommended) }}</td>
+            </tr>
+            
+            <!-- 2. Price Diff Discount -->
+            <tr>
+                <td style="border: none !important;"></td>
+                <td style="text-align: right; font-style: italic; color: red; border-left: 2px solid #000;">
+                    หักส่วนลดสินค้า</td>
+                <td style="text-align: right; font-style: italic; color: red; border-right: 2px solid #000;">
+                    -{{ "{:,.2f}".format(totals_summary.price_diff_discount) }}</td>
+            </tr>
 
-        <!-- 3. Bill Discount (2 Step Total) -->
-        <tr>
-            <td style="border: none !important;"></td>
-            <td style="text-align: right; font-style: italic; color: red; border-left: 2px solid #000;">
-                หักส่วนลดท้ายบิล รวม 2 Step</td>
-            <td style="text-align: right; font-style: italic; color: red; border-right: 2px solid #000;">
-                -{{ "{:,.2f}".format(totals_summary.bill_discount_total) }}</td>
-        </tr>
+            <!-- 3. Bill Discount (2 Step Total) -->
+            <tr>
+                <td style="border: none !important;"></td>
+                <td style="text-align: right; font-style: italic; color: red; border-left: 2px solid #000;">
+                    หักส่วนลดท้ายบิล รวม 2 Step</td>
+                <td style="text-align: right; font-style: italic; color: red; border-right: 2px solid #000;">
+                    -{{ "{:,.2f}".format(totals_summary.bill_discount_total) }}</td>
+            </tr>
 
-        <!-- 4. Total After All Discounts -->
-        <tr>
-            <td style="border: none !important;"></td>
-            <td style="text-align: right; border-left: 2px solid #000;">
-                จำนวนเงินรวมหลังหักส่วนลด</td>
-            <td style="text-align: right; border-right: 2px solid #000;">
-                {{ "{:,.2f}".format(totals_summary.total_after_discount) }}</td>
-        </tr>
+            <!-- 4. Total After All Discounts -->
+            <tr>
+                <td style="border: none !important;"></td>
+                <td style="text-align: right; border-left: 2px solid #000;">
+                    จำนวนเงินรวมหลังหักส่วนลด</td>
+                <td style="text-align: right; border-right: 2px solid #000;">
+                    {{ "{:,.2f}".format(totals_summary.total_after_discount) }}</td>
+            </tr>
 
-        <!-- 5. VAT -->
-        <tr>
-            <td style="border: none !important;"></td>
-            <td style="text-align: right; border-left: 2px solid #000;">
-                ภาษีมูลค่าเพิ่ม (VAT 7%)</td>
-            <td style="text-align: right; border-right: 2px solid #000;">
-                {{ "{:,.2f}".format(totals_summary.vat) }}</td>
-        </tr>
+            <!-- 5. VAT -->
+            <tr>
+                <td style="border: none !important;"></td>
+                <td style="text-align: right; border-left: 2px solid #000;">
+                    ภาษีมูลค่าเพิ่ม (VAT 7%)</td>
+                <td style="text-align: right; border-right: 2px solid #000;">
+                    {{ "{:,.2f}".format(totals_summary.vat) }}</td>
+            </tr>
 
-        <!-- 6. Grand Total -->
-        <tr>
-            <td style="border: none !important;"></td>
-            <td style="text-align: right; font-weight: bold; border-left: 2px solid #000; border-bottom: 2px solid #000; background-color: #f9f9f9;">
-                จำนวนเงินสุทธิ (TOTAL)</td>
-            <td style="text-align: right; font-weight: bold; border-right: 2px solid #000; border-bottom: 2px solid #000; background-color: #f9f9f9; color: #000;">
-                {{ "{:,.2f}".format(totals_summary.grand_total) }}</td>
-        </tr>
-    </table>
+            <!-- 6. Grand Total -->
+            <tr>
+                <td style="border: none !important;"></td>
+                <td style="text-align: right; font-weight: bold; border-left: 2px solid #000; border-bottom: 2px solid #000; background-color: #f9f9f9;">
+                    จำนวนเงินสุทธิ (TOTAL)</td>
+                <td style="text-align: right; font-weight: bold; border-right: 2px solid #000; border-bottom: 2px solid #000; background-color: #f9f9f9; color: #000;">
+                    {{ "{:,.2f}".format(totals_summary.grand_total) }}</td>
+            </tr>
+        </table>
 
-    <!-- Signature Section -->
-    <table class="tbl-sig">
-        <tr>
-            <td>
-                <!-- Authorize Seller Signature -->
-                <div class="sig-line">
-                    {% if sale_signature_src %}
-                    <img src="{{ sale_signature_src }}" class="sig-img">
-                    {% endif %}
-                </div>
-                <div style="font-weight: bold;">({% if po.creator %}{{ po.creator.fullName }}{% elif po.saleId %}{{ po.saleId }}{% else %}Authorized Seller{% endif %})</div>
-                <div style="font-weight: bold;">ผู้ขาย / Authorized Seller</div>
-                <div style="font-weight: bold;">Date: {{ po.created|bangkok_datetime('%d/%m/%Y') }}</div>
-            </td>
-
-            <td class="spacer"></td>
-
-            <td>
-                <!-- Customer Signature -->
-                <div class="sig-line">
-                    {% if signature_image_src %}
-                    <img src="{{ signature_image_src }}" class="sig-img">
-                    {% endif %}
-                </div>
-                <div style="font-weight: bold;">
+        <!-- Signature Section with row-by-row structure for perfect vertical alignment -->
+        <table class="tbl-sig">
+            <!-- Row 1: Signature Line Underline -->
+            <tr>
+                <td>
+                    <div class="sig-line">
+                        {% if sale_signature_src %}
+                        <img src="{{ sale_signature_src }}" class="sig-img">
+                        {% endif %}
+                    </div>
+                </td>
+                <td class="spacer"></td>
+                <td>
+                    <div class="sig-line">
+                        {% if signature_image_src %}
+                        <img src="{{ signature_image_src }}" class="sig-img">
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            <!-- Row 2: Bracketed Names -->
+            <tr>
+                <td style="vertical-align: top; font-weight: bold; padding-top: 5px;">
+                    ({% if po.creator %}{{ po.creator.fullName }}{% elif po.saleId %}{{ po.saleId }}{% else %}Authorized Seller{% endif %})
+                </td>
+                <td class="spacer"></td>
+                <td style="vertical-align: top; font-weight: bold; padding-top: 5px;">
                     {% if po.signatureImage %}
                     ( {% if po.customerName %}{{ po.customerName }}{% else %}Authorized Customer{% endif %} )
                     {% else %}
                     ( ....................................................... )
                     {% endif %}
-                </div>
-                <div style="font-weight: bold;">ผู้ซื้อ / Authorized Customer</div>
-                <div style="font-weight: bold;">Date: {% if po.signedAt %}{{ po.signedAt|bangkok_datetime }}{% else %}....../....../..........{% endif %}</div>
-            </td>
-        </tr>
-    </table>
+                </td>
+            </tr>
+            <!-- Row 3: Role Titles -->
+            <tr>
+                <td style="vertical-align: top; font-weight: bold;">
+                    ผู้ขาย / Authorized Seller
+                </td>
+                <td class="spacer"></td>
+                <td style="vertical-align: top; font-weight: bold;">
+                    ผู้ซื้อ / Authorized Customer
+                </td>
+            </tr>
+            <!-- Row 4: Dates -->
+            <tr>
+                <td style="vertical-align: top; font-weight: bold;">
+                    Date: {{ po.created|bangkok_datetime('%d/%m/%Y') }}
+                </td>
+                <td class="spacer"></td>
+                <td style="vertical-align: top; font-weight: bold;">
+                    Date: {% if po.signedAt %}{{ po.signedAt|bangkok_datetime }}{% else %}....../....../..........{% endif %}
+                </td>
+            </tr>
+        </table>
+    </div>
 
 </body>
-
 </html>

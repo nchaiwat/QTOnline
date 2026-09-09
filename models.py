@@ -339,17 +339,20 @@ class Product(db.Model):
 
 class PurchaseOrder(db.Model):
     __tablename__ = "purchase_orders"
+    __table_args__ = (
+        db.Index("idx_po_sale_created", "sale_user_id", "created"),
+    )
     id = db.Column(db.Integer, primary_key=True)
     poNumber = db.Column(db.String(50), unique=True, nullable=False, index=True)
     customerId = db.Column(db.String(50), nullable=False, index=True)
     customerName = db.Column(db.String(255))
     poShipTo = db.Column(db.Text)  # Manually editable ship to
-    sale_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    sale_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
     saleId = db.Column(db.String(150))
     amount = db.Column(db.Float, default=0.0)
-    status = db.Column(db.String(50), default="Draft")
-    created = db.Column(db.DateTime, default=now_bangkok)
-    updatedAt = db.Column(db.DateTime, default=now_bangkok, onupdate=now_bangkok)
+    status = db.Column(db.String(50), default="Draft", index=True)
+    created = db.Column(db.DateTime, default=now_bangkok, index=True)
+    updatedAt = db.Column(db.DateTime, default=now_bangkok, onupdate=now_bangkok, index=True)
     deliveryDate = db.Column(db.Date)
     signedFile = db.Column(db.String(255))
     signedFileUrl = db.Column(db.Text)
@@ -633,6 +636,46 @@ class PurchaseOrder(db.Model):
         })
         return res
 
+    def to_summary_dict(self):
+        sale_name = (
+            self.creator.fullName if self.creator else (self.saleId or "Unknown")
+        )
+        cust_name = self.get_customer_name()
+        created_dt = ensure_bangkok(self.created)
+        updated_dt = ensure_bangkok(self.updatedAt) if self.updatedAt else created_dt
+
+        delivery_date_display = None
+        delivery_date_iso = None
+        if self.deliveryDate:
+            try:
+                d_obj = self.deliveryDate
+                if isinstance(d_obj, str):
+                    d_obj = _parse_date(d_obj)
+                if isinstance(d_obj, (date, datetime)):
+                    delivery_date_display = d_obj.strftime("%d-%m-%Y")
+                    delivery_date_iso = d_obj.strftime("%Y-%m-%d")
+            except:
+                pass
+
+        return {
+            "id": self.id,
+            "poNumber": self.poNumber,
+            "customerId": self.customerId,
+            "customerName": cust_name,
+            "saleUserId": self.sale_user_id,
+            "saleId": sale_name,
+            "amount": self.amount or 0.0,
+            "status": self.status,
+            "created": created_dt.strftime("%d-%m-%Y") if created_dt else None,
+            "createdIso": created_dt.isoformat() if created_dt else None,
+            "updatedAt": updated_dt.strftime("%d-%m-%Y %H:%M") if updated_dt else None,
+            "updatedAtIso": updated_dt.isoformat() if updated_dt else None,
+            "deliveryDate": delivery_date_display,
+            "deliveryDateIso": delivery_date_iso,
+            "accessToken": self.accessToken,
+        }
+
+
 
 class POItem(db.Model):
     __tablename__ = "po_items"
@@ -653,6 +696,19 @@ class POItem(db.Model):
         foreign_keys=[productId],
         viewonly=True,
     )
+
+    @property
+    def resolved_image_url(self):
+        code = (self.productCode or "").strip()
+        img = self.imageUrl
+        if self.product:
+            if not code:
+                code = (self.product.productCode or "").strip()
+            if not img:
+                img = self.product.imageUrl
+        if not img and code:
+            img = f"/product-images/{code}.jpg"
+        return build_product_image_url(img)
 
     def to_dict(self):
         code = (self.productCode or "").strip()
@@ -729,6 +785,87 @@ def create_notification(user_id, text, link_id=None):
         db.session.add(notif)
     except Exception as e:
         print(f"Error creating notification: {e}")
+
+
+# --- Centralized Identity Management (CIAM) & Audit Models ---
+class CiamSetting(db.Model):
+    __tablename__ = "ciam_settings"
+    id = db.Column(db.Integer, primary_key=True)
+    is_enabled = db.Column(db.Boolean, default=True, nullable=False)
+    api_key = db.Column(db.String(100), nullable=False)
+    allowed_ips = db.Column(db.Text, default="157.173.219.153, 192.168.12.11, 127.0.0.1")
+    default_role = db.Column(db.String(50), default="Sale")
+    updated_at = db.Column(db.DateTime, default=now_bangkok, onupdate=now_bangkok)
+
+    def to_dict(self):
+        updated_local = ensure_bangkok(self.updated_at)
+        return {
+            "id": self.id,
+            "isEnabled": self.is_enabled,
+            "apiKey": self.api_key,
+            "allowedIps": self.allowed_ips or "",
+            "defaultRole": self.default_role or "Sale",
+            "updatedAt": updated_local.strftime("%d-%m-%Y %H:%M") if updated_local else None,
+        }
+
+
+class CiamAuditLog(db.Model):
+    __tablename__ = "ciam_audit_logs"
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, default=now_bangkok, index=True)
+    client_ip = db.Column(db.String(50), nullable=False)
+    action = db.Column(db.String(50), nullable=False, index=True)  # list_accounts, update_account_status, create_account
+    target_username = db.Column(db.String(150), nullable=True, index=True)
+    previous_status = db.Column(db.String(20), nullable=True)
+    new_status = db.Column(db.String(20), nullable=True)
+    reason = db.Column(db.Text, nullable=True)
+    updated_by = db.Column(db.String(150), nullable=True)
+    status_code = db.Column(db.Integer, default=200)
+    message = db.Column(db.Text, nullable=True)
+
+    def to_dict(self):
+        created_local = ensure_bangkok(self.created_at)
+        return {
+            "id": self.id,
+            "createdAt": created_local.strftime("%d-%m-%Y %H:%M:%S") if created_local else None,
+            "createdAtIso": created_local.isoformat() if created_local else None,
+            "clientIp": self.client_ip,
+            "action": self.action,
+            "targetUsername": self.target_username or "-",
+            "previousStatus": self.previous_status,
+            "newStatus": self.new_status,
+            "reason": self.reason or "-",
+            "updatedBy": self.updated_by or "-",
+            "statusCode": self.status_code,
+            "message": self.message or "",
+        }
+
+
+class LoginLog(db.Model):
+    __tablename__ = "login_logs"
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, default=now_bangkok, index=True)
+    username = db.Column(db.String(150), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    ip_address = db.Column(db.String(50), nullable=False)
+    user_agent = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(30), nullable=False, index=True)  # SUCCESS, FAILED_CREDENTIALS, ACCOUNT_DISABLED, USER_NOT_FOUND
+    failure_reason = db.Column(db.String(255), nullable=True)
+
+    def to_dict(self):
+        created_local = ensure_bangkok(self.created_at)
+        return {
+            "id": self.id,
+            "createdAt": created_local.strftime("%d-%m-%Y %H:%M:%S") if created_local else None,
+            "createdAtIso": created_local.isoformat() if created_local else None,
+            "username": self.username,
+            "userId": self.user_id,
+            "ipAddress": self.ip_address,
+            "userAgent": self.user_agent or "-",
+            "status": self.status,
+            "failureReason": self.failure_reason or "-",
+        }
+
 
 
 # --- CRUD Helpers ---

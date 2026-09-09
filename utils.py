@@ -166,3 +166,105 @@ def roles_required(*roles):
 def bangkok_datetime_filter(value, format='%d-%m-%Y %H:%M'):
     if value is None: return ""
     return ensure_bangkok(value).strftime(format)
+
+
+# --- File Compression Helpers ---
+def compress_image(input_path, output_path, max_dimension=1600, quality=75, keep_format=False):
+    """
+    Compress an image to reduce file size.
+    If keep_format is False, it will convert non-JPEG images to JPEG.
+    """
+    try:
+        from PIL import Image, ImageOps
+        with Image.open(input_path) as img:
+            # Handle EXIF orientation
+            try:
+                img = ImageOps.exif_transpose(img)
+            except Exception:
+                pass
+
+            # Resize keeping aspect ratio if any dimension exceeds max_dimension
+            width, height = img.size
+            if width > max_dimension or height > max_dimension:
+                if width > height:
+                    new_width = max_dimension
+                    new_height = int(height * (max_dimension / width))
+                else:
+                    new_height = max_dimension
+                    new_width = int(width * (max_dimension / height))
+                img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+            if keep_format:
+                # Keep original format
+                orig_format = img.format or 'JPEG'
+                if orig_format == 'JPEG' or orig_format == 'MPO':
+                    img.save(output_path, format='JPEG', optimize=True, quality=quality)
+                elif orig_format == 'PNG':
+                    img.save(output_path, format='PNG', optimize=True)
+                else:
+                    img.save(output_path, format=orig_format)
+            else:
+                # Convert to RGB (to drop alpha channel / transparency since JPEGs don't support it)
+                if img.mode in ("RGBA", "P"):
+                    background = Image.new("RGB", img.size, (255, 255, 255))
+                    background.paste(img, mask=img.split()[3] if img.mode == "RGBA" else None)
+                    img = background
+                elif img.mode != "RGB":
+                    img = img.convert("RGB")
+
+                # Save as JPEG with optimized compression
+                img.save(output_path, format="JPEG", optimize=True, quality=quality)
+            return True
+    except Exception as e:
+        import shutil
+        try:
+            shutil.copy(input_path, output_path)
+        except Exception:
+            pass
+        return False
+
+
+def compress_pdf(input_path, output_path, quality=60):
+    """
+    Compress a PDF file by compressing page streams and embedded images.
+    """
+    try:
+        from pypdf import PdfReader, PdfWriter
+        reader = PdfReader(input_path)
+        writer = PdfWriter()
+
+        for page in reader.pages:
+            writer.add_page(page)
+
+        for page in writer.pages:
+            try:
+                page.compress_content_streams()
+            except Exception:
+                pass
+
+            try:
+                for img in page.images:
+                    try:
+                        # Extract and replace image with lower quality setting
+                        img.replace(img.image, quality=quality)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+        try:
+            writer.compress_identical_objects(remove_duplicates=True, remove_unreferenced=True)
+        except Exception:
+            pass
+
+        with open(output_path, "wb") as f:
+            writer.write(f)
+        return True
+    except Exception as e:
+        import shutil
+        try:
+            shutil.copy(input_path, output_path)
+        except Exception:
+            pass
+        return False
+

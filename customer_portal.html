@@ -139,10 +139,17 @@
                     <tr>
                         <td class="text-center">{{ loop.index }}</td>
                         <td>
-                            {{ item.name }}
-                            {% if item.productCode %}
-                            <br><small class="text-muted">Code: {{ item.productCode }}</small>
-                            {% endif %}
+                            <div class="d-flex align-items-center gap-2">
+                                {% if item.resolved_image_url %}
+                                <img src="{{ item.resolved_image_url }}" alt="{{ item.name }}" class="img-thumbnail" style="width: 50px; height: 50px; object-fit: contain; flex-shrink: 0;">
+                                {% endif %}
+                                <div>
+                                    {{ item.name }}
+                                    {% if item.productCode %}
+                                    <br><small class="text-muted">Code: {{ item.productCode }}</small>
+                                    {% endif %}
+                                </div>
+                            </div>
                         </td>
                         <td class="text-center">{{ item.qty }}</td>
                         <td class="money-col">{{ "{:,.2f}".format(display_price) }}</td>
@@ -189,6 +196,12 @@
             <h3 class="text-success">เอกสารสมบูรณ์ / Completed</h3>
             <p class="lead">ลูกค้าได้ทำการลงนามเรียบร้อยแล้ว<br><small class="text-muted">เมื่อ {{
                     po.signedAt|bangkok_datetime }}</small></p>
+
+            <div class="mt-4 mb-3">
+                <a href="/p/{{ token }}/pdf" class="btn btn-outline-success btn-lg px-4 shadow-sm" download>
+                    📥 ดาวน์โหลดเอกสาร PDF (Download PDF)
+                </a>
+            </div>
 
             {% if po.signatureImage %}
             <div class="mt-3">
