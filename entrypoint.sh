@@ -31,6 +31,5 @@ fi
 
 echo "Environment prepared. Starting Gunicorn..."
 
-# CHANGE: บังคับรัน Gunicorn แทนที่จะรอรับคำสั่งจากภายนอก (แก้ปัญหา Loop Restart)
-# -w 2 : ลด worker เหลือ 2 เพื่อประหยัด RAM ตามคำแนะนำใน app.py
-exec gunicorn -w 2 -b 0.0.0.0:8000 app:app
+# -w 2 --threads 4: 2 workers with 4 threads each to handle concurrent requests and avoid queue bottlenecks
+exec gunicorn -w 2 --threads 4 --timeout 120 -b 0.0.0.0:8000 app:app

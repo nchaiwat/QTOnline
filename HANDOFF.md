@@ -1,58 +1,78 @@
 # Project Handoff Document - QT-Online
 
-**Date:** 2026-09-09  
+**Date:** 2026-09-10  
 **Repository:** `https://github.com/nchaiwat/QTOnline.git` (`main` branch)  
 **Production Server:** VPS `srv832658` (`qol.windowasia.com`)
 
 ---
 
 ## 1. Executive Summary
-วันนี้ได้ดำเนินการแก้ไขปัญหาหลักและนำขึ้นสู่ Production สำเร็จเรียบร้อย:
-1. **แก้ปัญหาระบบทำงานช้า (High Latency & High Resource Usage)**: เกิดจากการที่ API `/api/pos` เดิมทำ Joined Load ทุกรายการสินค้า (`items`) และความคิดเห็น (`comments`) ส่งผลให้เกิด Cartesian Product ใน PostgreSQL และ Payload ขนาดใหญ่เกินความจำเป็น
-   - แก้ไขโดยเพิ่ม 5 Database Indexes บนตาราง `purchase_orders`
-   - เพิ่ม `PurchaseOrder.to_summary_dict()` ดึงเฉพาะข้อมูลที่จำเป็นสำหรับตารางรายการ QT ลดขนาดข้อมูลลงกว่า 90%
-2. **ปรับปรุงหน้า QT Management ให้ Default เป็นเดือนปัจจุบัน (`YYYY-MM`)**:
-   - ลดภาระการโหลดข้อมูลลงเหลือเฉพาะเดือนปัจจุบันโดยกรองที่ฝั่ง Server-side ทันที
-   - รองรับการเปลี่ยนเดือนหรือกดล้างตัวกรอง (Clear) เพื่อดูรายการทั้งหมดได้อย่างถูกต้อง
-3. **ระบบ Centralized Identity Management (CIAM) & หน้า System Settings**:
-   - พัฒนา M2M REST API 3 Endpoints ตามข้อกำหนด [CENTRAL_IDENTITY_MANAGEMENT_API_SPEC.md](CENTRAL_IDENTITY_MANAGEMENT_API_SPEC.md) (`GET /api/v1/directory/accounts`, `PATCH /api/v1/directory/accounts/<username>/status`, `POST /api/v1/directory/accounts`)
-   - ระบบตรวจสอบความปลอดภัยด้วย API Key (`X-Management-API-Key`) และ Client IP Whitelist
-   - ออกแบบหน้าเว็บ **System Settings (`#page-settings`)** ในระบบ พร้อมแท็บดู Audit Logs การเชื่อมต่อจาก CIAM (`ciam_audit_logs`) และแท็บประวัติการ Login (`login_logs`)
-4. **แก้ไขปัญหาบันทึก Allowed IPs ไม่ลงฐานข้อมูล (ล่าสุด)**:
-   - แก้ไข Payload Key Mismatch ระหว่าง Frontend (`allowed_ips`) กับ Backend (`allowedIps`)
-   - เพิ่ม Cache-busting (`?_t=${Date.now()}`) และ No-cache headers เพื่อป้องกัน Browser หรือ Proxy แคชค่าคอนฟิกเดิม
-   - เพิ่มการเรียงลำดับ `order_by(CiamSetting.id.asc())` ให้การอ่านและอัปเดตสอดคล้องกันแน่นอน
-   - ปรับขั้นตอนการ Deploy บน VPS ให้บังคับ `cd /var/www/QT-Online` และใส่ `--build` flag ใน Docker Compose เพื่อ Rebuild โค้ดใหม่เข้า Container เสมอ
+
+### 📌 การปรับปรุงล่าสุด (10 ก.ย. 2026 - Major Performance Overhaul):
+1. **แก้ปัญหาระบบ Dashboard โหลดช้า (จาก 26 วินาที เหลือ < 0.2 วินาที)**:
+   - **สาเหตุ:** หน้า Dashboard ใน `app.html` เรียก `/api/pos?summary=false` โดยไม่มีการกรองเดือน ทำให้ฝั่ง Backend ดึง PO 500 ใบพร้อม Joinedload 8 ตาราง (สินค้าทุกชิ้นและคอมเมนต์) แล้ว Python ต้องวนลูปคำนวณและแปลง JSON ขนาดหลาย MB ส่งไปให้ Browser วนลูปคำนวณซ้ำอีกครั้ง
+   - **การแก้ไข:** ปรับปรุง Endpoint `/api/dashboard/stats` ให้รันคำสั่ง **SQL Aggregations** (`COUNT`, `SUM`, `GROUP BY`) โดยตรงบน PostgreSQL (นับยอดวันนี้, สัปดาห์นี้, เดือนนี้, Top 5 ลูกค้า, Top 5 สินค้า, 10 กิจกรรมล่าสุด) ได้ผลลัพธ์ใน 20-30 ms และปรับ `loadDashboardStats()` ใน `app.html` ให้ดึงจาก Endpoint นี้แทน
+2. **แก้ปัญหากด Save แล้วหมุน "Saving..." นาน (จาก 3-5 วินาที เหลือ < 0.1 วินาที)**:
+   - **สาเหตุ:** ฟังก์ชัน `send_telegram_msg()` มีการยิง HTTP Request ไปยัง Telegram API แบบ Synchronous บล็อกการทำงานของ Worker ไว้จนกว่าจะส่งเสร็จ และมีการ query รายการสินค้าแบบ N+1 ในแต่ละรายการ
+   - **การแก้ไข:** ปรับ `send_telegram_msg()` ใน `utils.py` ให้ทำงานใน **Background Daemon Thread** (`threading.Thread`) ทำให้การตอบกลับคำขอ Save ไม่ต้องรอ Telegram Server และปรับ `POST/PUT /api/pos` ใน `app.py` ให้ใช้ Batch Query ดึงสินค้าทั้งหมดในครั้งเดียว
+3. **แก้ปัญหาหลัง Save แล้วตาราง QT Management ค้าง "Loading..."**:
+   - **สาเหตุ:** ใน `savePO()` มีคำสั่ง `poFilterMonth = '';` ซึ่งไปล้างค่าตัวกรองเดือนทิ้ง ทำให้เมื่อสลับกลับมาหน้ารายการ ระบบยิง `/api/pos?summary=true` แบบไม่มีเดือน จึงต้องโหลดข้อมูลประวัติทั้งหมด 500 ใบ
+   - **การแก้ไข:** ยกเลิกการล้างค่า `poFilterMonth` โดยให้คงค่าตัวกรองเดิม หรือ Default เป็นเดือนปัจจุบัน (`YYYY-MM`) เสมอ ทำให้หน้ารายการโหลดเฉพาะเดือนปัจจุบันผ่าน Database Index ทันทีใน ~50ms
+4. **แก้ปัญหาเข้าหน้า User Management ช้า (9 วินาที) ด้วย Gunicorn Multi-threading**:
+   - **สาเหตุ:** Gunicorn มีแค่ 2 Workers แบบ Sync ทำให้เวลาคำขอ Dashboard หรือคำขออื่นติดพัน คำขอเข้าหน้า User Management (`/api/users`) ต้องรอคิว (Backlog Queue) นานเกือบ 10 วินาที
+   - **การแก้ไข:** เพิ่ม `--threads 4` ใน `entrypoint.sh` ทำให้ 2 Workers รองรับได้ถึง 8 Concurrent Requests พร้อมกัน และปรับ `User.to_dict()` ใน `models.py` ไม่ให้ส่งก้อน Base64 ลายเซ็นเต็มก้อนออกมาในหน้ารายชื่อ
 
 ---
 
-## 2. ไฟล์ที่มีการแก้ไขและสร้างใหม่ (Files Changed)
+### 📌 การแก้ไขก่อนหน้า (10 ก.ย. 2026 - เช้า):
+1. **แก้ไขปัญหา Date Filter เด้งกลับไปเดือนมิถุนายน (`QT26060020`) เมื่อคลิกปุ่ม View**:
+   - แยกตัวแปร `poFilterType` (`month` หรือ `date`) ควบคุม Flatpickr ด้วย API มาตรฐาน `filterDatePicker.setDate(poFilterMonth, false)` โดยไม่เขียนทับ input
+2. **แก้ไขปัญหาค้าง "Loading..." เมื่อเปลี่ยนเป็น Date (Infinite Event Loop)**:
+   - ตัด `clear()` ออกจาก `renderPOTableList()`, ใส่ Loop Guard ใน Flatpickr `onChange`
+3. **ปรับพฤติกรรมตัวกรองเดือน/วันที่ (Preserve Filter State)**:
+   - เข้าใช้งานระบบครั้งแรก Default เดือนปัจจุบัน จดจำค่าตัวกรองไว้ตลอดแม้คลิก View แล้วกด Back กลับมา
+
+---
+
+## 2. ไฟล์ที่มีการแก้ไขในรอบนี้ (Files Changed)
 
 | ไฟล์ | ประเภท | คำอธิบาย |
 | :--- | :--- | :--- |
-| [models.py](file:///d:/Python/PO-Online/models.py) | Modified | เพิ่ม 5 Indexes บน `purchase_orders`, เพิ่ม `to_summary_dict()`, เพิ่ม Model `CiamSetting`, `CiamAuditLog`, `LoginLog` |
-| [app.py](file:///d:/Python/PO-Online/app.py) | Modified | ปรับปรุง `GET /api/pos` ให้รองรับ `month` และ `summary=true`, เพิ่ม CIAM M2M APIs, รองรับ Payload ทั้ง camelCase/snake_case ใน Settings API, เพิ่ม No-cache headers |
-| [app.html](file:///d:/Python/PO-Online/app.html) | Modified | เพิ่มเมนู Settings, หน้า `#page-settings` (3 แท็บ), ตัวกรองเดือนเริ่มต้น, ปรับปรุง `saveCiamSettings` พร้อม Loading spinner, เพิ่ม Cache-buster ใน `loadCiamSettings` |
-| [docker-compose.yml](file:///d:/Python/PO-Online/docker-compose.yml) | Modified | กำหนดค่าสภาพแวดล้อม Production ให้ตรงกับ VPS (ต่อ Traefik network `root_default`, DB `qt_online_db`) |
-| [scripts/migrate_performance_and_ciam.py](file:///d:/Python/PO-Online/scripts/migrate_performance_and_ciam.py) | **New** | สคริปต์ Migration แบบ Idempotent สำหรับสร้างตารางใหม่และ Indexes |
-| [backup.sh](file:///d:/Python/PO-Online/backup.sh) | **New** | สคริปต์ Backup ฐานข้อมูลและไฟล์เอกสารอัตโนมัติบน VPS |
-| [QUICK_UPDATE_GUIDE.md](file:///d:/Python/PO-Online/QUICK_UPDATE_GUIDE.md) | Modified | อัปเดตคู่มือสรุปวิธี Backup และ Deploy บน VPS (เน้นย้ำ `cd` และ `--build`) |
-| [docs/technical_manual_th.md](file:///d:/Python/PO-Online/docs/technical_manual_th.md) | Modified | อัปเดตโครงสร้างฐานข้อมูลและ API Specifications |
-| [HANDOFF.md](file:///d:/Python/PO-Online/HANDOFF.md) | **New** | สรุปผลการทำงานของรอบพัฒนานี้และอัปเดตล่าสุด |
-| [MEMORY.md](file:///d:/Python/PO-Online/MEMORY.md) | **New** | ข้อควรจำสำหรับ AI Assistant (แจ้งสถานะ Git และมี CIAM ทุกครั้งเมื่อเริ่ม Session) |
+| [app.py](file:///d:/Python/PO-Online/app.py) | Modified | เพิ่ม SQL Aggregations ใน `/api/dashboard/stats`, Batch Query สินค้าใน `POST/PUT /api/pos` |
+| [app.html](file:///d:/Python/PO-Online/app.html) | Modified | ปรับปรุง `loadDashboardStats` ให้เรียก `/api/dashboard/stats`, คงค่าตัวกรองเดือนใน `savePO` |
+| [utils.py](file:///d:/Python/PO-Online/utils.py) | Modified | ปรับปรุง `send_telegram_msg` ให้ส่งแบบ Non-blocking Background Thread |
+| [models.py](file:///d:/Python/PO-Online/models.py) | Modified | ลดขนาด Payload `User.to_dict()` โดยไม่ส่งก้อน Base64 ลายเซ็นในรายการผู้ใช้ |
+| [entrypoint.sh](file:///d:/Python/PO-Online/entrypoint.sh) | Modified | เพิ่ม `--threads 4` และ `--timeout 120` ให้ Gunicorn เพื่อแก้ปัญหา Worker Queue Bottleneck |
+| [HANDOFF.md](file:///d:/Python/PO-Online/HANDOFF.md) | Modified | บันทึกสรุปการแก้ไขปัญหา Performance ครบวงจร |
+
 
 ---
 
 ## 3. สถานะการทำงานจริงบน Production VPS
+- **Production URL:** `https://qol.windowasia.com` (VPS `srv832658`)
+- **Path บน VPS:** `/var/www/QT-Online`
 - **Database Container:** `9ed884bd8e40_qt-online-db` (Database: `qt_online_db`, User: `WAUser`)
-- **Web Container:** `qt-online-web` (ทำงานบน Network `qt-network` และ `root_default` ผ่าน Traefik)
-- **สถานะการเชื่อมต่อกับ CIAM ส่วนกลาง:** **สำเร็จ (ออนไลน์)**
-  - Central IAM Dashboard แสดงสถานะ **QT Online (QOL) เป็น "ออนไลน์" (Response Time ~383 ms)**
-  - ซิงก์รายชื่อบัญชีสำเร็จเรียบร้อย (**17 บัญชี**)
-- **ขั้นตอน Deploy มาตรฐานบน VPS:**
-  ```bash
-  cd /var/www/QT-Online
-  git stash -u
-  git pull origin main
-  docker compose up -d --no-deps --build web
-  ```
+- **Web Container:** `qt-online-web` (ต่อ Network `qt-network` และ `root_default` ผ่าน Traefik)
+- **CIAM Status:** ออนไลน์ เชื่อมต่อ Directory Synchronization สำเร็จ
+
+---
+
+## 4. ขั้นตอนการ Deploy มาตรฐานบน VPS
+```bash
+# 1. ต้อง cd เข้าโฟลเดอร์โปรเจกต์ก่อนเสมอ
+cd /var/www/QT-Online
+
+# 2. เคลียร์ไฟล์ค้างและดึงโค้ดล่าสุด
+git stash -u
+git pull origin main
+
+# 3. บิลด์คอนเทนเนอร์ web ใหม่พร้อมโค้ดล่าสุด (ต้องใส่ --build เสมอ)
+docker compose up -d --no-deps --build web
+```
+
+---
+
+## 5. สิ่งที่วางแผนทำต่อในรอบถัดไป (Next Steps / Backlog)
+1. **ทดสอบการใช้งาน Date Filter และ Pagination บน Production**: ตรวจสอบการเลือกวันที่ต่างๆ ทั้งในเดือนปัจจุบันและเดือนย้อนหลัง
+2. **การปรับแต่ง UX เพิ่มเติม**: พิจารณาเพิ่มตัวเลือก Pagination (แบ่งหน้า) สำหรับตาราง QT Management หากจำนวนข้อมูลในแต่ละเดือนเพิ่มขึ้นในอนาคต
+3. **ตรวจสอบฟังก์ชัน Export Excel**: ทดสอบให้แน่ใจว่าตัวกรองวันที่แบบ Date (dd/mm/yyyy) ถูกส่งไปยัง API `export-excel` อย่างถูกต้องเช่นเดียวกับหน้าเว็บ

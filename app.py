@@ -521,22 +521,188 @@ def change_password():
 @app.route("/api/dashboard/stats")
 @login_required
 def get_dashboard_stats():
+    """
+    High-performance Server-side Dashboard Aggregations.
+    Replaces client-side calculation of 500 POs with instant SQL queries.
+    """
     now = now_bangkok()
-    today = now.replace(hour=0, minute=0, second=0, microsecond=0).replace(tzinfo=None)
-    query = PurchaseOrder.query
-    if current_user.role not in ["Administrator", "Sale Admin"]:
-        query = query.filter_by(sale_user_id=current_user.id)
+    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0).replace(tzinfo=None)
+    start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).replace(tzinfo=None)
+    
+    # Monday as start of week
+    days_since_monday = start_of_day.weekday() # 0 = Monday
+    start_of_week = start_of_day - timedelta(days=days_since_monday)
 
-    today_count = query.filter(PurchaseOrder.created >= today).count()
-    pos = query.with_entities(PurchaseOrder.status).all()
-    status_summary = {}
-    for p in pos:
-        status_summary[p.status] = status_summary.get(p.status, 0) + 1
+    # Base Role Filter condition
+    is_admin = current_user.role in ["Administrator", "Sale Admin"]
+    if is_admin:
+        role_cond = or_(PurchaseOrder.status != "Draft", PurchaseOrder.sale_user_id == current_user.id)
+    else:
+        role_cond = (PurchaseOrder.sale_user_id == current_user.id)
+
+    # 1. Today Count
+    today_count = db.session.query(func.count(PurchaseOrder.id)).filter(
+        role_cond,
+        PurchaseOrder.created >= start_of_day,
+        PurchaseOrder.status != "Cancelled"
+    ).scalar() or 0
+
+    # 2. Week Count
+    week_count = db.session.query(func.count(PurchaseOrder.id)).filter(
+        role_cond,
+        PurchaseOrder.created >= start_of_week,
+        PurchaseOrder.status != "Cancelled"
+    ).scalar() or 0
+
+    # 3. Status Summary (Counts for Funnel and Pie Chart)
+    status_order = ["Draft", "Pending Review", "Changes Requested", "Approved", "Completed", "Cancellation Requested", "Cancelled"]
+    status_counts = {st: 0 for st in status_order}
+    status_rows = db.session.query(
+        PurchaseOrder.status, func.count(PurchaseOrder.id)
+    ).filter(role_cond).group_by(PurchaseOrder.status).all()
+    for s_name, s_cnt in status_rows:
+        status_counts[s_name] = s_cnt
+
+    # 4. Monthly Approved Value and Count
+    approved_statuses = ["Approved", "Completed", "Cancellation Requested"]
+    month_approved_row = db.session.query(
+        func.count(PurchaseOrder.id),
+        func.coalesce(func.sum(PurchaseOrder.amount), 0.0)
+    ).filter(
+        role_cond,
+        PurchaseOrder.status.in_(approved_statuses),
+        PurchaseOrder.created >= start_of_month
+    ).first()
+    monthly_approved_count = month_approved_row[0] if month_approved_row else 0
+    monthly_approved_value = float(month_approved_row[1]) if month_approved_row else 0.0
+
+    # 5. Action Count
+    if current_user.role == "Sale":
+        action_count = status_counts.get("Draft", 0) + status_counts.get("Changes Requested", 0)
+    else:
+        action_count = status_counts.get("Pending Review", 0) + status_counts.get("Cancellation Requested", 0)
+
+    # 6. Cycle Durations (Avg delivery days)
+    cycle_rows = db.session.query(
+        PurchaseOrder.created, PurchaseOrder.deliveryDate
+    ).filter(
+        role_cond,
+        PurchaseOrder.status.in_(approved_statuses),
+        PurchaseOrder.deliveryDate.isnot(None)
+    ).order_by(PurchaseOrder.id.desc()).limit(100).all()
+
+    cycle_durations = []
+    for c_created, c_delivery in cycle_rows:
+        if c_created and c_delivery:
+            try:
+                d_obj = c_delivery
+                if isinstance(d_obj, str):
+                    d_obj = _parse_date(d_obj)
+                c_date = c_created.date() if hasattr(c_created, "date") else c_created
+                if isinstance(d_obj, (date, datetime)) and isinstance(c_date, (date, datetime)):
+                    diff = (d_obj - c_date).days
+                    if diff >= 0:
+                        cycle_durations.append(diff)
+            except Exception:
+                pass
+    avg_cycle = round(sum(cycle_durations) / len(cycle_durations), 1) if cycle_durations else None
+
+    # 7. Top 5 Customers
+    top_cust_rows = db.session.query(
+        func.coalesce(PurchaseOrder.customerName, PurchaseOrder.customerId).label("cname"),
+        func.sum(PurchaseOrder.amount).label("total")
+    ).filter(
+        role_cond,
+        PurchaseOrder.status != "Cancelled"
+    ).group_by(func.coalesce(PurchaseOrder.customerName, PurchaseOrder.customerId)).order_by(text("total DESC")).limit(5).all()
+
+    top_customers = [
+        {"name": r[0] or "Unknown", "total": float(r[1] or 0.0)}
+        for r in top_cust_rows
+    ]
+
+    # 8. Top 5 Products
+    top_prod_rows = db.session.query(
+        POItem.productCode,
+        POItem.name,
+        func.sum(POItem.total).label("ptotal")
+    ).join(PurchaseOrder, POItem.po_id == PurchaseOrder.id).filter(
+        role_cond,
+        PurchaseOrder.status != "Cancelled"
+    ).group_by(POItem.productCode, POItem.name).order_by(text("ptotal DESC")).limit(5).all()
+
+    top_products = [
+        {
+            "productCode": r[0] or "",
+            "name": r[1] or "Unknown",
+            "total": float(r[2] or 0.0)
+        }
+        for r in top_prod_rows
+    ]
+
+    # 9. Recent Timeline Events (Up to 10 latest)
+    recent_pos = (
+        PurchaseOrder.query.filter(role_cond)
+        .options(
+            joinedload(PurchaseOrder.canceller),
+            joinedload(PurchaseOrder.requester)
+        )
+        .order_by(PurchaseOrder.id.desc())
+        .limit(10)
+        .all()
+    )
+    timeline_events = []
+    for p in recent_pos:
+        c_dt = ensure_bangkok(p.created)
+        if c_dt:
+            timeline_events.append({
+                "timestamp": c_dt.isoformat(),
+                "title": f"สร้าง {p.poNumber}",
+                "body": p.customerName or p.customerId or "ไม่ทราบลูกค้า",
+                "icon": "file-plus"
+            })
+        if p.cancelRequestAt:
+            cr_dt = ensure_bangkok(p.cancelRequestAt)
+            cr_by = p.requester.fullName if p.requester else "Sale"
+            timeline_events.append({
+                "timestamp": cr_dt.isoformat() if cr_dt else "",
+                "title": f"ขอเลิก {p.poNumber}",
+                "body": f"โดย {cr_by}: {p.cancelRequestReason or '-'}",
+                "icon": "alert-circle"
+            })
+        if p.cancelledAt:
+            can_dt = ensure_bangkok(p.cancelledAt)
+            can_by = p.canceller.fullName if p.canceller else "Admin"
+            timeline_events.append({
+                "timestamp": can_dt.isoformat() if can_dt else "",
+                "title": f"ยกเลิก {p.poNumber} สำเร็จ",
+                "body": f"อนุมัติโดย {can_by}: {p.cancelReason or '-'}",
+                "icon": "x-circle"
+            })
+        if p.signedAt:
+            s_dt = ensure_bangkok(p.signedAt)
+            timeline_events.append({
+                "timestamp": s_dt.isoformat() if s_dt else "",
+                "title": f"เซ็นชื่อสำเร็จ {p.poNumber}",
+                "body": "รายการเสร็จสมบูรณ์เข้าระบบ",
+                "icon": "check-circle"
+            })
+
+    timeline_events.sort(key=lambda x: x["timestamp"] or "", reverse=True)
+    timeline_events = timeline_events[:10]
 
     return jsonify(
         {
             "todayCount": today_count,
-            "statusSummary": status_summary,
+            "weekCount": week_count,
+            "statusCounts": status_counts,
+            "monthlyApprovedCount": monthly_approved_count,
+            "monthlyApprovedValue": monthly_approved_value,
+            "actionCount": action_count,
+            "avgCycleDays": avg_cycle,
+            "topCustomers": top_customers,
+            "topProducts": top_products,
+            "timelineEvents": timeline_events,
             "lastUpdate": now.strftime("%d-%m-%Y %H:%M"),
         }
     )
@@ -1053,12 +1219,15 @@ def manage_pos():
                 discount_percent_1=float(data.get("discountPercent1", 0.0)),
                 discount_percent_2=float(data.get("discountPercent2", 0.0)),
             )
-            for item in data.get("items", []):
-                prod = (
-                    Product.query.get(item["productId"])
-                    if item.get("productId")
-                    else None
-                )
+            item_list = data.get("items", [])
+            product_ids = [it["productId"] for it in item_list if it.get("productId")]
+            product_map = {}
+            if product_ids:
+                products = Product.query.filter(Product.id.in_(product_ids)).all()
+                product_map = {p.id: p for p in products}
+
+            for item in item_list:
+                prod = product_map.get(item.get("productId"))
                 new_po.items.append(
                     POItem(
                         productId=item.get("productId"),
@@ -1207,12 +1376,15 @@ def manage_po(id):
                 db.delete(POItem).where(POItem.po_id == id)
             )
 
-            for item in data.get("items", []):
-                prod = (
-                    Product.query.get(item["productId"])
-                    if item.get("productId")
-                    else None
-                )
+            item_list = data.get("items", [])
+            product_ids = [it["productId"] for it in item_list if it.get("productId")]
+            product_map = {}
+            if product_ids:
+                products = Product.query.filter(Product.id.in_(product_ids)).all()
+                product_map = {p.id: p for p in products}
+
+            for item in item_list:
+                prod = product_map.get(item.get("productId"))
                 po.items.append(
                     POItem(
                         productId=item.get("productId"),

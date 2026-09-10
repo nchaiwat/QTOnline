@@ -165,7 +165,8 @@ class User(UserMixin, db.Model):
             "fullName": self.fullName,
             "targetAmount": self.target_amount,
             "phoneNumber": self.phoneNumber or "",
-            "signatureImage": self.signature_image,
+            "signatureImage": "present" if self.signature_image else None,
+            "hasSignature": bool(self.signature_image),
             "status": getattr(self, "status", "active"),
             "createdAt": (
                 created_local.strftime("%d-%m-%Y %H:%M") if created_local else "-"

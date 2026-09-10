@@ -3110,192 +3110,56 @@
 
         // --- DASHBOARD FUNCTIONS (Content 1) ---
         async function loadDashboardStats() {
-            const pos = await fetchApi('/api/pos?summary=false');
-            if (!pos) return;
-
-            let scopedPOs = Array.isArray(pos) ? pos : [];
-            if (currentUser?.role === 'Sale') {
-                scopedPOs = scopedPOs.filter(p => p.saleId === currentUser.fullName);
-            }
+            // High-performance API using Server-side SQL Aggregations
+            const stats = await fetchApi(`/api/dashboard/stats?_t=${Date.now()}`);
+            if (!stats) return;
 
             const now = new Date();
             const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
             const startOfWeek = new Date(startOfDay);
             const weekday = startOfWeek.getDay(); // 0 = Sunday
-            const daysSinceMonday = (weekday + 6) % 7; // convert so Monday becomes start
+            const daysSinceMonday = (weekday + 6) % 7; // Monday as start
             startOfWeek.setDate(startOfWeek.getDate() - daysSinceMonday);
 
             const todaySub = document.getElementById('stat-today-subtext');
             if (todaySub) {
-                todaySub.textContent = `อัปเดตล่าสุด ${formatDateTime(now)}`;
+                todaySub.textContent = `อัปเดตล่าสุด ${stats.lastUpdate || formatDateTime(now)}`;
             }
             const weekSub = document.getElementById('stat-week-subtext');
             if (weekSub) {
                 weekSub.textContent = `ตั้งแต่ ${formatDateShort(startOfWeek)}`;
             }
 
-            const statusCounts = {};
-            const statusOrder = ['Draft', 'Pending Review', 'Changes Requested', 'Approved', 'Completed', 'Cancellation Requested', 'Cancelled'];
+            document.getElementById('stat-today').textContent = stats.todayCount || 0;
+            document.getElementById('stat-week').textContent = stats.weekCount || 0;
+            document.getElementById('stat-month-value').textContent = formatCurrency(stats.monthlyApprovedValue || 0);
+            document.getElementById('stat-month-count').textContent = `${stats.monthlyApprovedCount || 0} ใบสั่งซื้อ`;
 
-            let todayCount = 0;
-            let weekCount = 0;
-            let monthlyApprovedCount = 0;
-            let monthlyApprovedValue = 0;
-            const cycleDurations = [];
-            const customerTotals = new Map();
-            const productTotals = new Map();
-            let actionCount = 0;
-            const timelineEvents = [];
-
-            scopedPOs.forEach(po => {
-                const createdAt = safeParseDate(po.createdIso || po.created);
-                const amount = Number(po.amount) || 0;
-                const status = po.status || 'Draft';
-
-                if (statusCounts[status] === undefined) {
-                    statusCounts[status] = 0;
-                }
-                statusCounts[status] += 1;
-
-                if (createdAt && status !== 'Cancelled') {
-                    if (createdAt >= startOfDay) {
-                        todayCount += 1;
-                    }
-                    if (createdAt >= startOfWeek) {
-                        weekCount += 1;
-                    }
-
-                    timelineEvents.push({
-                        timestamp: createdAt,
-                        title: `สร้าง ${po.poNumber}`,
-                        body: po.customerName || po.customerId || 'ไม่ทราบลูกค้า',
-                        icon: 'file-plus'
-                    });
-
-                    // 1. Log: Cancellation Request
-                    if (po.cancelRequestAtIso) {
-                        const crDate = safeParseDate(po.cancelRequestAtIso);
-                        if (crDate) {
-                            timelineEvents.push({
-                                timestamp: crDate,
-                                title: `ขอเลิก ${po.poNumber}`,
-                                body: `โดย ${po.cancelRequestBy || 'Sale'}: ${po.cancelRequestReason || '-'}`,
-                                icon: 'alert-circle'
-                            });
-                        }
-                    }
-
-                    // 2. Log: Finalized Cancellation
-                    if (po.cancelledAtIso) {
-                        const cDate = safeParseDate(po.cancelledAtIso);
-                        if (cDate) {
-                            timelineEvents.push({
-                                timestamp: cDate,
-                                title: `ยกเลิก ${po.poNumber} สำเร็จ`,
-                                body: `อนุมัติโดย ${po.cancelledBy || 'Admin'}: ${po.cancelReason || '-'}`,
-                                icon: 'x-circle'
-                            });
-                        }
-                    }
-
-                    // 3. Log: Signature / Completed
-                    if (po.signedAtIso) {
-                        const sDate = safeParseDate(po.signedAtIso);
-                        if (sDate) {
-                            timelineEvents.push({
-                                timestamp: sDate,
-                                title: `เซ็นชื่อสำเร็จ ${po.poNumber}`,
-                                body: `รายการเสร็จสมบูรณ์เข้าระบบ`,
-                                icon: 'check-circle'
-                            });
-                        }
-                    }
-                }
-
-                if (status !== 'Cancelled') {
-                    const customerKey = po.customerName || po.customerId || 'ไม่ทราบลูกค้า';
-                    customerTotals.set(customerKey, (customerTotals.get(customerKey) || 0) + amount);
-                }
-
-                if (status !== 'Cancelled' && Array.isArray(po.items)) {
-                    po.items.forEach(item => {
-                        const itemTotal = Number(item.total) || (Number(item.price) || 0) * (Number(item.qty) || 0);
-                        // FIX: Format as Code - Name (Prioritize productCode)
-                        const productCode = item.productCode || '';
-                        let productName = item.name || 'ไม่ระบุสินค้า';
-                        if (productCode) {
-                            productName = cleanProductName(productName, productCode);
-                        }
-                        const productKey = productCode ? `${productCode} - ${productName}` : productName;
-
-                        productTotals.set(productKey, (productTotals.get(productKey) || 0) + itemTotal);
-                    });
-                }
-
-                if (['Approved', 'Completed', 'Cancellation Requested'].includes(status)) {
-                    if (createdAt && createdAt >= startOfMonth) {
-                        monthlyApprovedCount += 1;
-                        monthlyApprovedValue += amount;
-                    }
-                    if (createdAt && (po.deliveryDateIso || po.deliveryDate)) {
-                        const deliveryDate = new Date(po.deliveryDateIso || po.deliveryDate);
-                        if (!Number.isNaN(deliveryDate.getTime())) {
-                            const diffDays = Math.max(0, (deliveryDate - createdAt) / (1000 * 60 * 60 * 24));
-                            cycleDurations.push(diffDays);
-                        }
-                    }
-                }
-
-                if (currentUser?.role === 'Sale') {
-                    if (status === 'Draft' || status === 'Changes Requested') {
-                        actionCount += 1;
-                    }
-                } else if (currentUser && (currentUser.role === 'Sale Admin' || currentUser.role === 'Administrator')) {
-                    if (status === 'Pending Review' || status === 'Cancellation Requested') {
-                        actionCount += 1;
-                    }
-                }
-
-                if (Array.isArray(po.comments)) {
-                    po.comments.forEach(comment => {
-                        const commentDate = safeParseDate(comment.createdIso || comment.created);
-                        if (!commentDate) {
-                            return;
-                        }
-                        timelineEvents.push({
-                            timestamp: commentDate,
-                            title: `คอมเมนต์โดย ${comment.user}`,
-                            body: comment.text,
-                            icon: 'message-circle'
-                        });
-                    });
-                }
-            });
-
-            document.getElementById('stat-today').textContent = todayCount;
-            document.getElementById('stat-week').textContent = weekCount;
-            document.getElementById('stat-month-value').textContent = formatCurrency(monthlyApprovedValue);
-            document.getElementById('stat-month-count').textContent = `${monthlyApprovedCount} ใบสั่งซื้อ`;
-
-            if (cycleDurations.length) {
-                const avgCycle = cycleDurations.reduce((sum, days) => sum + days, 0) / cycleDurations.length;
-                document.getElementById('stat-cycle').textContent = `${avgCycle.toFixed(1)} วัน`;
-                document.getElementById('stat-cycle-subtext').textContent = `จาก ${cycleDurations.length} ใบสั่งซื้อที่อนุมัติแล้ว`;
+            if (stats.avgCycleDays !== null && stats.avgCycleDays !== undefined) {
+                document.getElementById('stat-cycle').textContent = `${Number(stats.avgCycleDays).toFixed(1)} วัน`;
+                document.getElementById('stat-cycle-subtext').textContent = 'คำนวณจากใบสั่งซื้อที่อนุมัติแล้ว';
             } else {
                 document.getElementById('stat-cycle').textContent = '–';
                 document.getElementById('stat-cycle-subtext').textContent = 'รอข้อมูลอนุมัติหรือวันส่งมอบ';
             }
 
-            document.getElementById('stat-action').textContent = `งานที่ต้องจัดการ: ${actionCount}`;
+            document.getElementById('stat-action').textContent = `งานที่ต้องจัดการ: ${stats.actionCount || 0}`;
 
-            const topCustomerEntries = Array.from(customerTotals.entries())
-                .sort((a, b) => (b[1] || 0) - (a[1] || 0))
-                .slice(0, 5);
-            const totalProductValue = Array.from(productTotals.values()).reduce((sum, value) => sum + (value || 0), 0);
-            const productEntries = Array.from(productTotals.entries())
-                .sort((a, b) => (b[1] || 0) - (a[1] || 0))
-                .slice(0, 6);
+            // Top Customers
+            const topCustomerEntries = (stats.topCustomers || []).map(c => [c.name, Number(c.total) || 0]);
+
+            // Top Products
+            const productEntries = (stats.topProducts || []).map(p => {
+                const code = p.productCode || '';
+                const cleanName = cleanProductName(p.name, code);
+                const key = code ? `${code} - ${cleanName}` : (p.name || 'ไม่ระบุสินค้า');
+                return [key, Number(p.total) || 0];
+            });
+            const totalProductValue = productEntries.reduce((sum, item) => sum + item[1], 0);
+
+            // Status Counts
+            const statusOrder = ['Draft', 'Pending Review', 'Changes Requested', 'Approved', 'Completed', 'Cancellation Requested', 'Cancelled'];
+            const statusCounts = stats.statusCounts || {};
             const statusChartStatuses = [...statusOrder];
             Object.keys(statusCounts).forEach(status => {
                 if (!statusChartStatuses.includes(status)) {
@@ -3306,14 +3170,18 @@
                 .map(status => ({ status, count: statusCounts[status] || 0 }))
                 .filter(item => item.count > 0);
 
+            // Timeline Events
+            const timelineEvents = (stats.timelineEvents || []).map(ev => ({
+                ...ev,
+                timestamp: safeParseDate(ev.timestamp) || new Date()
+            }));
+
             renderStatusFunnel(statusOrder, statusCounts);
-            renderTopCustomers(topCustomerEntries, customerTotals.size);
+            renderTopCustomers(topCustomerEntries, topCustomerEntries.length);
             renderProductMix(productEntries, totalProductValue);
             renderTimeline(timelineEvents);
 
-            // FIX: Ensure updateTargetProgress is called with the correct value
-            // and that the function itself handles visibility
-            updateTargetProgress(monthlyApprovedValue);
+            updateTargetProgress(stats.monthlyApprovedValue || 0);
 
             updateStatusPieChart(statusChartData);
             updateTopCustomersChart(topCustomerEntries);
@@ -4142,7 +4010,12 @@
                 poItems = [];
                 renderPOTable(); // Clears the create table
                 setSelectedCustomer(null);
-                poFilterMonth = '';
+                // Preserve or default to current month so QT Management table loads instantly
+                if (!poFilterMonth) {
+                    const now = new Date();
+                    poFilterMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                    poFilterType = 'month';
+                }
                 showPage('page-po-list');
             } catch (e) {
                 console.error("Error saving PO:", e);

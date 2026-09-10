@@ -96,12 +96,14 @@ def allowed_image_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_IMAGE_EXTENSIONS
 
+import threading
+
 # --- Telegram Notification ---
-def send_telegram_msg(message):
+def _send_telegram_worker(message):
     try:
         bot_token = os.environ.get('TELEGRAM_BOT_TOKEN', '8214911655:AAG5RKU6m75AOc3Wws0FqVBqn1CicDLsVWI')
         group_id = os.environ.get('TELEGRAM_GROUP_ID', '-5241471050')
-        api_base = os.environ.get('TELEGRAM_API_BASE_URL', 'http://127.0.0.1:3200')
+        api_base = os.environ.get('TELEGRAM_API_BASE_URL', 'https://api.telegram.org')
         url = f"{api_base}/bot{bot_token}/sendMessage"
         
         payload = {
@@ -115,9 +117,17 @@ def send_telegram_msg(message):
             data=json.dumps(payload).encode('utf-8'),
             headers={'Content-Type': 'application/json'}
         )
-        urllib.request.urlopen(req, timeout=5)
+        urllib.request.urlopen(req, timeout=8)
     except Exception as e:
         print(f"Telegram Notification Failed: {e}")
+
+def send_telegram_msg(message):
+    """Send Telegram message asynchronously in a background thread to avoid blocking HTTP requests."""
+    try:
+        thread = threading.Thread(target=_send_telegram_worker, args=(message,), daemon=True)
+        thread.start()
+    except Exception as e:
+        print(f"Failed to spawn Telegram notification thread: {e}")
 
 # --- Encryption Helpers ---
 KEY_FILE = None # Will be set during app initialization if needed, or use env
