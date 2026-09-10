@@ -1002,14 +1002,16 @@ def manage_pos():
         try:
             if is_summary:
                 # Fast summary query without heavy items/comments joins
-                pos = (
+                q = (
                     query.options(
                         joinedload(PurchaseOrder.creator),
                         joinedload(PurchaseOrder.customer_rel),
                     )
                     .order_by(PurchaseOrder.id.desc())
-                    .all()
                 )
+                if not month_param or month_param.lower() == "all":
+                    q = q.limit(500)
+                pos = q.all()
                 return jsonify([po.to_summary_dict() for po in pos])
             else:
                 pos = (

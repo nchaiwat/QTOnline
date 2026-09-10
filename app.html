@@ -2754,7 +2754,8 @@
         let poRows = [];
         let poFilterKeyword = '';
         let poFilterStatus = '';
-        let poFilterMonth = getCurrentMonthYear(); // Default to current month (e.g. 2026-09)
+        let poFilterType = 'month'; // 'month' or 'date'
+        let poFilterMonth = getCurrentMonthYear(); // Default to current month on initial load (e.g. 2026-09)
 
         // --- NEW: Sort State ---
         let poSortBy = 'created';
@@ -4277,13 +4278,24 @@
                 statusSelect.value = poFilterStatus;
             }
 
-            // Initialize Month Filter (Always ensure Gregorian year)
+            // Synchronize Filter Type and Date/Month Filter without disrupting Flatpickr
+            const typeSelect = document.getElementById('po-filter-type');
+            if (typeSelect && typeSelect.value !== poFilterType) {
+                typeSelect.value = poFilterType;
+            }
+
             const monthInput = document.getElementById('po-month-filter');
             if (monthInput) {
-                if (poFilterMonth && monthInput.value !== poFilterMonth) {
-                    monthInput.value = poFilterMonth;
-                } else if (!poFilterMonth) {
-                    monthInput.value = ''; // Ensure it's clear
+                if (poFilterType === 'date') {
+                    if (filterDatePicker) {
+                        if (poFilterMonth && poFilterMonth.split('-').length === 3) {
+                            filterDatePicker.setDate(poFilterMonth, false);
+                        } else {
+                            filterDatePicker.clear();
+                        }
+                    }
+                } else {
+                    monthInput.value = (poFilterMonth && poFilterMonth.split('-').length === 2) ? poFilterMonth : '';
                 }
             }
 
@@ -4320,46 +4332,63 @@
             console.log("Filtering POs. Date/Month:", monthFilter, "Status:", statusFilter, "Keyword:", keyword);
 
             const filtered = poRows.filter(po => {
-                // Month/Date Filter (Improved Robust check)
+                // Month/Date Filter (Improved Robust check matching backend on created and updatedAt)
                 if (monthFilter) {
                     const updatedAtIso = po.updatedAtIso || '';
                     const updatedAtDisplay = po.updatedAt || ''; // format: "DD-MM-YYYY HH:MM"
+                    const createdIso = po.createdIso || '';
+                    const createdDisplay = po.created || ''; // format: "DD-MM-YYYY"
 
                     let matchFound = false;
 
                     if (monthFilter.split('-').length === 3) {
                         // Matching YYYY-MM-DD
-                        if (updatedAtIso.startsWith(monthFilter)) {
+                        if (updatedAtIso.startsWith(monthFilter) || createdIso.startsWith(monthFilter)) {
                             matchFound = true;
-                        } else if (updatedAtDisplay) {
-                            const dateOnly = updatedAtDisplay.split(' ')[0]; // "DD-MM-YYYY"
+                        } else {
                             const [fYear, fMonth, fDay] = monthFilter.split('-').map(Number);
-                            const dParts = dateOnly.split('-');
-                            if (dParts.length >= 3) {
-                                const dDay = parseInt(dParts[0]);
-                                const dMonth = parseInt(dParts[1]);
-                                const dYear = parseInt(dParts[2]);
-
-                                if (dDay === fDay && dMonth === fMonth && (dYear === fYear || dYear === (fYear + 543))) {
-                                    matchFound = true;
+                            if (updatedAtDisplay) {
+                                const dParts = updatedAtDisplay.split(' ')[0].split('-');
+                                if (dParts.length >= 3) {
+                                    const dDay = parseInt(dParts[0]), dMonth = parseInt(dParts[1]), dYear = parseInt(dParts[2]);
+                                    if (dDay === fDay && dMonth === fMonth && (dYear === fYear || dYear === (fYear + 543))) {
+                                        matchFound = true;
+                                    }
+                                }
+                            }
+                            if (!matchFound && createdDisplay) {
+                                const dParts = createdDisplay.split(' ')[0].split('-');
+                                if (dParts.length >= 3) {
+                                    const dDay = parseInt(dParts[0]), dMonth = parseInt(dParts[1]), dYear = parseInt(dParts[2]);
+                                    if (dDay === fDay && dMonth === fMonth && (dYear === fYear || dYear === (fYear + 543))) {
+                                        matchFound = true;
+                                    }
                                 }
                             }
                         }
                     } else {
                         // Matching YYYY-MM
                         const [fYear, fMonth] = monthFilter.split('-').map(Number);
-                        if (updatedAtIso.startsWith(monthFilter)) {
-                            matchFound = true;
-                        } else if (updatedAtDisplay) {
-                            const dateOnly = updatedAtDisplay.split(' ')[0];
-                            const dParts = dateOnly.split('-');
+                        if (updatedAtIso) {
+                            const [pYear, pMonth] = updatedAtIso.split('-');
+                            if (parseInt(pYear) === fYear && parseInt(pMonth) === fMonth) matchFound = true;
+                        }
+                        if (!matchFound && createdIso) {
+                            const [pYear, pMonth] = createdIso.split('-');
+                            if (parseInt(pYear) === fYear && parseInt(pMonth) === fMonth) matchFound = true;
+                        }
+                        if (!matchFound && updatedAtDisplay) {
+                            const dParts = updatedAtDisplay.split(' ')[0].split('-');
                             if (dParts.length >= 3) {
-                                const dMonth = parseInt(dParts[1]);
-                                const dYear = parseInt(dParts[2]);
-
-                                if (dMonth === fMonth && (dYear === fYear || dYear === (fYear + 543))) {
-                                    matchFound = true;
-                                }
+                                const dMonth = parseInt(dParts[1]), dYear = parseInt(dParts[2]);
+                                if (dMonth === fMonth && (dYear === fYear || dYear === (fYear + 543))) matchFound = true;
+                            }
+                        }
+                        if (!matchFound && createdDisplay) {
+                            const dParts = createdDisplay.split(' ')[0].split('-');
+                            if (dParts.length >= 3) {
+                                const dMonth = parseInt(dParts[1]), dYear = parseInt(dParts[2]);
+                                if (dMonth === fMonth && (dYear === fYear || dYear === (fYear + 543))) matchFound = true;
                             }
                         }
                     }
@@ -4488,6 +4517,11 @@
         let filterDatePicker = null;
 
         function toggleFilterType(type) {
+            poFilterType = type;
+            const select = document.getElementById('po-filter-type');
+            if (select && select.value !== type) {
+                select.value = type;
+            }
             const input = document.getElementById('po-month-filter');
             const icon = document.getElementById('calendar-icon-container');
             if (!input) return;
@@ -4497,10 +4531,6 @@
                 filterDatePicker.destroy();
                 filterDatePicker = null;
             }
-            
-            // Clear current filter value
-            input.value = '';
-            poFilterMonth = '';
             
             if (type === 'date') {
                 input.type = 'text'; // Flatpickr works best on text inputs
@@ -4522,10 +4552,23 @@
                         renderPOTableList();
                     }
                 });
+
+                if (poFilterMonth && poFilterMonth.split('-').length === 3) {
+                    filterDatePicker.setDate(poFilterMonth, false);
+                } else {
+                    input.value = '';
+                    poFilterMonth = '';
+                }
             } else {
                 input.type = 'month';
                 input.placeholder = '';
                 if (icon) icon.style.display = 'none'; // Hide custom calendar icon (native month picker has its own)
+                if (poFilterMonth && poFilterMonth.split('-').length === 2) {
+                    input.value = poFilterMonth;
+                } else {
+                    input.value = '';
+                    poFilterMonth = '';
+                }
             }
             renderPOTableList();
         }
@@ -4542,7 +4585,9 @@
             const monthInput = document.getElementById('po-month-filter');
             if (monthInput) {
                 monthInput.value = '';
-                if (monthInput._flatpickr) {
+                if (filterDatePicker) {
+                    filterDatePicker.clear();
+                } else if (monthInput._flatpickr) {
                     monthInput._flatpickr.clear();
                 }
             }
@@ -4563,7 +4608,9 @@
             const monthInput = document.getElementById('po-month-filter');
             if (monthInput) {
                 monthInput.value = '';
-                if (monthInput._flatpickr) {
+                if (filterDatePicker) {
+                    filterDatePicker.clear();
+                } else if (monthInput._flatpickr) {
                     monthInput._flatpickr.clear();
                 }
             }
