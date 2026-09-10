@@ -34,7 +34,7 @@ def run_migration():
             ("idx_products_inactive_code", 'CREATE INDEX IF NOT EXISTS idx_products_inactive_code ON products(inactive, "productCode");'),
         ]
 
-        print("Checking/creating performance indexes on purchase_orders...")
+        print("Checking/creating performance indexes on purchase_orders, customers, products...")
         for name, sql in indexes:
             try:
                 db.session.execute(text(sql))
@@ -42,6 +42,15 @@ def run_migration():
             except Exception as e:
                 print(f"  - Index {name} warning: {e}")
         db.session.commit()
+
+        # Refresh database optimizer statistics
+        print("Refreshing PostgreSQL query planner statistics (ANALYZE)...")
+        try:
+            db.session.execute(text("ANALYZE purchase_orders; ANALYZE customers; ANALYZE products; ANALYZE users;"))
+            db.session.commit()
+            print("  - Database statistics updated successfully.")
+        except Exception as e:
+            print(f"  - ANALYZE warning: {e}")
 
         # 3. Seed default CIAM settings if empty
         setting = CiamSetting.query.first()

@@ -3774,6 +3774,9 @@
 
             const placeholderImage = 'https://placehold.co/60x60/e2e8f0/94a3b8?text=No+Image';
 
+            let tableRowsHtml = '';
+            let mobileCardsHtml = '';
+
             poItems.forEach(item => {
                 const imageSrc = item.imageUrl || placeholderImage;
                 subtotal += item.price * item.qty;
@@ -3782,7 +3785,7 @@
                 // Desktop Row
                 const cleanName = cleanProductName(item.name, item.productCode);
                 const displayHtml = item.productCode ? `<span class="font-bold">${escapeHtml(item.productCode)}</span> - ${escapeHtml(cleanName)}` : escapeHtml(item.name);
-                tableBody.innerHTML += `
+                tableRowsHtml += `
                     <tr data-tempid="${item.tempId}">
                         <td class="px-6 py-4">
                             <img src="${imageSrc}" alt="${escapeHtml(item.name)}" class="w-12 h-12 rounded-md object-cover border">
@@ -3803,11 +3806,9 @@
                     </tr>
                 `;
 
-                // Mobile Card (NEW)
+                // Mobile Card
                 if (mobileCards) {
-                    const cleanName = cleanProductName(item.name, item.productCode);
-                    const displayHtml = item.productCode ? `<span class="font-bold">${escapeHtml(item.productCode)}</span> - ${escapeHtml(cleanName)}` : escapeHtml(item.name);
-                    mobileCards.innerHTML += `
+                    mobileCardsHtml += `
                         <div class="bg-white p-4 rounded-lg shadow border border-gray-200 flex gap-4">
                             <img src="${imageSrc}" alt="${escapeHtml(item.name)}" class="w-16 h-16 rounded-md object-cover border flex-shrink-0">
                             <div class="flex-grow min-w-0">
@@ -3835,6 +3836,11 @@
                     `;
                 }
             });
+
+            tableBody.innerHTML = tableRowsHtml;
+            if (mobileCards) {
+                mobileCards.innerHTML = mobileCardsHtml;
+            }
 
             // --- Multi-step Discount Calculation (VAT-Exclusive Items) ---
             // 1. Base Subtotal (Sum of items)
@@ -6950,8 +6956,7 @@
 
             updateUserSortIcons();
 
-            tableBody.innerHTML = '';
-            users.forEach(user => {
+            const rowsHtml = users.map(user => {
                 const isActive = user.status === 'active';
                 const statusBadge = isActive
                     ? `<span class="px-3 py-1 text-sm font-medium rounded-full bg-green-100 text-green-800">Active</span>`
@@ -6961,16 +6966,16 @@
                 const lastLogin = user.lastLogin || '-';
                 const targetAmount = user.targetAmount ? Number(user.targetAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
 
-                tableBody.innerHTML += `
+                return `
                     <tr data-id="${user.id}">
-                        <td class="px-6 py-4">${user.username}</td>
-                        <td class="px-6 py-4">${user.fullName}</td>
-                        <td class="px-6 py-4">${user.role}</td>
-                        <td class="px-6 py-4 text-gray-600">${user.phoneNumber || '-'}</td>
+                        <td class="px-6 py-4 font-medium text-gray-900">${escapeHtml(user.username || '')}</td>
+                        <td class="px-6 py-4">${escapeHtml(user.fullName || '')}</td>
+                        <td class="px-6 py-4">${escapeHtml(user.role || '')}</td>
+                        <td class="px-6 py-4 text-gray-600">${escapeHtml(user.phoneNumber || '-')}</td>
                         <td class="px-6 py-4 text-right font-medium">${targetAmount}</td>
                         <td class="px-6 py-4 text-center">${statusBadge}</td>
-                        <td class="px-6 py-4 text-xs text-gray-500">${createdAt}</td>
-                        <td class="px-6 py-4 text-xs text-gray-500">${lastLogin}</td>
+                        <td class="px-6 py-4 text-xs text-gray-500">${escapeHtml(createdAt)}</td>
+                        <td class="px-6 py-4 text-xs text-gray-500">${escapeHtml(lastLogin)}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-center">
                             <button class="text-blue-600 hover:text-blue-900 mr-3" onclick="openUserCreateModal(${user.id})" title="Edit">
                                 <i data-lucide="edit-2" class="w-5 h-5"></i>
@@ -6984,7 +6989,9 @@
                         </td>
                     </tr>
                 `;
-            });
+            }).join('');
+
+            tableBody.innerHTML = rowsHtml;
             initIcons();
         }
 

@@ -38,12 +38,13 @@
 
 | ไฟล์ | ประเภท | คำอธิบาย |
 | :--- | :--- | :--- |
-| [app.py](file:///d:/Python/PO-Online/app.py) | Modified | เพิ่ม SQL Aggregations ใน `/api/dashboard/stats`, Batch Query สินค้าใน `POST/PUT /api/pos`, ปรับ `list_customers` ใช้ `load_only` และ `to_summary_dict` |
-| [app.html](file:///d:/Python/PO-Online/app.html) | Modified | ปรับปรุง `loadDashboardStats`, คงค่าตัวกรองเดือนใน `savePO`, ปรับ `customerPageSize = 50` และ Batch Render ตาราง Customer |
+| [app.py](file:///d:/Python/PO-Online/app.py) | Modified | เพิ่ม SQL Aggregations ใน `/api/dashboard/stats`, Batch Query สินค้า, ปรับ `list_customers` ใช้ `load_only`, เพิ่ม `SQLALCHEMY_ENGINE_OPTIONS` (pool_pre_ping) |
+| [app.html](file:///d:/Python/PO-Online/app.html) | Modified | ปรับปรุง `loadDashboardStats`, คงค่าตัวกรองเดือนใน `savePO`, ปรับ `customerPageSize = 50`, แก้ `renderUserTable` และ `renderPOTable` เป็น Batch Render |
+| [nginx.conf](file:///d:/Python/PO-Online/nginx.conf) | Modified | เปิดใช้งาน Gzip Compression ลดขนาดทราฟฟิก 80-90% และตั้งค่า Keepalive Upstream ลด TCP handshake |
 | [utils.py](file:///d:/Python/PO-Online/utils.py) | Modified | ปรับปรุง `send_telegram_msg` ให้ส่งแบบ Non-blocking Background Thread |
 | [models.py](file:///d:/Python/PO-Online/models.py) | Modified | ลดขนาด Payload `User.to_dict()` และเพิ่ม `Customer.to_summary_dict()` |
 | [entrypoint.sh](file:///d:/Python/PO-Online/entrypoint.sh) | Modified | เพิ่ม `--threads 4` และ `--timeout 120` ให้ Gunicorn เพื่อแก้ปัญหา Worker Queue Bottleneck |
-| [scripts/migrate_performance_and_ciam.py](file:///d:/Python/PO-Online/scripts/migrate_performance_and_ciam.py) | Modified | เพิ่ม Index ให้กับตาราง `customers` (`inactive, id`, `customerCode`, `name`, `telephone1`) และ `products` |
+| [scripts/migrate_performance_and_ciam.py](file:///d:/Python/PO-Online/scripts/migrate_performance_and_ciam.py) | Modified | เพิ่ม Index ให้กับตาราง `customers` และ `products` พร้อมคำสั่ง `ANALYZE` อัปเดตสถิติ Query Planner |
 | [HANDOFF.md](file:///d:/Python/PO-Online/HANDOFF.md) | Modified | บันทึกสรุปการแก้ไขปัญหา Performance ครบวงจร |
 
 
@@ -67,11 +68,16 @@ cd /var/www/QT-Online
 git stash -u
 git pull origin main
 
-# 3. บิลด์คอนเทนเนอร์ web ใหม่พร้อมโค้ดล่าสุด (ต้องใส่ --build เสมอ)
+# 3. บิลด์คอนเทนเนอร์ web ใหม่พร้อมโค้ดล่าสุด (ต้องใส่ --build เสมอ) และรีสตาร์ท Nginx เพื่อเปิดใช้ Gzip
 docker compose up -d --no-deps --build web
+docker compose restart nginx
 
-# 4. รันสคริปต์ Migration สร้าง Index (รันเพียงครั้งเดียว)
+# 4. รันสคริปต์ Migration สร้าง Index และรัน ANALYZE บน PostgreSQL
 docker compose exec web python scripts/migrate_performance_and_ciam.py
+
+# 5. ตรวจสอบสถานะ Index และทรัพยากรเครื่อง
+docker compose exec db psql -U WAUser -d qt_online_db -c "\di idx_*"
+free -h
 ```
 
 ---

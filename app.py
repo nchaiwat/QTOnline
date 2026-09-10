@@ -263,6 +263,13 @@ default_db_url = f"postgresql://{db_user}:{safe_db_pass}@{db_host}:{db_port}/{db
 
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", default_db_url)
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "pool_size": 10,
+    "max_overflow": 20,
+    "pool_timeout": 30,
+    "pool_recycle": 1800,
+    "pool_pre_ping": True,
+}
 
 # File Upload Configuration
 # We will save files in the 'instance/uploads' folder
