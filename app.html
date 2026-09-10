@@ -4287,15 +4287,18 @@
             const monthInput = document.getElementById('po-month-filter');
             if (monthInput) {
                 if (poFilterType === 'date') {
-                    if (filterDatePicker) {
-                        if (poFilterMonth && poFilterMonth.split('-').length === 3) {
+                    if (filterDatePicker && poFilterMonth && poFilterMonth.split('-').length === 3) {
+                        const curDate = filterDatePicker.selectedDates[0];
+                        const curStr = curDate ? `${curDate.getFullYear()}-${String(curDate.getMonth()+1).padStart(2,'0')}-${String(curDate.getDate()).padStart(2,'0')}` : '';
+                        if (curStr !== poFilterMonth) {
                             filterDatePicker.setDate(poFilterMonth, false);
-                        } else {
-                            filterDatePicker.clear();
                         }
                     }
                 } else {
-                    monthInput.value = (poFilterMonth && poFilterMonth.split('-').length === 2) ? poFilterMonth : '';
+                    const targetVal = (poFilterMonth && poFilterMonth.split('-').length === 2) ? poFilterMonth : '';
+                    if (monthInput.value !== targetVal) {
+                        monthInput.value = targetVal;
+                    }
                 }
             }
 
@@ -4540,15 +4543,16 @@
                     dateFormat: "d/m/Y",
                     allowInput: true,
                     onChange: function(selectedDates, dateStr, instance) {
+                        let newFilter = '';
                         if (selectedDates.length > 0) {
                             const d = selectedDates[0];
                             const year = d.getFullYear();
                             const month = String(d.getMonth() + 1).padStart(2, '0');
                             const day = String(d.getDate()).padStart(2, '0');
-                            poFilterMonth = `${year}-${month}-${day}`;
-                        } else {
-                            poFilterMonth = '';
+                            newFilter = `${year}-${month}-${day}`;
                         }
+                        if (poFilterMonth === newFilter) return;
+                        poFilterMonth = newFilter;
                         renderPOTableList();
                     }
                 });
@@ -4576,19 +4580,22 @@
         function handlePOMonthChange(event) {
             const filterType = document.getElementById('po-filter-type')?.value;
             if (filterType === 'date') return; // Skip because Flatpickr's onChange handles this
-            poFilterMonth = event?.target?.value || '';
+            const val = event?.target?.value || '';
+            if (poFilterMonth === val) return;
+            poFilterMonth = val;
             renderPOTableList();
         }
 
         function clearMonthFilter() {
+            if (poFilterMonth === '') return;
             poFilterMonth = '';
             const monthInput = document.getElementById('po-month-filter');
             if (monthInput) {
                 monthInput.value = '';
                 if (filterDatePicker) {
-                    filterDatePicker.clear();
+                    filterDatePicker.clear(false);
                 } else if (monthInput._flatpickr) {
-                    monthInput._flatpickr.clear();
+                    monthInput._flatpickr.clear(false);
                 }
             }
             renderPOTableList();
@@ -4609,9 +4616,9 @@
             if (monthInput) {
                 monthInput.value = '';
                 if (filterDatePicker) {
-                    filterDatePicker.clear();
+                    filterDatePicker.clear(false);
                 } else if (monthInput._flatpickr) {
-                    monthInput._flatpickr.clear();
+                    monthInput._flatpickr.clear(false);
                 }
             }
 
