@@ -20,13 +20,18 @@ def run_migration():
         db.create_all()
         print("Tables checked/created successfully.")
 
-        # 2. Add indexes on purchase_orders
+        # 2. Add performance indexes on purchase_orders, customers, and products
         indexes = [
             ("idx_po_sale_user_id", 'CREATE INDEX IF NOT EXISTS idx_po_sale_user_id ON purchase_orders(sale_user_id);'),
             ("idx_po_status", 'CREATE INDEX IF NOT EXISTS idx_po_status ON purchase_orders(status);'),
             ("idx_po_created", 'CREATE INDEX IF NOT EXISTS idx_po_created ON purchase_orders(created);'),
             ("idx_po_updated_at", 'CREATE INDEX IF NOT EXISTS idx_po_updated_at ON purchase_orders("updatedAt");'),
             ("idx_po_sale_created", 'CREATE INDEX IF NOT EXISTS idx_po_sale_created ON purchase_orders(sale_user_id, created);'),
+            ("idx_customers_inactive_id", 'CREATE INDEX IF NOT EXISTS idx_customers_inactive_id ON customers(inactive, id);'),
+            ("idx_customers_code", 'CREATE INDEX IF NOT EXISTS idx_customers_code ON customers("customerCode");'),
+            ("idx_customers_name", 'CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name);'),
+            ("idx_customers_phone", 'CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(telephone1);'),
+            ("idx_products_inactive_code", 'CREATE INDEX IF NOT EXISTS idx_products_inactive_code ON products(inactive, "productCode");'),
         ]
 
         print("Checking/creating performance indexes on purchase_orders...")

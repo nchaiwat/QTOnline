@@ -2770,12 +2770,12 @@
         let customerFilterKeyword = '';
         let customerFilterStatus = 'all'; // active, inactive, all
         let customerCurrentPage = 1;
-        let customerPageSize = 100;
+        let customerPageSize = 50;
         let customerTotalRows = 0;
         let customerSearchTimer = null;
 
         const CUSTOMER_SEARCH_DELAY = 250; // milliseconds debounce for search
-        const CUSTOMER_PAGE_SIZE_OPTIONS = [50, 100, 250, 500, 1000];
+        const CUSTOMER_PAGE_SIZE_OPTIONS = [25, 50, 100, 200];
 
         const MONTHLY_TARGET_BY_ROLE = {
             'Sale': 300000,
@@ -6158,6 +6158,13 @@
             }
         }
 
+        async function handleCustomerToggleClick(e, customerCode, targetInactive) {
+            if (e) e.stopPropagation();
+            if (confirm(`Are you sure you want to ${targetInactive ? 'deactivate' : 'activate'} this customer?`)) {
+                await toggleCustomerStatus(customerCode, targetInactive);
+            }
+        }
+
         function renderCustomerTable(customers) {
             const tableBody = document.getElementById('customer-table-body');
             if (!tableBody) return;
@@ -6167,20 +6174,17 @@
             if (!customers || customers.length === 0) {
                 tableBody.innerHTML = `
                     <tr>
-                        <td colspan="7" class="px-6 py-4 text-center text-gray-500">ไม่พบข้อมูลลูกค้า</td>
+                        <td colspan="9" class="px-6 py-4 text-center text-gray-500">ไม่พบข้อมูลลูกค้า</td>
                     </tr>
                 `;
-                lucide.createIcons();
+                if (window.lucide) lucide.createIcons();
                 return;
             }
 
-            tableBody.innerHTML = '';
+            const isAdminOrSaleAdmin = currentUser && (currentUser.role === 'Administrator' || currentUser.role === 'Sale Admin');
 
-            customers.forEach(customer => {
-                const row = document.createElement('tr');
-                row.className = 'hover:bg-gray-50';
-
-                const province = customer.billTo?.province || customer.shipTo?.province || '-';
+            const rowsHtml = customers.map(customer => {
+                const province = customer.province || customer.billTo?.province || customer.shipTo?.province || '-';
                 const phone = customer.telephone1 || customer.mobilePhone || customer.telephone2 || '-';
                 const payment = customer.paymentTermsCode || '-';
                 const creditNumber = customer.creditLimit !== null && customer.creditLimit !== undefined && customer.creditLimit !== ''
@@ -6193,59 +6197,50 @@
                     ? `<span class="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">Inactive</span>`
                     : `<span class="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">Active</span>`;
 
+                const safeCode = escapeHtml(customer.customerCode || '');
+                const safeName = escapeHtml(customer.name || '-');
+                const safeProvince = escapeHtml(province);
+                const safePhone = escapeHtml(phone);
+                const safePayment = escapeHtml(payment);
+                const isSelected = selectedIds.customer.includes(String(customer.id));
+
                 let actionButtons = `
-                    <button type="button" class="inline-flex items-center px-3 py-1 bg-white border border-gray-300 rounded-lg text-blue-600 hover:text-blue-800 hover:border-blue-400 transition-colors customer-view-button mr-2" data-customer-code="">
+                    <button type="button" onclick="openCustomerDetail('${safeCode}')" class="inline-flex items-center px-3 py-1 bg-white border border-gray-300 rounded-lg text-blue-600 hover:text-blue-800 hover:border-blue-400 transition-colors mr-2">
                         <i data-lucide="eye" class="w-4 h-4 mr-1"></i> View
                     </button>
                 `;
 
-                // Only Administrator and Sale Admin can deactivate/activate
-                if (currentUser && (currentUser.role === 'Administrator' || currentUser.role === 'Sale Admin')) {
+                if (isAdminOrSaleAdmin) {
                     actionButtons += `
-                        <button type="button" class="inline-flex items-center p-1.5 bg-white border border-gray-300 rounded-lg ${isInactive ? 'text-green-600 hover:text-green-800' : 'text-red-600 hover:text-red-800'} hover:border-gray-400 transition-colors customer-toggle-button" title="${isInactive ? 'Activate' : 'Deactivate'}">
+                        <button type="button" onclick="handleCustomerToggleClick(event, '${safeCode}', ${!isInactive})" class="inline-flex items-center p-1.5 bg-white border border-gray-300 rounded-lg ${isInactive ? 'text-green-600 hover:text-green-800' : 'text-red-600 hover:text-red-800'} hover:border-gray-400 transition-colors" title="${isInactive ? 'Activate' : 'Deactivate'}">
                             <i data-lucide="${isInactive ? 'check-circle' : 'x-circle'}" class="w-4 h-4"></i>
                         </button>
                     `;
                 }
 
-                row.innerHTML = `
-                    <td class="px-6 py-4 admin-only-ui">
-                        <input type="checkbox" class="customer-row-checkbox rounded text-blue-600 focus:ring-blue-500" 
-                            value="${customer.id}" ${selectedIds.customer.includes(String(customer.id)) ? 'checked' : ''}
-                            onchange="handleRowSelect('customer', '${customer.id}', this.checked)">
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap font-medium text-gray-900">${escapeHtml(customer.customerCode || '')}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-gray-700">${escapeHtml(customer.name || '-')}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-gray-700">${escapeHtml(province || '-')}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-gray-700">${escapeHtml(phone || '-')}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-gray-700">${escapeHtml(payment || '-')}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-right text-gray-700">${credit}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-center">${statusBadge}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-right">
-                        ${actionButtons}
-                    </td>
+                return `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 admin-only-ui">
+                            <input type="checkbox" class="customer-row-checkbox rounded text-blue-600 focus:ring-blue-500" 
+                                value="${customer.id}" ${isSelected ? 'checked' : ''}
+                                onchange="handleRowSelect('customer', '${customer.id}', this.checked)">
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap font-medium text-gray-900">${safeCode}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-gray-700">${safeName}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-gray-700">${safeProvince}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-gray-700">${safePhone}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-gray-700">${safePayment}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-gray-700">${credit}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">${statusBadge}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right">${actionButtons}</td>
+                    </tr>
                 `;
+            }).join('');
 
-                const viewButton = row.querySelector('.customer-view-button');
-                if (viewButton) {
-                    viewButton.dataset.customerCode = customer.customerCode;
-                    viewButton.addEventListener('click', () => openCustomerDetail(customer.customerCode));
-                }
-
-                const toggleButton = row.querySelector('.customer-toggle-button');
-                if (toggleButton) {
-                    toggleButton.addEventListener('click', async (e) => {
-                        e.stopPropagation();
-                        if (confirm(`Are you sure you want to ${isInactive ? 'activate' : 'deactivate'} this customer?`)) {
-                            await toggleCustomerStatus(customer.customerCode, !isInactive);
-                        }
-                    });
-                }
-
-                tableBody.appendChild(row);
-            });
-
-            lucide.createIcons();
+            tableBody.innerHTML = rowsHtml;
+            if (window.lucide) {
+                lucide.createIcons();
+            }
         }
 
         function populateCustomerForm(data) {

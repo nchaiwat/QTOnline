@@ -256,6 +256,23 @@ class Customer(db.Model):
             "inactive": self.inactive,
         }
 
+    def to_summary_dict(self):
+        province = self.billToCounty or self.shipToCounty or "-"
+        phone = self.telephone1 or self.mobilePhone or self.telephone2 or "-"
+        return {
+            "id": self.id,
+            "customerCode": self.customerCode,
+            "name": self.name,
+            "province": province,
+            "telephone1": phone,
+            "mobilePhone": self.mobilePhone or "",
+            "billTo": {"province": province},
+            "shipTo": {"province": province},
+            "paymentTermsCode": self.paymentTermsCode or "-",
+            "creditLimit": _decimal_to_str(self.creditLimit),
+            "inactive": self.inactive,
+        }
+
     def to_detail_dict(self):
         d = self.to_dict()
         d.update(

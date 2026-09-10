@@ -38,11 +38,12 @@
 
 | ไฟล์ | ประเภท | คำอธิบาย |
 | :--- | :--- | :--- |
-| [app.py](file:///d:/Python/PO-Online/app.py) | Modified | เพิ่ม SQL Aggregations ใน `/api/dashboard/stats`, Batch Query สินค้าใน `POST/PUT /api/pos` |
-| [app.html](file:///d:/Python/PO-Online/app.html) | Modified | ปรับปรุง `loadDashboardStats` ให้เรียก `/api/dashboard/stats`, คงค่าตัวกรองเดือนใน `savePO` |
+| [app.py](file:///d:/Python/PO-Online/app.py) | Modified | เพิ่ม SQL Aggregations ใน `/api/dashboard/stats`, Batch Query สินค้าใน `POST/PUT /api/pos`, ปรับ `list_customers` ใช้ `load_only` และ `to_summary_dict` |
+| [app.html](file:///d:/Python/PO-Online/app.html) | Modified | ปรับปรุง `loadDashboardStats`, คงค่าตัวกรองเดือนใน `savePO`, ปรับ `customerPageSize = 50` และ Batch Render ตาราง Customer |
 | [utils.py](file:///d:/Python/PO-Online/utils.py) | Modified | ปรับปรุง `send_telegram_msg` ให้ส่งแบบ Non-blocking Background Thread |
-| [models.py](file:///d:/Python/PO-Online/models.py) | Modified | ลดขนาด Payload `User.to_dict()` โดยไม่ส่งก้อน Base64 ลายเซ็นในรายการผู้ใช้ |
+| [models.py](file:///d:/Python/PO-Online/models.py) | Modified | ลดขนาด Payload `User.to_dict()` และเพิ่ม `Customer.to_summary_dict()` |
 | [entrypoint.sh](file:///d:/Python/PO-Online/entrypoint.sh) | Modified | เพิ่ม `--threads 4` และ `--timeout 120` ให้ Gunicorn เพื่อแก้ปัญหา Worker Queue Bottleneck |
+| [scripts/migrate_performance_and_ciam.py](file:///d:/Python/PO-Online/scripts/migrate_performance_and_ciam.py) | Modified | เพิ่ม Index ให้กับตาราง `customers` (`inactive, id`, `customerCode`, `name`, `telephone1`) และ `products` |
 | [HANDOFF.md](file:///d:/Python/PO-Online/HANDOFF.md) | Modified | บันทึกสรุปการแก้ไขปัญหา Performance ครบวงจร |
 
 
@@ -68,6 +69,9 @@ git pull origin main
 
 # 3. บิลด์คอนเทนเนอร์ web ใหม่พร้อมโค้ดล่าสุด (ต้องใส่ --build เสมอ)
 docker compose up -d --no-deps --build web
+
+# 4. รันสคริปต์ Migration สร้าง Index (รันเพียงครั้งเดียว)
+docker compose exec web python scripts/migrate_performance_and_ciam.py
 ```
 
 ---

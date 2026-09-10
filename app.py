@@ -59,6 +59,7 @@ from sqlalchemy.orm import (
     subqueryload,
     selectinload,
     aliased,
+    load_only,
 )
 from flask_login import login_user, logout_user, login_required, current_user
 from utils import (
@@ -1847,18 +1848,34 @@ def upload_product_image(key):
     return jsonify({"error": "Invalid file type"}), 400
 
 
-# [MODIFIED] รองรับการค้นหา Customer (?q=...) และปรับ Format ให้ Dropdown ทำงานได้ 100%
+# [MODIFIED] รองรับการค้นหา Customer (?q=...) และปรับ Format ให้ Dropdown ทำงานได้ 100% พร้อม Pagination ที่รวดเร็ว
+CUSTOMER_SUMMARY_LOAD_FIELDS = (
+    Customer.id,
+    Customer.customerCode,
+    Customer.name,
+    Customer.billToCounty,
+    Customer.shipToCounty,
+    Customer.telephone1,
+    Customer.telephone2,
+    Customer.mobilePhone,
+    Customer.paymentTermsCode,
+    Customer.creditLimit,
+    Customer.inactive,
+)
+
+
 @app.route("/api/customers", methods=["GET"])
 @login_required
 def list_customers():
-    # REMOVED default=1 เพื่อให้รู้ว่า Frontend ไม่ได้ขอ Pagination
     page = request.args.get("page", type=int)
     search = request.args.get("q")
     status = request.args.get("status", "all")  # active, inactive, all
+    per_page = request.args.get("pageSize", type=int) or request.args.get("per_page", type=int) or 50
+    per_page = min(max(per_page, 10), 250)
 
-    query = Customer.query
+    query = Customer.query.options(load_only(*CUSTOMER_SUMMARY_LOAD_FIELDS))
     if search:
-        term = f"%{search}%"
+        term = f"%{search.strip()}%"
         query = query.filter(
             or_(
                 Customer.customerCode.ilike(term),
@@ -1868,29 +1885,32 @@ def list_customers():
         )
 
     if status == "active":
-        query = query.filter_by(inactive=False)
+        query = query.filter(or_(Customer.inactive == False, Customer.inactive == None))
     elif status == "inactive":
-        query = query.filter_by(inactive=True)
+        query = query.filter(Customer.inactive == True)
     # else status == 'all', no filter applied
 
     query = query.order_by(Customer.id)
 
     # กรณีขอแบบแบ่งหน้า (สำหรับหน้า Management Tables)
     if page:
-        pg = query.paginate(page=page, per_page=100, error_out=False)
+        pg = query.paginate(page=page, per_page=per_page, error_out=False)
         return jsonify(
-            {"items": [c.to_dict() for c in pg.items], "total": pg.total, "page": page}
+            {
+                "items": [c.to_summary_dict() for c in pg.items],
+                "total": pg.total,
+                "page": page,
+                "pageSize": per_page,
+            }
         )
 
-    # กรณี Dropdown (ไม่ส่ง page มา) -> ต้องส่งกลับเป็น List [] เท่านั้น
-    # Default to active if status is not specified for dropdown
+    # กรณี Dropdown / Cache (ไม่ส่ง page มา)
+    limit = request.args.get("pageSize", type=int) or request.args.get("limit", type=int) or 500
     if not page and status == "all":
-        query = query.filter_by(inactive=False)
+        query = query.filter(or_(Customer.inactive == False, Customer.inactive == None))
 
-    # ดึงข้อมูลทั้งหมดเพื่อให้ Dropdown แสดงครบ (ไม่จำกัดจำนวน)
-    results = query.all()
-    # ส่งคืน List โดยตรง
-    return jsonify([c.to_dict() for c in results])
+    results = query.limit(limit).all()
+    return jsonify([c.to_summary_dict() for c in results])
 
 
 # [MODIFIED] ปรับแก้ Product List เช่นกัน เพื่อให้ Dropdown หน้า Create QT ทำงานได้
