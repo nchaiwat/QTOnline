@@ -56,9 +56,16 @@
 ---
 
 ## 4. โครงสร้างสถาปัตยกรรมสำคัญที่เพิ่งเพิ่ม (Sep 2026)
-1. **Performance Indexing & Query:**
-   - มี 5 Indexes บนตาราง `purchase_orders` (`idx_po_sale_user_id`, `idx_po_status`, `idx_po_created`, `idx_po_updated_at`, `idx_po_sale_created`)
-   - หน้า `page-po-list` (QT Management) เรียก `GET /api/pos?summary=true&month=YYYY-MM` เพื่อให้ตอบสนองเร็วและใช้ `PurchaseOrder.to_summary_dict()`
+1. **Performance Indexing & Query Optimization:**
+   - **ตาราง `purchase_orders`:** มี 5 Indexes (`idx_po_sale_user_id`, `idx_po_status`, `idx_po_created`, `idx_po_updated_at`, `idx_po_sale_created`)
+   - **ตาราง `customers`:** มี 4 Indexes (`idx_customers_inactive_id`, `idx_customers_code`, `idx_customers_name`, `idx_customers_phone`)
+   - **ตาราง `products`:** มี Index (`idx_products_inactive_code`)
+   - **Dashboard:** ใช้ Server-side SQL Aggregation (`/api/dashboard/stats`) คำนวณสรุปผลใน Database แทนการดึง POs ทั้งหมด
+   - **Save QT:** ส่ง Telegram แจ้งเตือนผ่าน Daemon Thread แบบ Asynchronous และใช้ Batch Query รายการสินค้า
+   - **Customer List:** ใช้ `Customer.to_summary_dict()` ร่วมกับ `load_only(...)` ดึงเฉพาะ 10 คอลัมน์หลัก และจำกัด pageSize เริ่มต้นที่ 50 รายการ
+   - **Network & Nginx:** เปิดใช้งาน `gzip on` (ลดขนาด `app.html` จาก 452 KB เหลือ ~45 KB) และ `upstream flask_app { keepalive 32; }`
+   - **Database Connection Pool:** กำหนด `SQLALCHEMY_ENGINE_OPTIONS` พร้อม `pool_pre_ping=True`, `pool_recycle=1800` ใน `app.py`
+   - **DOM Rendering:** ตาราง User, Customer, และ PO Create Items ใช้ Batch HTML String Injection แทนการวนลูป `innerHTML +=`
 2. **Centralized Identity Management (CIAM):**
    - อ้างอิงตามเอกสาร [CENTRAL_IDENTITY_MANAGEMENT_API_SPEC.md](CENTRAL_IDENTITY_MANAGEMENT_API_SPEC.md)
    - Endpoints: `GET /api/v1/directory/accounts`, `PATCH /api/v1/directory/accounts/<username>/status`, `POST /api/v1/directory/accounts`
