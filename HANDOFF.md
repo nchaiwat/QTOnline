@@ -243,3 +243,26 @@ emote_addr) มาบันทึกลงในฟิลด์ details JSON ข
          - เพิ่มคอลัมน์ email VARCHAR(150) และ 	elegram_chat_id VARCHAR(100) ในตาราง users ของ [models.py](models.py) และสคริปต์ [scripts/migrate_performance_and_ciam.py](scripts/migrate_performance_and_ciam.py)
          - เพิ่มช่องกรอก Email และ Telegram ID ในหน้าต่างจัดการผู้ใช้ [app.html](app.html)
          - เชื่อมต่อข้อมูลจริงเข้ากับ Directory Sync API (GET /api/v1/directory/accounts และ Mode C Outbound Heartbeat)
+
+16. **การแก้ไขปัญหา "กด Logout ยังไงก็ไม่ออก" (Fix Flask-Login Remember Token Re-Authentication Loop):**
+    - **สาเหตุเชิงลึก:**
+      1. เมื่อผู้ใช้ล็อกอิน (ทั้ง Local และ SSO) มีการเรียก `login_user(user, remember=True)` ซึ่งทำให้ Flask-Login ออกคุกกี้ `remember_token` ให้ Browser จดจำตัวตน
+      2. เมื่อกดออกจากระบบที่ `/logout`:
+         - มีการเรียก `logout_user()` ซึ่ง Flask-Login จะฝัง `session['_remember'] = 'clear'` ไว้ เพื่อรอให้ After-Request Hook ส่งคำสั่งลบคุกกี้ `remember_token`
+         - แต่บรรทัดถัดมามีคำสั่ง `session.clear()` ซึ่งทำการล้างค่าใน `session` ทั้งหมด ส่งผลให้ค่า `session['_remember']` ถูกลบหายไปด้วย
+         - ผลลัพธ์: Server จึง **ไม่ได้ส่งคำสั่งลบคุกกี้ `remember_token` ออกไปที่ Browser**
+      3. เมื่อ Browser ถูก Redirect ไปยัง `/login`:
+         - Flask-Login อ่านคุกกี้ `remember_token` ที่ยังค้างอยู่ใน Browser และทำการ Re-authenticate อัตโนมัติทันที
+         - ในฟังก์ชัน `login()` มีโค้ดตรวจสอบ: `if current_user.is_authenticated: return redirect(url_for("app_shell"))`
+         - ทำให้ผู้ใช้ถูก Redirect กลับเข้ามาที่หน้า Dashboard (`/`) ทันที เสมือนว่าการกด Logout ไม่มีผลใดๆ ("กด Logout ยังไงก็ไม่ออก")
+    - **การแก้ไข:**
+      1. ใน [app.py](app.py) ฟังก์ชัน `/logout`:
+         - เรียก `response = make_response(redirect(target_url))`
+         - ส่งคำสั่ง `response.delete_cookie(...)` อย่างชัดเจน ทั้งสำหรับ `remember_token` และ `session` (ครอบคลุมทั้ง Default Path `/` และ Domain ที่กำหนด)
+         - เพิ่ม Header ป้องกัน Browser แคชหน้าจอที่ล็อกอิน: `Cache-Control: no-cache, no-store, must-revalidate`
+      2. ใน [app.py](app.py) ฟังก์ชัน `/login`:
+         - เพิ่มการดักจับ Parameter `?logout=1` เพื่อบังคับเรียก `logout_user()` และ `session.clear()` ป้องกันการเด้งกลับเข้า `app_shell` ในทุกกรณี
+      3. ใน [app.html](app.html):
+         - ปรับปุ่ม Logout ด้านขวาบนให้มี `id="top-logout-btn"` และเพิ่ม `onclick="window.location.href='/logout';"` เพื่อการันตีการทำงานทั้งระดับ Link และ JavaScript Event
+    - **ผลลัพธ์การทดสอบ:**
+      - ทดสอบรัน Flow ล็อกอินด้วย `remember=True` แล้วเรียก `/logout` ตามด้วยการเข้า `/` พบว่าระบบเปลี่ยนเส้นทางไปยัง `/login?next=%2F` ได้ถูกต้อง 100% คุกกี้เซสชันและ Remember Token ถูกทำลายโดยสมบูรณ์ ผู้ใช้ถูกออกจากระบบอย่างแท้จริง

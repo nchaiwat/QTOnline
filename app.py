@@ -407,7 +407,10 @@ def health_check():
 @app.route("/login", methods=["GET", "POST"])
 @limiter.limit("15 per minute")
 def login():
-    if current_user.is_authenticated:
+    if request.args.get("logout"):
+        logout_user()
+        session.clear()
+    elif current_user.is_authenticated:
         return redirect(url_for("app_shell"))
 
     if request.method == "POST":
@@ -572,14 +575,32 @@ def logout():
             details={"username": username, "auth_provider": "ciam_sso" if is_sso else "local", "ip": client_ip},
             triggered_by=f"user:{username}",
         )
-        logout_user()
 
+    # Invalidate Flask-Login and session
+    logout_user()
     session.clear()
 
     # Spec 5.3 & 10.6: Seamless return to Central IAM App Portal if logged in via SSO
-    if is_sso:
-        return redirect(portal_url)
-    return redirect(url_for("login"))
+    target_url = portal_url if is_sso else url_for("login", logout="1")
+    response = make_response(redirect(target_url))
+
+    # Explicitly clear remember_token and session cookies across path and domains
+    remember_cookie_name = app.config.get("REMEMBER_COOKIE_NAME", "remember_token")
+    session_cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")
+
+    response.delete_cookie(remember_cookie_name, path="/")
+    response.delete_cookie(session_cookie_name, path="/")
+    if app.config.get("REMEMBER_COOKIE_DOMAIN"):
+        response.delete_cookie(remember_cookie_name, domain=app.config.get("REMEMBER_COOKIE_DOMAIN"), path="/")
+    if app.config.get("SESSION_COOKIE_DOMAIN"):
+        response.delete_cookie(session_cookie_name, domain=app.config.get("SESSION_COOKIE_DOMAIN"), path="/")
+
+    # Prevent browser caching of authenticated state
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+
+    return response
 
 
 @app.route("/")

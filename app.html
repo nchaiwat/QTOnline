@@ -393,10 +393,11 @@
                             <i data-lucide="pen-tool" class="w-4 h-4"></i>
                         </button>
                         <!-- VISIBLE LOGOUT BUTTON -->
-                        <!-- FIX 1.2: Changed to <a> tag for simple href logout -->
                         <a href="/logout"
-                            class="ml-2 px-2 py-2 rounded-full bg-gray-100 hover:bg-red-100 text-gray-600 hover:text-red-600 transition-colors"
-                            title="Logout">
+                            id="top-logout-btn"
+                            class="ml-2 px-2 py-2 rounded-full bg-gray-100 hover:bg-red-100 text-gray-600 hover:text-red-600 transition-colors cursor-pointer"
+                            title="ออกจากระบบ"
+                            onclick="window.location.href='/logout';">
                             <i data-lucide="log-out" class="w-4 h-4"></i>
                         </a>
                     </div>
