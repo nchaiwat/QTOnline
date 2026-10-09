@@ -544,7 +544,11 @@
                 if (data.success) {
                     window.location.href = '/';
                 } else {
-                    alert.textContent = data.error || 'Login failed';
+                    let errMsg = data.error || 'Login failed';
+                    if (errMsg === 'Invalid username or password') {
+                        errMsg = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง (สำหรับพนักงานองค์กร กรุณาเข้าสู่ระบบด้วยปุ่ม Window Asia SSO)';
+                    }
+                    alert.textContent = errMsg;
                     alert.style.display = 'block';
                     btn.disabled = false;
                     btn.innerHTML = originalHtml;
@@ -557,17 +561,35 @@
             }
         });
 
+        // Auto-hide error alert when typing in username or password
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+        const alertBox = document.getElementById('errorAlert');
+        if (usernameInput) {
+            usernameInput.addEventListener('input', () => {
+                if (alertBox) alertBox.style.display = 'none';
+            });
+        }
+        if (passwordInput) {
+            passwordInput.addEventListener('input', () => {
+                if (alertBox) alertBox.style.display = 'none';
+            });
+        }
+
         // CIAM Spec v2.7.0 SSO Client Integration
         async function initSsoConfig() {
             // Check URL for error params (e.g. from failed callback)
             const urlParams = new URLSearchParams(window.location.search);
             const errParam = urlParams.get('error');
             if (errParam) {
-                const alertBox = document.getElementById('errorAlert');
                 if (alertBox) {
                     alertBox.textContent = decodeURIComponent(errParam);
                     alertBox.style.display = 'block';
                 }
+                // Clear error from URL query bar so user isn't stuck seeing error on manual reload
+                try {
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                } catch(e) {}
             }
 
             try {
@@ -594,7 +616,11 @@
 
         async function handleCiamSsoLogin() {
             try {
-                const redirectUri = window.location.origin + '/auth/callback';
+                let redirectOrigin = window.location.origin;
+                if (window.location.hostname.includes('windowasia.com') && redirectOrigin.startsWith('http:')) {
+                    redirectOrigin = redirectOrigin.replace('http:', 'https:');
+                }
+                const redirectUri = redirectOrigin + '/auth/callback';
                 const res = await fetch('/api/auth/sso/authorize-url', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },

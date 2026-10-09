@@ -245,6 +245,7 @@ def verify_rs256_jwt(id_token: str, base_url: str, expected_aud: str) -> dict:
 def exchange_oauth_code(code: str, redirect_uri: str, code_verifier: str = None) -> dict:
     """
     Exchange authorization code for tokens at ${ciam_base_url}/api/v1/oauth/token.
+    Follows OAuth 2.0 / RFC 6749 standard with application/x-www-form-urlencoded payload.
     """
     cfg = get_ciam_config()
     token_url = f"{cfg['ciam_base_url']}/api/v1/oauth/token"
@@ -259,19 +260,61 @@ def exchange_oauth_code(code: str, redirect_uri: str, code_verifier: str = None)
     if code_verifier:
         payload_data["code_verifier"] = code_verifier
 
-    json_bytes = json.dumps(payload_data).encode('utf-8')
+    # Try Form-URLencoded first (RFC 6749 standard for OAuth2 token endpoints)
+    encoded_data = urllib.parse.urlencode(payload_data).encode('utf-8')
     req = urllib.request.Request(
         token_url,
-        data=json_bytes,
+        data=encoded_data,
         headers={
-            "Content-Type": "application/json",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
             "User-Agent": "QT-Online-Spoke/1.7.4",
         },
         method="POST"
     )
 
-    with urllib.request.urlopen(req, timeout=8.0) as resp:
-        return json.loads(resp.read().decode('utf-8'))
+    try:
+        with urllib.request.urlopen(req, timeout=10.0) as resp:
+            return json.loads(resp.read().decode('utf-8'))
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode('utf-8', errors='replace')
+        # If server specifically rejected form-urlencoded, try json fallback
+        if "json" in err_body.lower() or e.code == 415:
+            try:
+                json_bytes = json.dumps(payload_data).encode('utf-8')
+                req_json = urllib.request.Request(
+                    token_url,
+                    data=json_bytes,
+                    headers={
+                        "Content-Type": "application/json",
+                        "Accept": "application/json",
+                        "User-Agent": "QT-Online-Spoke/1.7.4",
+                    },
+                    method="POST"
+                )
+                with urllib.request.urlopen(req_json, timeout=10.0) as resp_json:
+                    return json.loads(resp_json.read().decode('utf-8'))
+            except urllib.error.HTTPError as e_json:
+                err_body = e_json.read().decode('utf-8', errors='replace')
+            except Exception:
+                pass
+
+        # Parse detailed error from CIAM
+        detailed_msg = err_body
+        try:
+            err_doc = json.loads(err_body)
+            detailed_msg = (
+                err_doc.get("error_description")
+                or err_doc.get("error")
+                or err_doc.get("message")
+                or err_body
+            )
+        except Exception:
+            pass
+
+        raise ValueError(f"CIAM Token Exchange (HTTP {e.code}): {detailed_msg}")
+    except Exception as e:
+        raise ValueError(f"CIAM Token Exchange Connection Error: {str(e)}")
 
 # --- Mode C Two-Way Immediate Directory Reconciliation ---
 def execute_ciam_command(action: str, username: str, auto_role: str = "Sale") -> tuple[bool, str]:

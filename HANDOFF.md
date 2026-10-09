@@ -173,3 +173,18 @@ docker stats --no-stream
 
 
 
+
+10. **การแก้ไขปัญหา SSO จาก Central IAM App Portal และการล็อกอินตรง (Authentication Fix):**
+    - **อาการที่พบ:** เมื่อผู้ใช้กดเปิดแอปจากการ์ดบน Central IAM App Portal เกิดข้อผิดพลาด HTTP Error 400: Bad Request บนหน้าจอ Login และกล่องแจ้งเตือนสีแดงไม่หายไป ทำให้เข้าใจผิดว่าระบบล็อกอินตรงไม่ทำงาน
+    - **สาเหตุเชิงเทคนิค:**
+      1. **Redirect URI Scheme Mismatch (http vs https):** บน VPS มี Reverse Proxy (Traefik/Nginx) ทำให้ 
+equest.host_url ภายในคอนเทนเนอร์เป็น http://qol.windowasia.com/auth/callback ขณะที่ Central IAM บังคับลงทะเบียนเป็น https://... ตาม RFC 6749 หาก Redirect URI ไม่ตรงกันทุกตัวอักษร Endpoint แลก Token จะตีกลับเป็น 400 Bad Request: invalid_grant
+      2. **OAuth Token Exchange Content-Type:** ใน utils_ciam.py เดิมส่ง Payload เป็น JSON (pplication/json) ซึ่ง Token Endpoint มาตรฐานตาม RFC 6749 บังคับให้เป็น Form-Urlencoded (pplication/x-www-form-urlencoded)
+      3. **Error Handling & UX Alert Clutter:** เดิม urllib พ่นข้อความ generic HTTP Error 400: Bad Request กลบสาเหตุที่แท้จริง และบนหน้า login.html กล่อง #errorAlert ค้างอยู่ตลอด ไม่เคลียร์ตัวเองเมื่อผู้ใช้เริ่มพิมพ์ ทำให้ดูเหมือนหน้าล็อกอินค้าง
+    - **การแก้ไข:**
+      1. สร้าง get_canonical_redirect_uri() ใน [app.py](app.py) ตรวจสอบ Header X-Forwarded-Proto และบังคับใช้ https:// เสมอเมื่อเป็นโดเมน windowasia.com
+      2. ปรับ exchange_oauth_code() ใน [utils_ciam.py](utils_ciam.py) ให้ส่ง Payload แบบ pplication/x-www-form-urlencoded ตามมาตรฐาน RFC 6749 พร้อมดึง JSON error description จาก CIAM มาแสดงผลแบบเข้าใจง่าย
+      3. ปรับปรุง [login.html](login.html):
+         - ซ่อนกล่อง #errorAlert ทันทีเมื่อผู้ใช้คลิกหรือเริ่มพิมพ์ในช่อง Username / Password
+         - ล้าง ?error=... ออกจาก URL ด้วย window.history.replaceState เพื่อไม่ให้ค้างเวลา Refresh
+         - แสดงคำแนะนำที่ชัดเจนหากผู้ใช้กรอกรหัสผ่านไม่ตรง ว่าสำหรับพนักงานองค์กรให้กดปุ่ม 'Window Asia SSO'

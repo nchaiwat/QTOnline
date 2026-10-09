@@ -3853,8 +3853,8 @@ def ciam_sso_authorize_url():
         }), 503
 
     data = request.json or {}
-    default_redirect = f"{request.host_url.rstrip('/')}/auth/callback"
-    redirect_uri = data.get("redirect_uri") or default_redirect
+    default_redirect = get_canonical_redirect_uri()
+    redirect_uri = get_canonical_redirect_uri(data.get("redirect_uri")) if data.get("redirect_uri") else default_redirect
 
     code_verifier, code_challenge, state = generate_pkce_codes()
     session["sso_verifier"] = code_verifier
@@ -4025,6 +4025,23 @@ def ciam_sso_callback_api():
         return jsonify({"error": f"SSO Authentication failed: {str(e)}"}), 400
 
 
+def get_canonical_redirect_uri(custom_uri=None):
+    """
+    Construct canonical OAuth2 redirect URI, ensuring https scheme in production
+    when behind reverse proxies (Traefik / Nginx).
+    """
+    if custom_uri:
+        if "windowasia.com" in custom_uri and custom_uri.startswith("http://"):
+            return custom_uri.replace("http://", "https://", 1)
+        return custom_uri
+
+    host = request.headers.get("X-Forwarded-Host") or request.host
+    proto = request.headers.get("X-Forwarded-Proto")
+    if not proto or "windowasia.com" in host or request.is_secure:
+        proto = "https" if ("windowasia.com" in host or request.is_secure) else (proto or request.scheme)
+    return f"{proto}://{host}/auth/callback"
+
+
 @app.route("/auth/start", methods=["GET"])
 def ciam_auth_start():
     """
@@ -4036,7 +4053,7 @@ def ciam_auth_start():
     if not cfg["ciam_sso_enabled"] or cfg["ciam_break_glass_active"]:
         return redirect(url_for("login"))
 
-    default_redirect = f"{request.host_url.rstrip('/')}/auth/callback"
+    default_redirect = get_canonical_redirect_uri()
     code_verifier, code_challenge, state = generate_pkce_codes()
     session["sso_verifier"] = code_verifier
     session["sso_state"] = state
@@ -4070,12 +4087,14 @@ def ciam_auth_callback_page():
         return redirect(url_for("login"))
 
     cfg = get_ciam_config()
-    default_redirect = f"{request.host_url.rstrip('/')}/auth/callback"
+    default_redirect = get_canonical_redirect_uri()
+    raw_redirect = session.get("sso_redirect_uri") or default_redirect
+    redirect_uri = get_canonical_redirect_uri(raw_redirect)
     code_verifier = session.get("sso_verifier")
     client_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
 
     try:
-        token_res = exchange_oauth_code(code, default_redirect, code_verifier)
+        token_res = exchange_oauth_code(code, redirect_uri, code_verifier)
         id_token = token_res.get("id_token") or token_res.get("access_token")
         if not id_token:
             return redirect(url_for("login") + "?error=TokenExchangeFailed")
@@ -4144,6 +4163,7 @@ def ciam_auth_callback_page():
 
         session.pop("sso_verifier", None)
         session.pop("sso_state", None)
+        session.pop("sso_redirect_uri", None)
 
         return redirect(url_for("app_shell"))
 
