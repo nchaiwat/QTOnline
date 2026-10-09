@@ -85,3 +85,11 @@
    - ตารางบันทึก Audit: `ciam_audit_logs` (การเชื่อมต่อ API) และ `login_logs` (การ Login ของผู้ใช้)
 3. **หน้าจอ System Settings (`#page-settings`):**
    - อยู่ใน `app.html` มองเห็นได้เฉพาะ Role `Administrator` มี 3 แท็บ (CIAM Parameters, CIAM Connection Logs, Login Activity Logs)
+4. **CIAM Spoke Integration Specification v2.7.0 & Security Authentication:**
+   - **User AD Authentication Toggle (`use_ad_auth`):** เพิ่มฟิลด์ควบคุมการล็อกอินด้วย AD Gateway ในระดับรายบุคคล พร้อม Badges บน UI ตารางผู้ใช้
+   - **Active Directory Gateway Fallback:** เมื่อล็อกอินตรงที่ `/login` ระบบจะตรวจสอบรหัสผ่านผ่าน AD Gateway (`POST /api/v1/auth/ad-verify`) สำหรับบัญชีที่เปิดสิทธิ์
+   - **Email & Telegram Chat ID:** เพิ่มฟิลด์ `email` และ `telegram_chat_id` ใน User Model, UI User Management และ Sync API เพื่อรองรับ Identity Governance
+   - **Client IP & Full Audit Logging:** บันทึก IP Address ลงใน `transaction_logs` ครอบคลุมทุก Authentication Event ตามมาตรฐาน ISO 27001
+   - **Seamless Logout to Central IAM Portal:** ผู้ใช้ที่เข้าผ่าน SSO เมื่อกด Logout จะถูกนำทางกลับไปยัง `https://ciam.windowasia.com/portal`
+   - **Fix Remember Token Re-Authentication Loop:** บังคับทำลายคุกกี้ `remember_token` และ `session` บน HTTP Response โดยตรงในฟังก์ชัน `/logout` เพื่อแก้ปัญหาการเด้งกลับเข้า Dashboard หลังกด Logout
+   - **Fix Duplicate JavaScript Identifiers:** จัดการ Scope ตัวแปรใน `login.html` คืนค่าการทำงานของปุ่มลูกตาเปิดดูรหัสผ่าน และ Mobile QR Login

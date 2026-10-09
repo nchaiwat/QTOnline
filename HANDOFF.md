@@ -266,3 +266,20 @@ emote_addr) มาบันทึกลงในฟิลด์ details JSON ข
          - ปรับปุ่ม Logout ด้านขวาบนให้มี `id="top-logout-btn"` และเพิ่ม `onclick="window.location.href='/logout';"` เพื่อการันตีการทำงานทั้งระดับ Link และ JavaScript Event
     - **ผลลัพธ์การทดสอบ:**
       - ทดสอบรัน Flow ล็อกอินด้วย `remember=True` แล้วเรียก `/logout` ตามด้วยการเข้า `/` พบว่าระบบเปลี่ยนเส้นทางไปยัง `/login?next=%2F` ได้ถูกต้อง 100% คุกกี้เซสชันและ Remember Token ถูกทำลายโดยสมบูรณ์ ผู้ใช้ถูกออกจากระบบอย่างแท้จริง
+
+17. **สรุปสถานะปัจจุบันและแผนงานสำหรับดำเนินงานต่อในรอบถัดไป (Current Status & Next Steps for CIAM Spoke v2.7.0):**
+    - **สถานะระบบปัจจุบัน (Current Operational Status):**
+      - ✅ **Performance & Stability:** ระบบทำงานรวดเร็วตาม Performance Overhaul (Dashboard < 0.2s, Save QT < 0.1s, Customer List แบบแบ่งหน้าพร้อม Batch Render, Nginx Gzip เปิดใช้งานสมบูรณ์)
+      - ✅ **Authentication & Login:** หน้า Login รองรับทั้ง **Local Login**, **Direct Active Directory Login** (ผ่าน AD Gateway Verification), และ **Window Asia Central IAM SSO (OIDC + PKCE S256)**
+      - ✅ **UI Controls:** ฟังก์ชันเปิดดูรหัสผ่าน (ไอคอนลูกตา) และกล่อง Mobile QR Login ทำงานถูกต้อง 100%
+      - ✅ **User Identity Governance:** ตาราง User มีคอลัมน์ `use_ad_auth`, `email`, และ `telegram_chat_id` ครบถ้วน และสามารถแก้ไขผ่านหน้าต่าง User Management บน UI ได้ทันที
+      - ✅ **Session Lifecycle & Logout:** ระบบออกจากระบบได้อย่างสมบูรณ์ โดยทำลายคุกกี้ `session` และ `remember_token` ป้องกันการเด้งกลับเข้า Dashboard และเชื่อมโยงกลับไปยัง **Central IAM App Portal** สำหรับผู้ใช้ SSO
+      - ✅ **Audit Logging:** บันทึก IP Address ของ Client ลงใน `transaction_logs` ครบทุก Security Event (ISO 27001)
+
+    - **รายการที่เตรียมพร้อมดำเนินการต่อในรอบถัดไป (Roadmap for Next Session):**
+      1. **Two-Way Reconciliation & Auto-Provisioning (Mode C):**
+         - ตรวจสอบ Command Queue ที่ได้รับจาก Central IAM ในฟังก์ชัน Heartbeat (`sync_spoke_with_ciam`) เพื่อรองรับคำสั่ง `PROVISION_USER` และ `DISABLE_USER` สำหรับการสร้างบัญชีผู้ใช้ใหม่ใน Local Database อัตโนมัติเมื่อมีการเพิ่มสิทธิ์บน CIAM
+      2. **ปุ่ม Immediate Sync บนหน้า System Settings UI (Spec D.4 & 5.1):**
+         - เพิ่มปุ่ม `[ ⚡ ซิงก์บัญชีผู้ใช้กับ CIAM ทันที ]` บนแท็บ CIAM Parameters ในหน้า System Settings (`#page-settings`) เพื่อให้ผู้ดูแลระบบสามารถกดสั่ง Sync บัญชีได้แบบ Real-time โดยไม่ต้องรอรอบ Background Timer 120 วินาที
+      3. **End-to-End SSO Portal Launch Verification:**
+         - ทดสอบการกดเปิดเข้าสู่ระบบจาก Employee Portal ของ CIAM (`https://ciam.windowasia.com/portal`) ส่งมายัง Endpoint `/auth/start` และเชื่อมโยงต่อไปยัง Dashboard อย่างราบรื่น
