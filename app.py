@@ -3269,6 +3269,39 @@ with app.app_context():
     try:
         db.create_all()
 
+        # [NEW] Auto-Migration for missing columns (Schema Update) before querying models
+        with db.engine.connect() as conn:
+            # 1. Check purchase_orders columns
+            res_po = conn.execute(
+                text("SELECT column_name FROM information_schema.columns WHERE table_name='purchase_orders';")
+            )
+            existing_po_cols = [row[0].lower() for row in res_po]
+            po_new_columns = {
+                "customerLocationFile": "TEXT",
+                "customerLocationFileUrl": "TEXT",
+                "customerLocationUploadedAt": "TIMESTAMP WITHOUT TIME ZONE",
+                "customerLocationUploadedBy": "INTEGER",
+                "customerPoFile": "TEXT",
+                "customerPoFileUrl": "TEXT",
+                "customerPoUploadedAt": "TIMESTAMP WITHOUT TIME ZONE",
+                "customerPoUploadedBy": "INTEGER",
+                "updatedAt": "TIMESTAMP WITHOUT TIME ZONE",
+            }
+            for col, dtype in po_new_columns.items():
+                if col.lower() not in existing_po_cols:
+                    conn.execute(text(f'ALTER TABLE purchase_orders ADD COLUMN "{col}" {dtype};'))
+
+            # 2. Check users columns (use_ad_auth)
+            res_user = conn.execute(
+                text("SELECT column_name FROM information_schema.columns WHERE table_name='users';")
+            )
+            existing_user_cols = [row[0].lower() for row in res_user]
+            if "use_ad_auth" not in existing_user_cols:
+                conn.execute(text('ALTER TABLE users ADD COLUMN use_ad_auth BOOLEAN DEFAULT TRUE;'))
+
+            conn.commit()
+            print("DEBUG: Schema is up to date.")
+
         # [NEW] ตรวจสอบและสร้าง Admin เริ่มต้นถ้ายังไม่มีข้อมูล
         if not User.query.first():
             print("----------------------------------------------------------------")
@@ -3291,51 +3324,6 @@ with app.app_context():
         )
     except Exception as e:
         print(f"CRITICAL WARNING: Database init failed: {e}", file=sys.stderr)
-
-    # [NEW] Auto-Migration for missing columns (Schema Update)
-    try:
-        with db.engine.connect() as conn:
-            # Check if columns exist in 'purchase_orders' table
-            # Provide raw SQL compatible with PostgreSQL
-            result = conn.execute(
-                text(
-                    "SELECT column_name FROM information_schema.columns WHERE table_name='purchase_orders';"
-                )
-            )
-            existing_columns = [row[0] for row in result]
-
-            # List of new columns to add if missing
-            new_columns = {
-                "customerLocationFile": "TEXT",
-                "customerLocationFileUrl": "TEXT",
-                "customerLocationUploadedAt": "TIMESTAMP WITHOUT TIME ZONE",
-                "customerLocationUploadedBy": "INTEGER",
-                "customerPoFile": "TEXT",
-                "customerPoFileUrl": "TEXT",
-                "customerPoUploadedAt": "TIMESTAMP WITHOUT TIME ZONE",
-                "customerPoUploadedBy": "INTEGER",
-                "updatedAt": "TIMESTAMP WITHOUT TIME ZONE",
-            }
-
-            alter_statements = []
-            for col, dtype in new_columns.items():
-                # Note: PostgreSQL column names are usually lowercase in information_schema
-                if col.lower() not in [c.lower() for c in existing_columns]:
-                    print(f"DEBUG: Migrating 'purchase_orders' - Adding column '{col}'")
-                    alter_statements.append(
-                        f'ALTER TABLE purchase_orders ADD COLUMN "{col}" {dtype};'
-                    )
-
-            if alter_statements:
-                for stmt in alter_statements:
-                    conn.execute(text(stmt))
-                conn.commit()
-                print("DEBUG: Schema migration completed successfully.")
-            else:
-                print("DEBUG: Schema is up to date.")
-
-    except Exception as e:
-        print(f"WARNING: Auto-migration failed: {e}", file=sys.stderr)
 
 
 # --- [NEW] Bulk Delete Routes ---
