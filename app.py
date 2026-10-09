@@ -478,9 +478,17 @@ def login():
         except Exception as log_err:
             print(f"Error writing login log: {log_err}")
 
-        return jsonify({"success": False, "error": "Invalid username or password"}), 401
+        err_msg = "ไม่พบบัญชีผู้ใช้นี้ในระบบตรง สำหรับพนักงานองค์กร กรุณาเข้าสู่ระบบด้วยปุ่ม 'Window Asia SSO' ด้านบน" if not user else "รหัสผ่านไม่ถูกต้อง กรุณาตรวจสอบหรือเข้าสู่ระบบด้วยปุ่ม 'Window Asia SSO' ด้านบน"
+        return jsonify({"success": False, "error": err_msg}), 401
 
-    return render_template("login.html", version=APP_VERSION, username="")
+    cfg = get_ciam_config()
+    return render_template(
+        "login.html",
+        version=APP_VERSION,
+        username="",
+        sso_enabled=cfg.get("ciam_sso_enabled", True),
+        break_glass_active=cfg.get("ciam_break_glass_active", False),
+    )
 
 
 @app.route("/logout")

@@ -188,3 +188,14 @@ equest.host_url ภายในคอนเทนเนอร์เป็น htt
          - ซ่อนกล่อง #errorAlert ทันทีเมื่อผู้ใช้คลิกหรือเริ่มพิมพ์ในช่อง Username / Password
          - ล้าง ?error=... ออกจาก URL ด้วย window.history.replaceState เพื่อไม่ให้ค้างเวลา Refresh
          - แสดงคำแนะนำที่ชัดเจนหากผู้ใช้กรอกรหัสผ่านไม่ตรง ว่าสำหรับพนักงานองค์กรให้กดปุ่ม 'Window Asia SSO'
+
+11. **การแก้ไขปัญหาไอคอนลูกตารหัสผ่าน (Password Visibility Toggle) และปุ่ม SSO ไม่แสดงผล:**
+    - **สาเหตุ:**
+      1. การเรียกใช้ไลบรารีไอคอนจาก CDN ภายนอก (https://unpkg.com/lucide@latest) อาจติดขัดจากเน็ตเวิร์กองค์กร/ไฟร์วอลล์ เมื่อโหลดไม่สำเร็จคำสั่ง lucide.createIcons() จะโยน ReferenceError ทำให้ JavaScript บนหน้า login.html หยุดทำงานทั้งหมด
+      2. เมื่อสคริปต์หยุดทำงาน กลไกเปิดแสดงปุ่ม SSO (desktopSsoWrap) ที่เดิมตั้งต้นด้วย display: none จึงไม่ทำงาน ทำให้ปุ่ม SSO หายไปจากหน้าจอ
+      3. เมื่อปุ่ม SSO หาย ผู้ใช้ที่เป็นพนักงานองค์กรจึงเข้าใจว่าต้องพิมพ์ชื่อผู้ใช้ในฟอร์มตรง ซึ่งบัญชี AD ไม่ได้มีรหัสผ่าน Local อยู่ในระบบ
+    - **การแก้ไข:**
+      1. แปลงไอคอนสำคัญทั้งหมด (User, Lock, Eye, Eye-off, Shield-check, QR-code, Warning) เป็น **Pure Inline SVG** แบบเบ็ดเสร็จ 100% ใน HTML โดยไม่ต้องรอโหลด CDN ภายนอก
+      2. ปรับฟังก์ชัน Toggle Password ให้สลับแสดงผลระหว่าง <svg id='eyeIcon'> กับ <svg id='eyeOffIcon'> ได้อย่างแม่นยำ ไม่พึ่งพาไลบรารีภายนอก
+      3. ปรับให้ปุ่ม **Window Asia SSO** แสดงผลเป็นค่าเริ่มต้น (Default Visible) เหนือฟอร์มทันทีทั้งบน Desktop และ Mobile ผ่าน Server-Side Template Rendering ใน [app.py](app.py)
+      4. ปรับข้อความแจ้งเตือนกรณีพิมพ์ชื่อบัญชีในระบบตรงไม่พบ ให้แจ้งคำแนะนำกดปุ่ม 'Window Asia SSO' ด้านบนทันที
