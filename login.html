@@ -455,7 +455,7 @@
                     </button>
 
                     <div id="qrContainer">
-                        <img id="loginQr" src="" alt="Access QR">
+                        <img id="loginQr" src="/qrcode?base_url={{ request.host_url.rstrip('/') }}" alt="Access QR">
                         <p style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">Scan to access on mobile
                             device</p>
                     </div>
@@ -470,14 +470,15 @@
             try { lucide.createIcons(); } catch(e) {}
         }
 
-        // QR Code Logic
-        document.addEventListener("DOMContentLoaded", function () {
-            var currentUrl = window.location.origin;
+        // QR Code Logic - Ensure QR image is loaded immediately
+        function ensureLoginQr() {
             var qrImg = document.getElementById("loginQr");
             if (qrImg) {
+                var currentUrl = window.location.origin || (window.location.protocol + "//" + window.location.host);
                 qrImg.src = "/qrcode?base_url=" + encodeURIComponent(currentUrl);
             }
-        });
+        }
+        ensureLoginQr();
 
         // Toggle QR Visibility
         const toggleQrBtn = document.getElementById('toggleQrBtn');
@@ -490,6 +491,7 @@
                     qrContainer.style.display = 'none';
                     qrBtnText.textContent = 'Mobile QR Login';
                 } else {
+                    ensureLoginQr();
                     qrContainer.style.display = 'block';
                     qrBtnText.textContent = 'Hide QR Code';
                 }

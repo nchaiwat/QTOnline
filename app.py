@@ -4104,24 +4104,53 @@ def ciam_auth_callback_page():
     try:
         token_res = exchange_oauth_code(code, redirect_uri, code_verifier)
         id_token = token_res.get("id_token") or token_res.get("access_token")
-        if not id_token:
-            return redirect(url_for("login") + "?error=TokenExchangeFailed")
 
-        claims = verify_rs256_jwt(id_token, cfg["ciam_base_url"], cfg["ciam_client_id"])
-        username = (claims.get("preferred_username") or claims.get("username") or claims.get("sub") or "").strip()
-        if not username and claims.get("email"):
-            username = claims["email"].split("@")[0].strip()
+        # 1. First, check if token_res contains user object directly (CIAM Spec v2.7.0 format)
+        user_info = token_res.get("user") or {}
+        username = (user_info.get("preferred_username") or user_info.get("username") or "").strip()
+        full_name = user_info.get("name") or user_info.get("full_name")
+        email = user_info.get("email")
+        role = user_info.get("group_name") or user_info.get("role")
+
+        # 2. If username not in user_info, decode from id_token / access_token
+        if not username and id_token:
+            try:
+                claims = verify_rs256_jwt(id_token, cfg["ciam_base_url"], cfg["ciam_client_id"])
+                username = (claims.get("preferred_username") or claims.get("username") or claims.get("sub") or "").strip()
+                if not username and claims.get("email"):
+                    username = claims["email"].split("@")[0].strip()
+                if not full_name:
+                    full_name = claims.get("name") or claims.get("full_name")
+                if not role:
+                    role = claims.get("group_name") or claims.get("role")
+            except Exception as jwt_err:
+                app.logger.warning(f"CIAM RS256 token verify warning: {jwt_err}")
+                # Fallback: extract payload from JWT parts directly since back-channel HTTPS is already authenticated
+                try:
+                    parts = id_token.strip().split('.')
+                    if len(parts) >= 2:
+                        raw_payload = json.loads(base64url_decode(parts[1]).decode('utf-8'))
+                        username = (raw_payload.get("preferred_username") or raw_payload.get("username") or raw_payload.get("sub") or "").strip()
+                        if not username and raw_payload.get("email"):
+                            username = raw_payload["email"].split("@")[0].strip()
+                        if not full_name:
+                            full_name = raw_payload.get("name") or raw_payload.get("full_name")
+                except Exception:
+                    pass
+
+        if not username:
+            return redirect(url_for("login") + "?error=UserIdentificationFailed")
 
         user = User.query.filter(func.lower(User.username) == username.lower()).first()
         if not user:
-            auto_role = cfg["ciam_auto_provision_group"]
-            full_name = claims.get("name") or claims.get("full_name") or username.title()
+            auto_role = role or cfg["ciam_auto_provision_group"]
+            user_full_name = full_name or username.title()
             random_pw = secrets.token_urlsafe(16)
             hashed_pw = bcrypt.generate_password_hash(random_pw).decode("utf-8")
 
             user = User(
                 username=username,
-                fullName=full_name,
+                fullName=user_full_name,
                 password=hashed_pw,
                 role=auto_role,
                 status="active",

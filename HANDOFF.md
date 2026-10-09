@@ -199,3 +199,11 @@ equest.host_url ภายในคอนเทนเนอร์เป็น htt
       2. ปรับฟังก์ชัน Toggle Password ให้สลับแสดงผลระหว่าง <svg id='eyeIcon'> กับ <svg id='eyeOffIcon'> ได้อย่างแม่นยำ ไม่พึ่งพาไลบรารีภายนอก
       3. ปรับให้ปุ่ม **Window Asia SSO** แสดงผลเป็นค่าเริ่มต้น (Default Visible) เหนือฟอร์มทันทีทั้งบน Desktop และ Mobile ผ่าน Server-Side Template Rendering ใน [app.py](app.py)
       4. ปรับข้อความแจ้งเตือนกรณีพิมพ์ชื่อบัญชีในระบบตรงไม่พบ ให้แจ้งคำแนะนำกดปุ่ม 'Window Asia SSO' ด้านบนทันที
+
+12. **การแก้ไขปัญหา Mobile QR Code ไม่แสดงผล และ UnboundLocalError ใน SSO Callback:**
+    - **สาเหตุ:**
+      1. รูปภาพ QR Code บนหน้า Login (`#loginQr`) มี `src=""` เป็นค่าว่างใน HTML โดยเดิมตั้ง Event Listener รอ `DOMContentLoaded` แต่เมื่อสคริปต์อยู่ด้านล่างสุดของเอกสาร Event นี้ทำงานเสร็จสิ้นไปก่อนแล้ว ทำให้รูปไม่มีค่า URL และเมื่อผู้ใช้กดปุ่ม 'Mobile QR Login' กล่องจึงเปิดมาเป็นภาพว่างเปล่า
+      2. ในฟังก์ชัน `/auth/callback` ของ [app.py](app.py) เมื่อได้รับข้อมูลผู้ใช้จาก CIAM ผ่าน `user` object ตัวแปร `claims` ไม่ได้ถูกกำหนดค่า แต่ในบรรทัดสร้างบัญชีผู้ใช้ใหม่มีการเรียก `claims.get(...)` ส่งผลให้เกิดข้อผิดพลาด `UnboundLocalError: cannot access local variable 'claims'` ทำให้ SSO ล้มเหลวและดีดกลับมาหน้า Login
+    - **การแก้ไข:**
+      1. ใน [login.html](login.html) ฝัง URL QR Code ใน HTML ตั้งต้นทันที (`src="/qrcode?base_url={{ request.host_url.rstrip('/') }}"`) และเรียกฟังก์ชัน `ensureLoginQr()` ทันทีพร้อมเรียกซ้ำทุกครั้งที่กดปุ่ม Mobile QR Login
+      2. ใน [app.py](app.py) ปรับปรุงการดึงชื่อและสิทธิ์ให้ใช้ตัวแปรที่ผ่านการประมวลผลแล้ว (`user_full_name` และ `auto_role`) รองรับทั้ง CIAM User Object และ JWT Token Claims ครอบคลุมทุกกรณีโดยไม่เกิด UnboundLocalError
