@@ -275,7 +275,21 @@ db_name = os.environ.get("POSTGRES_DB", "po_online_db")
 safe_db_pass = quote_plus(db_pass)
 default_db_url = f"postgresql://{db_user}:{safe_db_pass}@{db_host}:{db_port}/{db_name}"
 
-app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", default_db_url)
+raw_db_url = os.environ.get("DATABASE_URL", default_db_url)
+if raw_db_url.startswith("postgres://"):
+    raw_db_url = raw_db_url.replace("postgres://", "postgresql://", 1)
+
+# Ensure database driver compatibility (psycopg v3 vs psycopg2)
+try:
+    import psycopg  # noqa: F401
+except ImportError:
+    # If psycopg v3 is not installed in the environment, fallback to psycopg2 explicitly
+    if raw_db_url.startswith("postgresql+psycopg://"):
+        raw_db_url = raw_db_url.replace("postgresql+psycopg://", "postgresql+psycopg2://", 1)
+    elif raw_db_url.startswith("postgresql://"):
+        raw_db_url = raw_db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+
+app.config["SQLALCHEMY_DATABASE_URI"] = raw_db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_size": 10,

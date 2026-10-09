@@ -157,6 +157,12 @@ docker stats --no-stream
    - เพิ่มปุ่มและฟังก์ชัน **"🔄 ซิงก์ผู้ใช้ทันที"** (Two-Way Directory Reconciliation)
    - เพิ่มฟอร์มกรอกและจัดการ OIDC Base URL, Client ID, Client Secret (Masked), Role Auto-Provision, และ Break-Glass Toggle
    - เพิ่ม Tab 4: **Transaction Logs (ISO 27001)** เพื่อดู Audit Trail และประวัติการทำงานแบบละเอียด
+8. **PostgreSQL Driver Compatibility Fix (`psycopg` v3 vs `psycopg2`):**
+   - **ปัญหาที่พบ:** บน VPS เมื่อรัน Migration เกิด `ModuleNotFoundError: No module named 'psycopg'` เนื่องจาก SQLAlchemy 2.0+ ตรวจพบ Connection String หรือ Environment และพยายามเรียกใช้ `psycopg` (v3) ที่ยังไม่ได้ประกาศใน `requirements.txt`
+   - **การแก้ไข:**
+     1. เพิ่ม `psycopg[binary]>=3.1.18` ใน [requirements.txt](requirements.txt) ควบคู่กับ `psycopg2-binary>=2.9.9`
+     2. เพิ่ม Driver Fallback ใน [app.py](app.py) ให้สลับไปใช้ `postgresql+psycopg2://` โดยอัตโนมัติหากสภาพแวดล้อมยังไม่มี `psycopg` v3
+
 
 
 
