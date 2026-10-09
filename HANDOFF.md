@@ -207,3 +207,8 @@ equest.host_url ภายในคอนเทนเนอร์เป็น htt
     - **การแก้ไข:**
       1. ใน [login.html](login.html) ฝัง URL QR Code ใน HTML ตั้งต้นทันที (`src="/qrcode?base_url={{ request.host_url.rstrip('/') }}"`) และเรียกฟังก์ชัน `ensureLoginQr()` ทันทีพร้อมเรียกซ้ำทุกครั้งที่กดปุ่ม Mobile QR Login
       2. ใน [app.py](app.py) ปรับปรุงการดึงชื่อและสิทธิ์ให้ใช้ตัวแปรที่ผ่านการประมวลผลแล้ว (`user_full_name` และ `auto_role`) รองรับทั้ง CIAM User Object และ JWT Token Claims ครอบคลุมทุกกรณีโดยไม่เกิด UnboundLocalError
+
+13. **ข้อกำหนดสำคัญในการ Deploy บน VPS Hostinger (Mandatory Docker Rebuild):**
+    - **ข้อจำกัดเชิงสถาปัตยกรรม:** ใน `docker-compose.yml` มีการ Mount Volume เฉพาะ `./instance` และ `./uploads` ส่วนซอร์สโค้ดของแอปพลิเคชัน (`app.py`, `login.html`, `utils_ciam.py`, etc.) ถูกฝัง (bake) เข้าไปใน Image ผ่านคำสั่ง `COPY . .` ใน `Dockerfile`
+    - **ผลกระทบ:** คำสั่ง `docker compose restart web` จะเพียงแค่หยุดและรัน Container เดิมจาก Image เก่าซ้ำ โดยไม่นำโค้ดใหม่ที่ดึงมาจาก `git pull` ไปใช้งาน
+    - **แนวทางปฏิบัติที่ถูกต้อง:** ในทุกครั้งที่มีการอัปเดตโค้ดบน VPS **ต้องใช้คำสั่ง `docker compose up -d --build web` เสมอ** เพื่อให้ Docker ทำการ Rebuild Image ด้วยโค้ดล่าสุด (ใช้เวลาเพียง 1-3 วินาทีเนื่องจากใช้ Docker Cache) และ Recreate Container อัตโนมัติ
