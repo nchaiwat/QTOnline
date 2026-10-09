@@ -4,8 +4,13 @@
 > 1. **โปรเจกต์นี้ใช้งาน Git:** Remote คือ `https://github.com/nchaiwat/QTOnline.git` (Branch: `main`)
 > 2. **โปรเจกต์นี้มีระบบ CIAM (Centralized Identity Management):** มี Directory API (`/api/v1/directory/...`) เชื่อมต่อกับระบบจัดการตัวตนส่วนกลางขององค์กร และมีหน้า System Settings (`#page-settings`)
 > 3. **เมื่อเริ่ม Session หรือก่อนเริ่มเขียนโค้ด:** ต้องทักทายและ**แจ้งให้ผู้ใช้ทราบเสมอว่าเราใช้ Git และมีระบบ CIAM เชื่อมต่ออยู่** พร้อมตรวจสอบสถานะ Git (`git status`, ตรวจสอบว่าโค้ดล่าสุดดึงมาจาก `origin/main` หรือยัง)
-> 4. **การสั่งคำสั่งบน VPS:** ก่อนสั่ง `git pull` หรือคำสั่งใดๆ บน VPS **ต้องแจ้งให้ `cd /var/www/QT-Online` ก่อนทุกครั้ง** และต้องใส่ Flag `--build` ในคำสั่ง `docker compose up -d --no-deps --build web` เสมอ
-> 5. **เมื่อจบงานหรือเตรียมนำขึ้น Server:** ต้องสรุปคำสั่ง `git add`, `git commit`, `git push origin main` ให้ผู้ใช้เสมอ
+>
+> 📋 **ข้อตกลงและเงื่อนไขการทำงาน 5 ข้อ (ตกลงร่วมกัน - ปฏิบัติทุกครั้งอย่างเคร่งครัด):**
+> 1. **ทดสอบบน Local ก่อนเสมอ:** ทุกครั้งที่แก้ไขไฟล์ใดๆ เสร็จแล้ว ต้อง Run ทดสอบบน Local ก่อนว่าทำงานถูกต้อง ไม่มี Error
+> 2. **Push ขึ้น Git หลังจากทดสอบผ่าน:** ทำการ Commit และ Push ขึ้น Git หลังจากทดสอบแล้วไม่มี Error และตรงตามที่คุยกันแล้ว
+> 3. **แจ้ง Command บน VPS Hostinger เสมอ:** แจ้ง Command ที่จะต้องทำบน VPS Hostinger (`/var/www/QT-Online` Linux Hosting) ให้ผู้ใช้ทราบอย่างชัดเจน
+> 4. **ต้องมี `cd /var/www/QT-Online` ทุกครั้ง:** ในคำสั่งที่จะต้อง Run บน VPS ที่จะต้องแจ้งทุกครั้ง ให้มี `cd /var/www/QT-Online` ด้วยทุกครั้ง เพื่อป้องกันการสั่ง run ผิด Folder
+> 5. **อัปเดต HANDOFF.md ทุกครั้ง:** ทำการเขียน [HANDOFF.md](HANDOFF.md) เก็บประวัติการแก้ไขไว้ทุกครั้ง
 
 ---
 
@@ -13,6 +18,13 @@
 - **Remote URL:** `https://github.com/nchaiwat/QTOnline.git`
 - **Main Branch:** `main`
 - **การ Sync กับ VPS:** โค้ดบน VPS (`/var/www/QT-Online`) จะถูกดึงผ่าน `git pull origin main` ดังนั้นทุกฟีเจอร์ที่ทำเสร็จแล้วจะต้องถูก Commit และ Push ขึ้น GitHub เสมอ
+- **เอกสารสำคัญของโปรเจกต์:**
+  - 📖 [README.md](README.md): ภาพรวมระบบ การติดตั้ง และคู่มือการใช้งาน
+  - 📘 [PRD.md](PRD.md): Product Requirements Document ข้อกำหนดผลิตภัณฑ์และฟังก์ชันทั้งหมด
+  - 🤖 [AGENT.md](AGENT.md): คู่มือกฎเหล็กและข้อปฏิบัติสำหรับ AI Assistant / Developer
+  - 🤝 [HANDOFF.md](HANDOFF.md): ประวัติการส่งมอบงานและการจูนประสิทธิภาพ (Performance Overhaul)
+  - 🔐 [CENTRAL_IDENTITY_MANAGEMENT_API_SPEC.md](CENTRAL_IDENTITY_MANAGEMENT_API_SPEC.md): สเปกระบบ CIAM
+
 
 ---
 
