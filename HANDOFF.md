@@ -162,6 +162,13 @@ docker stats --no-stream
    - **การแก้ไข:**
      1. เพิ่ม `psycopg[binary]>=3.1.18` ใน [requirements.txt](requirements.txt) ควบคู่กับ `psycopg2-binary>=2.9.9`
      2. เพิ่ม Driver Fallback ใน [app.py](app.py) ให้สลับไปใช้ `postgresql+psycopg2://` โดยอัตโนมัติหากสภาพแวดล้อมยังไม่มี `psycopg` v3
+9. **ผลการ Deploy บน VPS Production (`srv832658`):**
+   - คอนเทนเนอร์ทั้งหมดทำงานสมบูรณ์ 100%:
+     - `qt-online-db`: Up (healthy)
+     - `qt-online-nginx`: Up
+     - `qt-online-web`: Up (healthy)
+   - Gunicorn เริ่มต้นด้วย `gthread` (Worker PID 10, 11) พร้อม Logging initialized และ Schema migration ผ่านเรียบร้อย
+   - การเชื่อมต่อกับ Central IAM v2.7.0 ออนไลน์และพร้อมให้บริการเต็มรูปแบบ
 
 
 
