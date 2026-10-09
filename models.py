@@ -148,6 +148,8 @@ class User(UserMixin, db.Model):
     password = db.Column(db.String(150), nullable=False)
     role = db.Column(db.String(50), nullable=False)
     fullName = db.Column(db.String(150))
+    email = db.Column(db.String(150), nullable=True)
+    telegram_chat_id = db.Column(db.String(100), nullable=True)
     target_amount = db.Column(db.Float, default=0.0)
     phoneNumber = db.Column(db.String(50))
     signature_image = db.Column(db.Text, nullable=True)
@@ -164,12 +166,16 @@ class User(UserMixin, db.Model):
             "username": self.username,
             "role": self.role,
             "fullName": self.fullName,
+            "email": getattr(self, "email", "") or "",
+            "telegramChatId": getattr(self, "telegram_chat_id", "") or "",
+            "telegram_chat_id": getattr(self, "telegram_chat_id", "") or "",
             "targetAmount": self.target_amount,
             "phoneNumber": self.phoneNumber or "",
             "signatureImage": "present" if self.signature_image else None,
             "hasSignature": bool(self.signature_image),
             "status": getattr(self, "status", "active"),
             "useAdAuth": getattr(self, "use_ad_auth", True),
+            "use_ad_auth": getattr(self, "use_ad_auth", True),
             "createdAt": (
                 created_local.strftime("%d-%m-%Y %H:%M") if created_local else "-"
             ),

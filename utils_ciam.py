@@ -316,6 +316,56 @@ def exchange_oauth_code(code: str, redirect_uri: str, code_verifier: str = None)
     except Exception as e:
         raise ValueError(f"CIAM Token Exchange Connection Error: {str(e)}")
 
+# --- Active Directory Direct Gateway Authentication ---
+def authenticate_ad_gateway(username: str, password: str) -> bool:
+    """
+    Authenticate user credentials against internal Active Directory Gateway
+    (ciam_ad_gateway_url) for direct login at Spoke when use_ad_auth=True.
+    """
+    if not username or not password:
+        return False
+    cfg = get_ciam_config()
+    gateway_url = (cfg.get("ciam_ad_gateway_url") or "").strip().rstrip("/")
+    if not gateway_url:
+        return False
+
+    auth_endpoints = [
+        f"{gateway_url}/authenticate",
+        f"{gateway_url}/api/v1/auth",
+        f"{gateway_url}/auth",
+    ]
+
+    payload = json.dumps({"username": username.strip(), "password": password}).encode("utf-8")
+    for endpoint in auth_endpoints:
+        try:
+            req = urllib.request.Request(
+                endpoint,
+                data=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "User-Agent": "QT-Online-Spoke/1.7.4",
+                },
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=3.5) as resp:
+                if resp.status == 200:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    if (
+                        data.get("success") is True
+                        or data.get("authenticated") is True
+                        or data.get("status") in ("success", "ok")
+                    ):
+                        return True
+        except urllib.error.HTTPError as e:
+            if e.code in (401, 403):
+                # Explicit invalid credentials from AD
+                return False
+            continue
+        except Exception:
+            continue
+    return False
+
 # --- Mode C Two-Way Immediate Directory Reconciliation ---
 def execute_ciam_command(action: str, username: str, auto_role: str = "Sale") -> tuple[bool, str]:
     """Execute command received from CIAM queue in local database."""
@@ -386,9 +436,11 @@ def sync_with_ciam_now() -> dict:
         accounts_payload.append({
             "username": u.username,
             "full_name": u.fullName or u.username,
-            "email": f"{u.username}@windowasia.com",
+            "email": getattr(u, "email", None) or f"{u.username}@windowasia.com",
             "department": u.role or "Sale",
             "role": u.role or "Sale",
+            "telegram_chat_id": getattr(u, "telegram_chat_id", None),
+            "use_ad_auth": getattr(u, "use_ad_auth", True),
             "is_active": getattr(u, "status", "active") == "active",
         })
 

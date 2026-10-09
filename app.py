@@ -116,6 +116,7 @@ from utils_ciam import (
     mask_secret,
     sync_with_ciam_now,
     init_default_ciam_settings,
+    authenticate_ad_gateway,
 )
 
 from werkzeug.utils import secure_filename
@@ -427,7 +428,23 @@ def login():
 
         user = User.query.filter(func.lower(User.username) == username.lower()).first()
 
-        if user and bcrypt.check_password_hash(user.password, password):
+        authenticated = False
+        auth_source = "LOCAL_PASSWORD"
+
+        if user:
+            # 1. If account is enabled for AD authentication (use_ad_auth == True)
+            if getattr(user, "use_ad_auth", True):
+                if authenticate_ad_gateway(username, password):
+                    authenticated = True
+                    auth_source = "AD_GATEWAY"
+
+            # 2. Check local password if not authenticated via AD Gateway
+            if not authenticated:
+                if user.password and bcrypt.check_password_hash(user.password, password):
+                    authenticated = True
+                    auth_source = "LOCAL_PASSWORD"
+
+        if user and authenticated:
             if getattr(user, "status", "active") != "active":
                 try:
                     db.session.add(
@@ -443,10 +460,22 @@ def login():
                     db.session.commit()
                 except Exception as log_err:
                     print(f"Error writing login log: {log_err}")
+
+                TransactionLog.log(
+                    category="ciam_sso",
+                    action="account_deactivated",
+                    status="warning",
+                    message=f"ปฏิเสธการเข้าสู่ระบบ: บัญชี '{username}' ถูกระงับสิทธิ์",
+                    details={"username": username, "ip": client_ip, "reason": "status is inactive"},
+                    triggered_by=f"user:{username}",
+                )
                 return jsonify({"success": False, "error": "Account disabled"}), 403
 
             login_user(user, remember=True)
+            session["auth_provider"] = "local"
+            session["is_sso"] = False
             user.lastLogin = now_bangkok()
+
             try:
                 db.session.add(
                     LoginLog(
@@ -460,6 +489,24 @@ def login():
                 db.session.commit()
             except Exception as log_err:
                 print(f"Error writing login log: {log_err}")
+
+            # ISO 27001 Audit Trail (Event BG-02 or Direct Login)
+            log_action = "fallback_ad_login" if auth_source == "AD_GATEWAY" else "direct_login_success"
+            log_category = "security_break_glass" if auth_source == "AD_GATEWAY" else "ciam_sso"
+            TransactionLog.log(
+                category=log_category,
+                action=log_action,
+                status="success",
+                message=f"เข้าสู่ระบบสำเร็จผ่าน {auth_source}: ผู้ใช้ '{user.username}'",
+                details={
+                    "username": user.username,
+                    "auth_source": auth_source,
+                    "ip": client_ip,
+                    "use_ad_auth": getattr(user, "use_ad_auth", True),
+                },
+                triggered_by=f"user:{user.username}",
+            )
+
             return jsonify({"success": True})
 
         # Login failed
@@ -478,6 +525,19 @@ def login():
         except Exception as log_err:
             print(f"Error writing login log: {log_err}")
 
+        TransactionLog.log(
+            category="security",
+            action="login_failed",
+            status="failed",
+            message=f"พยายามเข้าสู่ระบบไม่สำเร็จ: ผู้ใช้ '{username}'",
+            details={
+                "username": username,
+                "ip": client_ip,
+                "reason": "Invalid credentials" if user else "Username not found",
+            },
+            triggered_by=f"user:{username}" if user else "system:anonymous",
+        )
+
         err_msg = "ไม่พบบัญชีผู้ใช้นี้ในระบบตรง สำหรับพนักงานองค์กร กรุณาเข้าสู่ระบบด้วยปุ่ม 'Window Asia SSO' ด้านบน" if not user else "รหัสผ่านไม่ถูกต้อง กรุณาตรวจสอบหรือเข้าสู่ระบบด้วยปุ่ม 'Window Asia SSO' ด้านบน"
         return jsonify({"success": False, "error": err_msg}), 401
 
@@ -492,9 +552,33 @@ def login():
 
 
 @app.route("/logout")
-@login_required
 def logout():
-    logout_user()
+    client_ip = (
+        request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        or request.remote_addr
+        or "127.0.0.1"
+    )
+    is_sso = session.get("auth_provider") == "ciam_sso" or session.get("is_sso", False)
+    cfg = get_ciam_config()
+    portal_url = f"{cfg.get('ciam_base_url', 'https://ciam.windowasia.com').rstrip('/')}/portal"
+
+    if current_user.is_authenticated:
+        username = current_user.username
+        TransactionLog.log(
+            category="ciam_sso",
+            action="logout",
+            status="info",
+            message=f"ออกจากระบบ: ผู้ใช้ '{username}' ({'SSO' if is_sso else 'Local'})",
+            details={"username": username, "auth_provider": "ciam_sso" if is_sso else "local", "ip": client_ip},
+            triggered_by=f"user:{username}",
+        )
+        logout_user()
+
+    session.clear()
+
+    # Spec 5.3 & 10.6: Seamless return to Central IAM App Portal if logged in via SSO
+    if is_sso:
+        return redirect(portal_url)
     return redirect(url_for("login"))
 
 
@@ -2973,12 +3057,19 @@ def manage_users():
             )
 
         hashed_password = bcrypt.generate_password_hash(password).decode("utf-8")
+        use_ad_auth = data.get("use_ad_auth")
+        if use_ad_auth is None:
+            use_ad_auth = data.get("useAdAuth", True)
+
         new_user = User(
             username=data["username"],
             fullName=data["fullName"],
+            email=data.get("email", "").strip() or None,
+            telegram_chat_id=data.get("telegramChatId") or data.get("telegram_chat_id") or None,
             password=hashed_password,
             role=data.get("role", "Sale"),
             status="active",
+            use_ad_auth=bool(use_ad_auth),
             target_amount=data.get("targetAmount", 0),
             phoneNumber=data.get("phoneNumber", ""),
             createdAt=now_bangkok(),
@@ -3001,6 +3092,15 @@ def manage_user(id):
         data = request.json
         user.username = data.get("username", user.username)
         user.fullName = data.get("fullName", user.fullName)
+        if "email" in data:
+            user.email = data.get("email", "").strip() or None
+        if "telegramChatId" in data or "telegram_chat_id" in data:
+            user.telegram_chat_id = data.get("telegramChatId") or data.get("telegram_chat_id") or None
+        if "use_ad_auth" in data or "useAdAuth" in data:
+            val = data.get("use_ad_auth")
+            if val is None:
+                val = data.get("useAdAuth")
+            user.use_ad_auth = bool(val)
         user.role = data.get("role", user.role)
         user.status = data.get("status", user.status)
         user.target_amount = data.get("targetAmount", user.target_amount)
@@ -3299,13 +3399,17 @@ with app.app_context():
                 if col.lower() not in existing_po_cols:
                     conn.execute(text(f'ALTER TABLE purchase_orders ADD COLUMN "{col}" {dtype};'))
 
-            # 2. Check users columns (use_ad_auth)
+            # 2. Check users columns (use_ad_auth, email, telegram_chat_id)
             res_user = conn.execute(
                 text("SELECT column_name FROM information_schema.columns WHERE table_name='users';")
             )
             existing_user_cols = [row[0].lower() for row in res_user]
             if "use_ad_auth" not in existing_user_cols:
                 conn.execute(text('ALTER TABLE users ADD COLUMN use_ad_auth BOOLEAN DEFAULT TRUE;'))
+            if "email" not in existing_user_cols:
+                conn.execute(text('ALTER TABLE users ADD COLUMN email VARCHAR(150);'))
+            if "telegram_chat_id" not in existing_user_cols:
+                conn.execute(text('ALTER TABLE users ADD COLUMN telegram_chat_id VARCHAR(100);'))
 
             conn.commit()
             print("DEBUG: Schema is up to date.")
@@ -3526,11 +3630,11 @@ def ciam_list_accounts():
                 "id": u.id,
                 "username": u.username,
                 "full_name": u.fullName or u.username,
-                "email": f"{u.username}@windowasia.com",
+                "email": getattr(u, "email", None) or f"{u.username}@windowasia.com",
                 "department": u.role or "General",
-                "telegram_chat_id": None,
+                "telegram_chat_id": getattr(u, "telegram_chat_id", None),
                 "group_name": u.role or "Sale",
-                "use_ad_auth": False,
+                "use_ad_auth": getattr(u, "use_ad_auth", True),
                 "is_active": is_active,
                 "last_login_at": (
                     last_login_local.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -3718,6 +3822,9 @@ def ciam_create_account():
     new_user = User(
         username=username,
         fullName=full_name,
+        email=email or None,
+        telegram_chat_id=data.get("telegram_chat_id", "").strip() or None,
+        use_ad_auth=bool(data.get("use_ad_auth", True)),
         password=hashed_pw,
         role=role,
         status="active",
@@ -3986,6 +4093,8 @@ def ciam_sso_callback_api():
 
         # 4. Issue Flask-Login session
         login_user(user, remember=True)
+        session["auth_provider"] = "ciam_sso"
+        session["is_sso"] = True
 
         # 5. Audit Logging
         try:
@@ -4176,6 +4285,8 @@ def ciam_auth_callback_page():
             db.session.commit()
 
         login_user(user, remember=True)
+        session["auth_provider"] = "ciam_sso"
+        session["is_sso"] = True
 
         try:
             db.session.add(LoginLog(
@@ -4219,6 +4330,11 @@ def ciam_break_glass_toggle():
     new_active = bool(data.get("break_glass_active", False))
     reason = data.get("reason", "Manual emergency toggle by Administrator")
     admin_user = current_user.username if current_user.is_authenticated else "admin"
+    client_ip = (
+        request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        or request.remote_addr
+        or "127.0.0.1"
+    )
 
     SystemSetting.set_value("ciam_break_glass_active", "true" if new_active else "false", description="โหมดปลดระบบฉุกเฉิน", data_type="boolean")
 
@@ -4228,7 +4344,7 @@ def ciam_break_glass_toggle():
         action="toggle_break_glass",
         status="warning" if new_active else "success",
         message=f"สลับสถานะระบบ Break-Glass: {status_str} โดย '{admin_user}' (เหตุผล: {reason})",
-        details={"break_glass_active": new_active, "reason": reason, "admin": admin_user},
+        details={"break_glass_active": new_active, "reason": reason, "admin": admin_user, "ip": client_ip},
         triggered_by=f"user:{admin_user}",
     )
 
@@ -4321,12 +4437,18 @@ def update_ciam_settings_spec():
         except Exception:
             pass
 
+    client_ip = (
+        request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        or request.remote_addr
+        or "127.0.0.1"
+    )
+
     TransactionLog.log(
         category="system_setting",
         action="update_ciam_settings",
         status="success",
         message=f"แก้ไขการตั้งค่าระบบ Central IAM SSO โดย '{admin_user}' ({len(changed_fields)} ฟิลด์)",
-        details={"changed_fields": changed_fields, "admin": admin_user},
+        details={"changed_fields": changed_fields, "admin": admin_user, "ip": client_ip},
         triggered_by=f"user:{admin_user}",
     )
 

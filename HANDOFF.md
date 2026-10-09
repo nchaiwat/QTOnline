@@ -226,3 +226,20 @@ equest.host_url ภายในคอนเทนเนอร์เป็น htt
     - **การแก้ไข:**
       - นำการประกาศ const passwordInput บรรทัดที่ 563 ออก และรียูสตัวแปร passwordInput ที่ประกาศไว้แล้วที่บรรทัด 503
       - ผลลัพธ์: โค้ด JavaScript ทั้งหมดในหน้า Login กลับมาประมวลผลได้อย่างสมบูรณ์ 100% ปุ่ม Toggle รหัสผ่าน, Mobile QR Login, และการ Submit Login/SSO ใช้งานได้ตามปกติ
+
+15. **การปรับปรุงความสมบูรณ์ด้าน Authentication, Session Lifecycle และ Identity ตาม CIAM Spoke Specification v2.7.0 (4 ประเด็นหลัก):**
+    - **รายการที่ได้รับการปรับปรุง:**
+      1. **User Management AD Authentication Toggle (use_ad_auth):**
+         - เพิ่ม Checkbox ใน Modal สร้าง/แก้ไขผู้ใช้ของ [app.html](app.html) ให้ Admin สามารถกำหนดได้ว่าบัญชีนี้เข้าสู่ระบบด้วย Active Directory ได้หรือไม่
+         - แสดง Badge สถานะ 'AD Auth' และ 'Local Only' บนตารางรายชื่อผู้ใช้งาน
+         - ปรับปรุงฟังก์ชัน POST /login ใน [app.py](app.py): หากบัญชีผู้ใช้เปิด use_ad_auth = True ระบบจะเชื่อมต่อไปยัง AD Gateway (ciam_ad_gateway_url) เพื่อตรวจสอบรหัสผ่าน AD สำหรับการเข้าใช้งานตรง หากไม่ผ่านหรือปิดใช้งานจะตรวจสอบด้วยรหัสผ่าน Local Bcrypt
+      2. **Seamless Logout & Return to Central IAM App Portal (Spec 5.3 & 10.6):**
+         - ปรับปรุง /logout ใน [app.py](app.py): หากผู้ใช้เข้าสู่ระบบผ่าน SSO (uth_provider == 'ciam_sso') ให้ล้างเซสชันในระบบลูกและ Redirect นำทางกลับไปยัง Central IAM App Portal (https://ciam.windowasia.com/portal) โดยอัตโนมัติ สำหรับ Local Admin จะกลับไปหน้า /login ตามเดิม
+         - ปรับปรุงการดักจับ HTTP 401 (Session Expired) ใน Frontend ให้ส่งคำขอ /logout เพื่อคืนสิทธิ์กลับสู่ Portal อย่างราบรื่น
+      3. **การบันทึก Audit Log พร้อม Client IP สมบูรณ์แบบ 100% (Spec ข้อ 4 - ISO 27001):**
+         - ดึง Client IP (X-Forwarded-For หรือ 
+emote_addr) มาบันทึกลงในฟิลด์ details JSON ของตาราง 	ransaction_logs ครอบคลุมทุก Event: login_success, login_failed, allback_ad_login, logout, 	oggle_break_glass, และ update_ciam_settings
+      4. **การจัดเก็บ Telegram ID และ Email สำหรับ Identity Governance:**
+         - เพิ่มคอลัมน์ email VARCHAR(150) และ 	elegram_chat_id VARCHAR(100) ในตาราง users ของ [models.py](models.py) และสคริปต์ [scripts/migrate_performance_and_ciam.py](scripts/migrate_performance_and_ciam.py)
+         - เพิ่มช่องกรอก Email และ Telegram ID ในหน้าต่างจัดการผู้ใช้ [app.html](app.html)
+         - เชื่อมต่อข้อมูลจริงเข้ากับ Directory Sync API (GET /api/v1/directory/accounts และ Mode C Outbound Heartbeat)

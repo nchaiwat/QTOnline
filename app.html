@@ -2250,6 +2250,18 @@
                             class="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                             placeholder="e.g. 081-234-5678">
                     </div>
+                    <div>
+                        <label for="user-email" class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                        <input type="email" id="user-email"
+                            class="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="e.g. employee@windowasia.com">
+                    </div>
+                    <div>
+                        <label for="user-telegram" class="block text-sm font-medium text-gray-700 mb-1">Telegram ID (Chat ID)</label>
+                        <input type="text" id="user-telegram"
+                            class="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="e.g. @username หรือ Chat ID">
+                    </div>
                     <div id="password-field">
                         <label for="user-password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
                             <input type="password" id="user-password"
@@ -2275,6 +2287,16 @@
                         <input type="number" id="user-target-amount"
                             class="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                             step="0.01" min="0" placeholder="0.00">
+                    </div>
+
+                    <div class="pt-2 bg-blue-50 p-3 rounded-lg border border-blue-100">
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="checkbox" id="user-use-ad-auth" class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500" checked>
+                            <span class="text-sm font-semibold text-blue-900">อนุญาตให้เข้าสู่ระบบด้วย Active Directory (AD Auth)</span>
+                        </label>
+                        <p class="text-xs text-blue-700 mt-1 ml-6">
+                            เปิดใช้งานเพื่อให้พนักงานสามารถล็อกอินด้วยรหัสผ่าน AD ได้ทั้งผ่าน SSO และฟอร์มล็อกอินตรง หากไม่เลือก จะเป็น Local Account
+                        </p>
                     </div>
 
                     <!-- NEW: Signature Pad -->
@@ -7147,13 +7169,25 @@
                 const createdAt = user.createdAt || '-';
                 const lastLogin = user.lastLogin || '-';
                 const targetAmount = user.targetAmount ? Number(user.targetAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
+                const adBadge = user.useAdAuth !== false
+                    ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800">AD Auth</span>`
+                    : `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-600">Local Only</span>`;
 
                 return `
                     <tr data-id="${user.id}">
                         <td class="px-6 py-4 font-medium text-gray-900">${escapeHtml(user.username || '')}</td>
-                        <td class="px-6 py-4">${escapeHtml(user.fullName || '')}</td>
-                        <td class="px-6 py-4">${escapeHtml(user.role || '')}</td>
-                        <td class="px-6 py-4 text-gray-600">${escapeHtml(user.phoneNumber || '-')}</td>
+                        <td class="px-6 py-4">
+                            <div>${escapeHtml(user.fullName || '')}</div>
+                            ${user.email ? `<div class="text-xs text-gray-500">${escapeHtml(user.email)}</div>` : ''}
+                        </td>
+                        <td class="px-6 py-4">
+                            <div>${escapeHtml(user.role || '')}</div>
+                            <div class="mt-0.5">${adBadge}</div>
+                        </td>
+                        <td class="px-6 py-4 text-gray-600">
+                            <div>${escapeHtml(user.phoneNumber || '-')}</div>
+                            ${user.telegramChatId ? `<div class="text-xs text-indigo-600">TG: ${escapeHtml(user.telegramChatId)}</div>` : ''}
+                        </td>
                         <td class="px-6 py-4 text-right font-medium">${targetAmount}</td>
                         <td class="px-6 py-4 text-center">${statusBadge}</td>
                         <td class="px-6 py-4 text-xs text-gray-500">${escapeHtml(createdAt)}</td>
@@ -7222,6 +7256,9 @@
             document.getElementById('user-id').value = '';
             document.getElementById('user-target-amount').value = ''; // Reset target amount
             document.getElementById('user-phone').value = ''; // Reset phone number
+            document.getElementById('user-email').value = ''; // Reset email
+            document.getElementById('user-telegram').value = ''; // Reset telegram
+            document.getElementById('user-use-ad-auth').checked = true; // Default AD Auth = true
             if (signaturePreview) signaturePreview.src = '';
 
             // Show modal first to ensure canvas has dimensions
@@ -7243,6 +7280,9 @@
                     document.getElementById('user-form-role').value = user.role;
                     document.getElementById('user-target-amount').value = user.targetAmount || 0; // Populate target amount
                     document.getElementById('user-phone').value = user.phoneNumber || ''; // Populate phone number
+                    document.getElementById('user-email').value = user.email || '';
+                    document.getElementById('user-telegram').value = user.telegramChatId || user.telegram_chat_id || '';
+                    document.getElementById('user-use-ad-auth').checked = user.useAdAuth !== false;
                     passwordInput.required = false;
                     passwordHelp.style.display = 'block';
 
@@ -7293,6 +7333,9 @@
             let payload = {
                 username: document.getElementById('user-username').value,
                 fullName: document.getElementById('user-fullname').value,
+                email: document.getElementById('user-email').value.trim(),
+                telegramChatId: document.getElementById('user-telegram').value.trim(),
+                use_ad_auth: document.getElementById('user-use-ad-auth').checked,
                 role: document.getElementById('user-form-role').value,
                 phoneNumber: document.getElementById('user-phone').value,
                 targetAmount: parseFloat(document.getElementById('user-target-amount').value) || 0
@@ -8152,8 +8195,8 @@
 
                 const response = await fetch(`${getBaseUrl()}${url}`, options);
 
-                if (response.status === 401) { // Unauthorized
-                    window.location.href = `${getBaseUrl()}/login`;
+                if (response.status === 401) { // Unauthorized / Session Expired
+                    window.location.href = `${getBaseUrl()}/logout`;
                     return null;
                 }
                 if (!response.ok) {

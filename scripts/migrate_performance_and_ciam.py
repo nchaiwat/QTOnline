@@ -52,6 +52,27 @@ def run_migration():
         except Exception as e:
             print(f"  - ANALYZE warning: {e}")
 
+        # Ensure users table has all CIAM identity columns
+        print("Checking/updating users table schema for CIAM identity fields...")
+        user_cols_to_add = [
+            ("use_ad_auth", "BOOLEAN DEFAULT TRUE"),
+            ("email", "VARCHAR(150)"),
+            ("telegram_chat_id", "VARCHAR(100)"),
+        ]
+        for col, col_type in user_cols_to_add:
+            try:
+                db.session.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} {col_type};"))
+                db.session.commit()
+                print(f"  - Column users.{col}: OK")
+            except Exception as col_err:
+                db.session.rollback()
+                try:
+                    db.session.execute(text(f"ALTER TABLE users ADD COLUMN {col} {col_type};"))
+                    db.session.commit()
+                    print(f"  - Column users.{col}: OK")
+                except Exception:
+                    db.session.rollback()
+
         # 3. Seed default CIAM settings if empty
         setting = CiamSetting.query.first()
         if not setting:
