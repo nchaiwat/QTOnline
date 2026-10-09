@@ -124,4 +124,39 @@ docker stats --no-stream
   4. คำสั่งบน VPS ต้องขึ้นต้นด้วย `cd /var/www/QT-Online` ทุกครั้งเพื่อป้องกันการ Run ผิดโฟลเดอร์
   5. บันทึกและอัปเดต [HANDOFF.md](HANDOFF.md) ทุกครั้งที่มีการแก้ไข
 
+---
+
+## 7. CIAM Spoke Enterprise Integration (v2.7.0) Complete Implementation
+
+**สถานะ:** เสร็จสมบูรณ์ (Implemented & Verified Locally 100%)  
+**เป้าหมายหลัก:** เชื่อมต่อระบบ QT-Online (QOL) เข้ากับ Central Identity Management (CIAM) ตามข้อกำหนด `CIAM_SPOKE_ENTERPRISE_INTEGRATION_SPECIFICATION_v2.7.0.md` โดยรักษา **UX/UI และ Business Logic เดิมทั้งหมด 100%** สำหรับระบบ Production ที่กำลังใช้งานอยู่
+
+### 🛡️ สรุปการปฏิบัติตามข้อกำหนดสเปก CIAM v2.7.0:
+1. **OIDC Single Sign-On (SSO) with PKCE (RFC 7636) & Asymmetric RS256 Verification:**
+   - พัฒนาใน [`utils_ciam.py`](utils_ciam.py) โดยใช้ Python Standard Library (`urllib.request`) ร่วมกับ `cryptography`
+   - ดาวน์โหลด JWKS จาก `https://ciam.windowasia.com/.well-known/jwks.json` มาสร้าง RSA Public Key และตรวจสอบลายเซ็น ID Token (RS256) โดยไม่ต้องพึ่งพา 3rd-party pip package ภายนอกที่ไม่แน่นอนบน VPS
+   - คำนวณ `code_verifier` และ `code_challenge` (S256) พร้อมตรวจสอบ `state` ป้องกัน CSRF Attacks
+2. **RFC 9700 Compliant Authorization Flow (Browser-Driven Bounce):**
+   - เพิ่ม Route `GET /auth/start` สำหรับส่ง Redirect User Browser ไปยัง CIAM Authorize URL พร้อม PKCE พารามิเตอร์แบบอัตโนมัติ
+   - เพิ่ม Route `GET /auth/callback` เพื่อรับ Authorization Code จาก Browser และส่งต่อให้ Frontend จัดการหรือแลก Token
+3. **Responsive Dual-Mode UX/UI บนหน้า Login ([login.html](login.html)):**
+   - **Desktop View:** แสดงปุ่ม SSO กระทัดรัดเหนือฟอร์มเดิม พร้อมเส้นคั่น `— หรือเข้าสู่ระบบด้วยชื่อผู้ใช้งาน —` โดยฟอร์ม Username/Password เดิมยังคงทำงาน 100%
+   - **Mobile View:** รักษาฟอร์ม Username/Password เดิมไว้ด้านบนเป็นลำดับแรก (Primary) และแสดงปุ่ม SSO ไว้ด้านล่างพร้อมเส้นคั่น
+   - **Zero Impact Fallback:** ปุ่ม SSO จะเริ่มต้นด้วยสถานะซ่อน (`display: none`) และจะแสดงผลต่อเมื่อระบบเปิดใช้งาน SSO เท่านั้น หาก SSO ปิดอยู่หรือขัดข้อง หน้าจอจะคงรูปแบบเดิม 100%
+4. **Break-Glass Emergency Mode:**
+   - รองรับโหมดฉุกเฉินผ่านการตั้งค่า `ciam_break_glass_active`
+   - เมื่อเปิดใช้งาน จะแสดงแถบแจ้งเตือนฉุกเฉินสีส้มบนหน้า Login และอนุญาตให้ผู้ใช้เข้าสู่ระบบด้วยรหัสผ่าน Local Password ฉุกเฉินได้ทันที
+5. **Database Models & Dynamic Runtime Settings ([models.py](models.py)):**
+   - เพิ่มคอลัมน์ `use_ad_auth` (Boolean, default True) ในตาราง `users`
+   - เพิ่มโมเดล `SystemSetting` (`system_settings` table) เพื่อเก็บค่า Config ปรับแต่งได้แบบ Real-time โดยไม่ต้องรีสตาร์ทแอป
+   - เพิ่มโมเดล `TransactionLog` (`transaction_logs` table) ตามมาตรฐาน ISO 27001 สำหรับ Audit Trail
+6. **Instant User Offboarding & Session Revocation:**
+   - ปรับปรุง `load_user(user_id)` ใน [app.py](app.py) ให้ตรวจสอบสถานะผู้ใช้ หาก `user.status == 'inactive'` ระบบจะตัด Session ทิ้งทันที (Force Logout) ภายใน Request ถัดไป
+7. **System Settings & CIAM Management UI ([app.html](app.html)):**
+   - เพิ่มปุ่มและฟังก์ชัน **"⚡ ทดสอบการเชื่อมต่อ Central IAM"** (ยิงทดสอบ Discovery & JWKS endpoint วัด Latency จริง)
+   - เพิ่มปุ่มและฟังก์ชัน **"🔄 ซิงก์ผู้ใช้ทันที"** (Two-Way Directory Reconciliation)
+   - เพิ่มฟอร์มกรอกและจัดการ OIDC Base URL, Client ID, Client Secret (Masked), Role Auto-Provision, และ Break-Glass Toggle
+   - เพิ่ม Tab 4: **Transaction Logs (ISO 27001)** เพื่อดู Audit Trail และประวัติการทำงานแบบละเอียด
+
+
 

@@ -247,6 +247,67 @@
             display: none;
         }
 
+        .alert-warning {
+            background: #fffbeb;
+            border: 1px solid #fef3c7;
+            color: #b45309;
+            padding: 12px;
+            border-radius: 10px;
+            font-size: 13px;
+            margin-bottom: 20px;
+            display: none;
+            line-height: 1.5;
+        }
+
+        /* CIAM Spec v2.7.0 SSO Button Styles */
+        .sso-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            padding: 11px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
+        }
+
+        .sso-btn:hover {
+            background: linear-gradient(135deg, #1d4ed8 0%, #4338ca 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 12px -1px rgba(37, 99, 235, 0.3);
+        }
+
+        .sso-divider {
+            position: relative;
+            text-align: center;
+            margin: 16px 0;
+        }
+
+        .sso-divider::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: var(--border);
+        }
+
+        .sso-divider span {
+            position: relative;
+            background: #fff;
+            padding: 0 12px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
         .qr-section {
             margin-top: 24px;
             text-align: center;
@@ -342,6 +403,21 @@
                 </div>
 
                 <div id="errorAlert" class="alert"></div>
+                <div id="breakGlassAlert" class="alert-warning">
+                    <i data-lucide="alert-triangle" style="width: 16px; height: 16px; display: inline-block; vertical-align: middle; margin-right: 4px;"></i>
+                    <strong>โหมดฉุกเฉิน (Break-Glass Active):</strong> กรุณาเข้าใช้งานด้วยชื่อผู้ใช้และรหัสผ่านตรง
+                </div>
+
+                <!-- Desktop Compact SSO (Placed above form on Desktop, Spec v2.7.0 §5.2) -->
+                <div id="desktopSsoWrap" class="desktop-sso-wrap" style="display: none; margin-bottom: 20px;">
+                    <button type="button" class="sso-btn" onclick="handleCiamSsoLogin()">
+                        <i data-lucide="shield-check" style="width: 16px; height: 16px;"></i>
+                        <span>เข้าสู่ระบบด้วย Window Asia SSO</span>
+                    </button>
+                    <div class="sso-divider">
+                        <span>หรือเข้าสู่ระบบด้วยชื่อผู้ใช้งาน</span>
+                    </div>
+                </div>
 
                 <form id="loginForm">
                     <div class="form-group">
@@ -370,6 +446,17 @@
                         <span>Login</span>
                     </button>
                 </form>
+
+                <!-- Mobile Compact SSO (Placed below form on Mobile, Spec v2.7.0 §5.2) -->
+                <div id="mobileSsoWrap" class="mobile-sso-wrap" style="display: none; margin-top: 16px;">
+                    <div class="sso-divider" style="margin: 12px 0;">
+                        <span>หรือเข้าสู่ระบบด้วย</span>
+                    </div>
+                    <button type="button" class="sso-btn" onclick="handleCiamSsoLogin()">
+                        <i data-lucide="shield-check" style="width: 16px; height: 16px;"></i>
+                        <span>Window Asia SSO</span>
+                    </button>
+                </div>
 
                 <div class="qr-section">
                     <button type="button" class="secondary-btn" id="toggleQrBtn">
@@ -469,6 +556,70 @@
                 btn.innerHTML = originalHtml;
             }
         });
+
+        // CIAM Spec v2.7.0 SSO Client Integration
+        async function initSsoConfig() {
+            // Check URL for error params (e.g. from failed callback)
+            const urlParams = new URLSearchParams(window.location.search);
+            const errParam = urlParams.get('error');
+            if (errParam) {
+                const alertBox = document.getElementById('errorAlert');
+                if (alertBox) {
+                    alertBox.textContent = decodeURIComponent(errParam);
+                    alertBox.style.display = 'block';
+                }
+            }
+
+            try {
+                const res = await fetch('/api/auth/sso/config');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.break_glass_active) {
+                        const bgAlert = document.getElementById('breakGlassAlert');
+                        if (bgAlert) bgAlert.style.display = 'block';
+                    } else if (data.sso_enabled) {
+                        const dWrap = document.getElementById('desktopSsoWrap');
+                        const mWrap = document.getElementById('mobileSsoWrap');
+                        if (window.innerWidth >= 768) {
+                            if (dWrap) dWrap.style.display = 'block';
+                        } else {
+                            if (mWrap) mWrap.style.display = 'block';
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('SSO configuration notice:', e);
+            }
+        }
+
+        async function handleCiamSsoLogin() {
+            try {
+                const redirectUri = window.location.origin + '/auth/callback';
+                const res = await fetch('/api/auth/sso/authorize-url', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ redirect_uri: redirectUri })
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.code_verifier) {
+                        sessionStorage.setItem('sso_verifier', data.code_verifier);
+                    }
+                    if (data.authorize_url) {
+                        window.location.href = data.authorize_url;
+                    }
+                } else {
+                    const errData = await res.json().catch(() => ({}));
+                    alert(errData.error || 'ระบบ SSO ปิดปรับปรุงชั่วคราว กรุณาเข้าใช้งานด้วยชื่อผู้ใช้และรหัสผ่าน');
+                }
+            } catch (err) {
+                alert('เกิดข้อผิดพลาดในการเชื่อมต่อไปยัง Central IAM');
+            }
+        }
+
+        // Initialize SSO configuration on load
+        window.addEventListener('DOMContentLoaded', initSsoConfig);
     </script>
 
 </body>

@@ -10,8 +10,15 @@ __pycache__/
 *.xlsx
 # Environment Variables (Secrets)
 .env
-.env.local
-.env.production
+.env.*
+.env.bak
+# Database backups and Excel dumps
+*.db
+*.sqlite
+*.sqlite3
+*.sql
+*.xlsx
+backups/
 # Uploads & Logs
 uploads/
 instance/
@@ -21,3 +28,6 @@ logs/
 qr_fb.txt
 qr_line.txt
 scratch/
+scratch_git.py
+docker-compose.override.yml
+

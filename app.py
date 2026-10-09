@@ -92,6 +92,8 @@ from models import (
     CiamSetting,
     CiamAuditLog,
     LoginLog,
+    SystemSetting,
+    TransactionLog,
     COMPANY_DATA,
     MOCK_CUSTOMER_DATA,
     CUSTOMER_CSV_COLUMNS,
@@ -105,9 +107,21 @@ from models import (
     create_notification,
 )
 
+from utils_ciam import (
+    get_ciam_config,
+    test_ciam_connection,
+    generate_pkce_codes,
+    exchange_oauth_code,
+    verify_rs256_jwt,
+    mask_secret,
+    sync_with_ciam_now,
+    init_default_ciam_settings,
+)
+
 from werkzeug.utils import secure_filename
 import io  # NEW: For PDF in memory
-from urllib.parse import urlparse, unquote, quote_plus
+import urllib
+from urllib.parse import urlparse, unquote, quote_plus, urlencode
 import json  # NEW: For Telegram Payload
 import traceback  # NEW: For detailed logging
 import logging  # NEW: Import logging
@@ -312,7 +326,10 @@ login_manager.login_message_category = "info"
 def load_user(user_id):
     # This callback is used to reload the user object from the user ID stored in the session
     try:
-        return User.query.get(int(user_id))
+        user = User.query.get(int(user_id))
+        if user and getattr(user, "status", "active") == "inactive":
+            return None  # Instant session revocation when user account is deactivated
+        return user
     except Exception:
         return None
 
@@ -3799,6 +3816,502 @@ def get_ciam_logs():
 def get_login_logs():
     logs = LoginLog.query.order_by(LoginLog.id.desc()).limit(100).all()
     return jsonify([log.to_dict() for log in logs])
+
+
+# =================================================================================
+# [NEW] CIAM Spec v2.7.0: Group B Single Sign-On (SSO) & Group A Settings Channels
+# =================================================================================
+
+@app.route("/api/auth/sso/config", methods=["GET"])
+def ciam_sso_config():
+    """
+    Spec B.1: Public endpoint providing current SSO availability & parameters
+    """
+    cfg = get_ciam_config()
+    return jsonify({
+        "sso_enabled": cfg["ciam_sso_enabled"],
+        "break_glass_active": cfg["ciam_break_glass_active"],
+        "ciam_base_url": cfg["ciam_base_url"],
+        "client_id": cfg["ciam_client_id"],
+        "login_button_label": "เข้าสู่ระบบด้วย Window Asia SSO",
+        "fallback_ad_available": bool(cfg.get("ciam_ad_gateway_url")),
+    }), 200
+
+
+@app.route("/api/auth/sso/authorize-url", methods=["POST"])
+def ciam_sso_authorize_url():
+    """
+    Spec B.2: Generate PKCE S256 verifier, challenge, state, and authorize_url
+    """
+    cfg = get_ciam_config()
+    if not cfg["ciam_sso_enabled"] or cfg["ciam_break_glass_active"]:
+        return jsonify({
+            "error": "Single Sign-On is currently unavailable.",
+            "break_glass_active": cfg["ciam_break_glass_active"]
+        }), 503
+
+    data = request.json or {}
+    default_redirect = f"{request.host_url.rstrip('/')}/auth/callback"
+    redirect_uri = data.get("redirect_uri") or default_redirect
+
+    code_verifier, code_challenge, state = generate_pkce_codes()
+    session["sso_verifier"] = code_verifier
+    session["sso_state"] = state
+    session["sso_redirect_uri"] = redirect_uri
+
+    params = {
+        "response_type": "code",
+        "client_id": cfg["ciam_client_id"],
+        "redirect_uri": redirect_uri,
+        "scope": "openid profile email",
+        "state": state,
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
+    }
+    authorize_url = f"{cfg['ciam_base_url']}/oauth/authorize?{urllib.parse.urlencode(params)}"
+
+    return jsonify({
+        "authorize_url": authorize_url,
+        "code_verifier": code_verifier,
+        "state": state,
+    }), 200
+
+
+@app.route("/api/auth/sso/callback", methods=["POST"])
+def ciam_sso_callback_api():
+    """
+    Spec B.3: Exchange Authorization Code, verify RS256 token, resolve/auto-provision user, issue session
+    """
+    cfg = get_ciam_config()
+    if not cfg["ciam_sso_enabled"] or cfg["ciam_break_glass_active"]:
+        return jsonify({"error": "Single Sign-On is disabled or in break-glass mode."}), 503
+
+    data = request.json or {}
+    code = data.get("code")
+    if not code:
+        return jsonify({"error": "Missing authorization code"}), 400
+
+    code_verifier = data.get("code_verifier") or session.get("sso_verifier")
+    default_redirect = f"{request.host_url.rstrip('/')}/auth/callback"
+    redirect_uri = data.get("redirect_uri") or session.get("sso_redirect_uri") or default_redirect
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+
+    try:
+        # 1. Exchange code for tokens
+        token_res = exchange_oauth_code(code, redirect_uri, code_verifier)
+        id_token = token_res.get("id_token") or token_res.get("access_token")
+        if not id_token:
+            return jsonify({"error": "Failed to retrieve ID token from Central IAM"}), 400
+
+        # 2. Verify token
+        claims = verify_rs256_jwt(id_token, cfg["ciam_base_url"], cfg["ciam_client_id"])
+        
+        # 3. User Identity Resolution
+        username = (claims.get("preferred_username") or claims.get("username") or claims.get("sub") or "").strip()
+        if not username and claims.get("email"):
+            username = claims["email"].split("@")[0].strip()
+
+        if not username:
+            return jsonify({"error": "Unable to extract username from identity token"}), 400
+
+        user = User.query.filter(func.lower(User.username) == username.lower()).first()
+        is_new_user = False
+
+        if not user:
+            # Auto-Provision User (JIT)
+            auto_role = cfg["ciam_auto_provision_group"]
+            full_name = claims.get("name") or claims.get("full_name") or username.title()
+            random_pw = secrets.token_urlsafe(16)
+            hashed_pw = bcrypt.generate_password_hash(random_pw).decode("utf-8")
+
+            user = User(
+                username=username,
+                fullName=full_name,
+                password=hashed_pw,
+                role=auto_role,
+                status="active",
+                use_ad_auth=True,
+                createdAt=now_bangkok(),
+                lastLogin=now_bangkok(),
+            )
+            db.session.add(user)
+            db.session.commit()
+            is_new_user = True
+
+            TransactionLog.log(
+                category="ciam_sso",
+                action="auto_provision_user",
+                status="info",
+                message=f"สร้างบัญชีผู้ใช้ใหม่อัตโนมัติจาก Central IAM: '{username}' (Role: {auto_role})",
+                details={"username": username, "role": auto_role, "ip": client_ip, "claims": claims},
+                triggered_by="system:ciam",
+            )
+        else:
+            # Check if account is active
+            if getattr(user, "status", "active") == "inactive":
+                TransactionLog.log(
+                    category="ciam_sso",
+                    action="account_deactivated",
+                    status="warning",
+                    message=f"ปฏิเสธการเข้าสู่ระบบ: บัญชีพนักงาน '{username}' ถูกระงับสิทธิ์ในระบบนี้",
+                    details={"username": username, "ip": client_ip},
+                    triggered_by=f"user:{username}",
+                )
+                try:
+                    db.session.add(LoginLog(
+                        username=username,
+                        user_id=user.id,
+                        ip_address=client_ip,
+                        user_agent=request.user_agent.string if request.user_agent else "-",
+                        status="ACCOUNT_DISABLED",
+                        failure_reason="Account is inactive in PO-Online",
+                    ))
+                    db.session.commit()
+                except Exception:
+                    pass
+                return jsonify({"error": "บัญชีผู้ใช้นี้ถูกระงับสิทธิ์การใช้งาน กรุณาติดต่อผู้ดูแลระบบ"}), 403
+
+            user.lastLogin = now_bangkok()
+            db.session.commit()
+
+        # 4. Issue Flask-Login session
+        login_user(user, remember=True)
+
+        # 5. Audit Logging
+        try:
+            db.session.add(LoginLog(
+                username=user.username,
+                user_id=user.id,
+                ip_address=client_ip,
+                user_agent=request.user_agent.string if request.user_agent else "-",
+                status="SUCCESS",
+                failure_reason=None,
+            ))
+            db.session.commit()
+        except Exception:
+            pass
+
+        TransactionLog.log(
+            category="ciam_sso",
+            action="login_success",
+            status="success",
+            message=f"เข้าสู่ระบบผ่าน Central IAM SSO สำเร็จ: ผู้ใช้ '{user.username}'",
+            details={"username": user.username, "ip": client_ip, "auth_method": "OIDC_PKCE_S256", "is_new": is_new_user},
+            triggered_by=f"user:{user.username}",
+        )
+
+        # Clear SSO session artifacts
+        session.pop("sso_verifier", None)
+        session.pop("sso_state", None)
+
+        return jsonify({
+            "success": True,
+            "redirect_url": "/",
+            "user": user.to_dict(),
+        }), 200
+
+    except Exception as e:
+        app.logger.error(f"SSO Callback failed: {e}")
+        TransactionLog.log(
+            category="ciam_sso",
+            action="login_failed",
+            status="failed",
+            message=f"การยืนยันตัวตน SSO ล้มเหลว: {str(e)}",
+            details={"ip": client_ip, "error": str(e)},
+            triggered_by="system:ciam",
+        )
+        return jsonify({"error": f"SSO Authentication failed: {str(e)}"}), 400
+
+
+@app.route("/auth/start", methods=["GET"])
+def ciam_auth_start():
+    """
+    Spec B.3 / RFC 9700: Seamless SSO Initiation Bounce Endpoint
+    Triggered when user clicks app card on Central IAM Employee Portal.
+    Bounces through CIAM with PKCE for Zero-Prompt 1-Click Launch.
+    """
+    cfg = get_ciam_config()
+    if not cfg["ciam_sso_enabled"] or cfg["ciam_break_glass_active"]:
+        return redirect(url_for("login"))
+
+    default_redirect = f"{request.host_url.rstrip('/')}/auth/callback"
+    code_verifier, code_challenge, state = generate_pkce_codes()
+    session["sso_verifier"] = code_verifier
+    session["sso_state"] = state
+    session["sso_redirect_uri"] = default_redirect
+
+    params = {
+        "response_type": "code",
+        "client_id": cfg["ciam_client_id"],
+        "redirect_uri": default_redirect,
+        "scope": "openid profile email",
+        "state": state,
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
+    }
+    authorize_url = f"{cfg['ciam_base_url']}/oauth/authorize?{urllib.parse.urlencode(params)}"
+    return redirect(authorize_url)
+
+
+@app.route("/auth/callback", methods=["GET"])
+def ciam_auth_callback_page():
+    """
+    Browser landing route for OIDC redirect. Handles Authorization Code
+    seamlessly and logs the user into the main application.
+    """
+    err = request.args.get("error") or request.args.get("error_description")
+    if err:
+        return redirect(url_for("login") + f"?error={urllib.parse.quote_plus(err)}")
+
+    code = request.args.get("code")
+    if not code:
+        return redirect(url_for("login"))
+
+    cfg = get_ciam_config()
+    default_redirect = f"{request.host_url.rstrip('/')}/auth/callback"
+    code_verifier = session.get("sso_verifier")
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+
+    try:
+        token_res = exchange_oauth_code(code, default_redirect, code_verifier)
+        id_token = token_res.get("id_token") or token_res.get("access_token")
+        if not id_token:
+            return redirect(url_for("login") + "?error=TokenExchangeFailed")
+
+        claims = verify_rs256_jwt(id_token, cfg["ciam_base_url"], cfg["ciam_client_id"])
+        username = (claims.get("preferred_username") or claims.get("username") or claims.get("sub") or "").strip()
+        if not username and claims.get("email"):
+            username = claims["email"].split("@")[0].strip()
+
+        user = User.query.filter(func.lower(User.username) == username.lower()).first()
+        if not user:
+            auto_role = cfg["ciam_auto_provision_group"]
+            full_name = claims.get("name") or claims.get("full_name") or username.title()
+            random_pw = secrets.token_urlsafe(16)
+            hashed_pw = bcrypt.generate_password_hash(random_pw).decode("utf-8")
+
+            user = User(
+                username=username,
+                fullName=full_name,
+                password=hashed_pw,
+                role=auto_role,
+                status="active",
+                use_ad_auth=True,
+                createdAt=now_bangkok(),
+                lastLogin=now_bangkok(),
+            )
+            db.session.add(user)
+            db.session.commit()
+
+            TransactionLog.log(
+                category="ciam_sso",
+                action="auto_provision_user",
+                status="info",
+                message=f"สร้างบัญชีผู้ใช้ใหม่อัตโนมัติจาก Central IAM: '{username}' (Role: {auto_role})",
+                details={"username": username, "role": auto_role, "ip": client_ip},
+                triggered_by="system:ciam",
+            )
+        else:
+            if getattr(user, "status", "active") == "inactive":
+                return redirect(url_for("login") + "?error=AccountDisabled")
+            user.lastLogin = now_bangkok()
+            db.session.commit()
+
+        login_user(user, remember=True)
+
+        try:
+            db.session.add(LoginLog(
+                username=user.username,
+                user_id=user.id,
+                ip_address=client_ip,
+                user_agent=request.user_agent.string if request.user_agent else "-",
+                status="SUCCESS",
+            ))
+            db.session.commit()
+        except Exception:
+            pass
+
+        TransactionLog.log(
+            category="ciam_sso",
+            action="login_success",
+            status="success",
+            message=f"เข้าสู่ระบบผ่าน Central IAM SSO สำเร็จ: ผู้ใช้ '{user.username}'",
+            details={"username": user.username, "ip": client_ip, "auth_method": "RFC9700_BOUNCE"},
+            triggered_by=f"user:{user.username}",
+        )
+
+        session.pop("sso_verifier", None)
+        session.pop("sso_state", None)
+
+        return redirect(url_for("app_shell"))
+
+    except Exception as e:
+        app.logger.error(f"Browser SSO callback failed: {e}")
+        return redirect(url_for("login") + f"?error={urllib.parse.quote_plus(str(e))}")
+
+
+@app.route("/api/auth/sso/break-glass-toggle", methods=["POST"])
+@roles_required("Administrator")
+def ciam_break_glass_toggle():
+    """
+    Spec B.4: Emergency break-glass toggle for ISO 27001 compliance
+    """
+    data = request.json or {}
+    new_active = bool(data.get("break_glass_active", False))
+    reason = data.get("reason", "Manual emergency toggle by Administrator")
+    admin_user = current_user.username if current_user.is_authenticated else "admin"
+
+    SystemSetting.set_value("ciam_break_glass_active", "true" if new_active else "false", description="โหมดปลดระบบฉุกเฉิน", data_type="boolean")
+
+    status_str = "ENABLED" if new_active else "DISABLED"
+    TransactionLog.log(
+        category="security_break_glass",
+        action="toggle_break_glass",
+        status="warning" if new_active else "success",
+        message=f"สลับสถานะระบบ Break-Glass: {status_str} โดย '{admin_user}' (เหตุผล: {reason})",
+        details={"break_glass_active": new_active, "reason": reason, "admin": admin_user},
+        triggered_by=f"user:{admin_user}",
+    )
+
+    return jsonify({
+        "success": True,
+        "break_glass_active": new_active,
+        "message": f"Break-glass mode {status_str} successfully.",
+    }), 200
+
+
+# --- Group A: System Settings Channel (Admin) ---
+
+@app.route("/api/settings/ciam-sso", methods=["GET"])
+@roles_required("Administrator")
+def get_ciam_settings_spec():
+    """
+    Spec A.1: Retrieve active CIAM configuration with masked secret
+    """
+    cfg = get_ciam_config()
+    setting_row = SystemSetting.query.filter_by(key="ciam_base_url").first()
+    updated_at_local = ensure_bangkok(setting_row.updated_at) if setting_row else now_bangkok()
+
+    return jsonify({
+        "status": "success",
+        "settings": {
+            "ciam_base_url": cfg["ciam_base_url"],
+            "ciam_client_id": cfg["ciam_client_id"],
+            "ciam_client_secret_masked": mask_secret(cfg["ciam_client_secret"]),
+            "ciam_sso_enabled": cfg["ciam_sso_enabled"],
+            "ciam_break_glass_active": cfg["ciam_break_glass_active"],
+            "ciam_ad_gateway_url": cfg["ciam_ad_gateway_url"],
+            "ciam_auto_provision_group": cfg["ciam_auto_provision_group"],
+            "ciam_session_ttl_minutes": cfg["ciam_session_ttl_minutes"],
+            "updated_at": updated_at_local.isoformat() if updated_at_local else None,
+        }
+    }), 200
+
+
+@app.route("/api/settings/ciam-sso", methods=["PUT"])
+@roles_required("Administrator")
+def update_ciam_settings_spec():
+    """
+    Spec A.2: Real-time update of CIAM settings in system_settings
+    """
+    data = request.json or {}
+    admin_user = current_user.username if current_user.is_authenticated else "admin"
+    changed_fields = []
+
+    if "ciam_base_url" in data and data["ciam_base_url"]:
+        SystemSetting.set_value("ciam_base_url", str(data["ciam_base_url"]).strip().rstrip("/"), data_type="string")
+        changed_fields.append("ciam_base_url")
+
+    if "ciam_client_id" in data and data["ciam_client_id"]:
+        SystemSetting.set_value("ciam_client_id", str(data["ciam_client_id"]).strip(), data_type="string")
+        changed_fields.append("ciam_client_id")
+
+    # Update secret only if not masked
+    new_sec = data.get("ciam_client_secret")
+    if new_sec and not new_sec.startswith("sec_****") and not new_sec.startswith("****"):
+        SystemSetting.set_value("ciam_client_secret", str(new_sec).strip(), data_type="encrypted")
+        changed_fields.append("ciam_client_secret")
+        # Also sync to CiamSetting for backward compatibility
+        cs = CiamSetting.query.first()
+        if cs:
+            cs.api_key = str(new_sec).strip()
+            db.session.commit()
+
+    if "ciam_sso_enabled" in data:
+        val = bool(data["ciam_sso_enabled"])
+        SystemSetting.set_value("ciam_sso_enabled", "true" if val else "false", data_type="boolean")
+        changed_fields.append("ciam_sso_enabled")
+        cs = CiamSetting.query.first()
+        if cs:
+            cs.is_enabled = val
+            db.session.commit()
+
+    if "ciam_ad_gateway_url" in data:
+        SystemSetting.set_value("ciam_ad_gateway_url", str(data["ciam_ad_gateway_url"]).strip(), data_type="string")
+        changed_fields.append("ciam_ad_gateway_url")
+
+    if "ciam_auto_provision_group" in data:
+        SystemSetting.set_value("ciam_auto_provision_group", str(data["ciam_auto_provision_group"]).strip(), data_type="string")
+        changed_fields.append("ciam_auto_provision_group")
+
+    if "ciam_session_ttl_minutes" in data:
+        try:
+            val_int = int(data["ciam_session_ttl_minutes"])
+            SystemSetting.set_value("ciam_session_ttl_minutes", str(val_int), data_type="integer")
+            changed_fields.append("ciam_session_ttl_minutes")
+        except Exception:
+            pass
+
+    TransactionLog.log(
+        category="system_setting",
+        action="update_ciam_settings",
+        status="success",
+        message=f"แก้ไขการตั้งค่าระบบ Central IAM SSO โดย '{admin_user}' ({len(changed_fields)} ฟิลด์)",
+        details={"changed_fields": changed_fields, "admin": admin_user},
+        triggered_by=f"user:{admin_user}",
+    )
+
+    return jsonify({
+        "success": True,
+        "message": "CIAM settings updated successfully.",
+        "changed_fields": changed_fields,
+    }), 200
+
+
+@app.route("/api/settings/ciam-sso/test-connection", methods=["POST"])
+@roles_required("Administrator")
+def ciam_test_connection_api():
+    """
+    Spec A.3: Test connection to Central IAM OpenID configuration & JWKS
+    """
+    result = test_ciam_connection()
+    return jsonify(result), (200 if result.get("status") == "connected" else 502)
+
+
+@app.route("/api/settings/ciam-agent/sync-now", methods=["POST"])
+@roles_required("Administrator")
+def ciam_immediate_sync_api():
+    """
+    Spec D.4: Mandatory Spoke Mode C Immediate Sync Button Endpoint
+    Reconciles local user directory with Central IAM in real-time.
+    """
+    result = sync_with_ciam_now()
+    return jsonify(result), (200 if result.get("success") else 500)
+
+
+@app.route("/api/admin/transaction-logs", methods=["GET"])
+@roles_required("Administrator")
+def get_transaction_logs_api():
+    """
+    Spec 4: Fetch recent ISO 27001 transaction logs
+    """
+    limit = request.args.get("limit", 100, type=int)
+    category = request.args.get("category")
+    query = TransactionLog.query
+    if category:
+        query = query.filter_by(category=category)
+    logs = query.order_by(TransactionLog.id.desc()).limit(min(limit, 500)).all()
+    return jsonify([log.to_dict() for log in logs]), 200
 
 
 # =================================================================================

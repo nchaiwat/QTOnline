@@ -69,6 +69,24 @@ def run_migration():
         else:
             print(f"CIAM settings already exist. API Key is configured.")
 
+        # 4. CIAM Spec v2.7.0 Tables and Runtime Parameters
+        print("4. Ensuring CIAM Spec v2.7.0 tables and columns (system_settings, transaction_logs, use_ad_auth)...")
+        try:
+            db.session.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS use_ad_auth BOOLEAN DEFAULT TRUE;"))
+            db.session.execute(text("CREATE INDEX IF NOT EXISTS idx_system_settings_key ON system_settings(key);"))
+            db.session.execute(text("CREATE INDEX IF NOT EXISTS idx_system_settings_category ON system_settings(category);"))
+            db.session.execute(text("CREATE INDEX IF NOT EXISTS idx_trans_logs_category ON transaction_logs(category);"))
+            db.session.execute(text("CREATE INDEX IF NOT EXISTS idx_trans_logs_created_at ON transaction_logs(created_at DESC);"))
+            db.session.commit()
+            print("  - CIAM v2.7 columns and indexes verified.")
+        except Exception as e:
+            print(f"  - CIAM v2.7 schema warning: {e}")
+            db.session.rollback()
+
+        from utils_ciam import init_default_ciam_settings
+        init_default_ciam_settings()
+        print("  - Central IAM v2.7 runtime settings initialized.")
+
     print("Migration completed successfully!")
 
 if __name__ == "__main__":

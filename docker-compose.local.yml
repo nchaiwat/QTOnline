@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  db:
+    ports:
+      - "5435:5432" # Expose DB port for local inspection
+
+  web:
+    build: .
+    volumes:
+      - .:/app
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      # Override the DB host if you run locally without docker for development, 
+      # but here we keep it as 'db' to connect to the docker postgres
+      - DB_HOST=db
+
+  nginx:
+    ports:
+      - "80:80"

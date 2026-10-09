@@ -152,6 +152,7 @@ class User(UserMixin, db.Model):
     phoneNumber = db.Column(db.String(50))
     signature_image = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(20), default="active")
+    use_ad_auth = db.Column(db.Boolean, default=True)
     lastLogin = db.Column(db.DateTime)
     createdAt = db.Column(db.DateTime, default=now_bangkok)
 
@@ -168,6 +169,7 @@ class User(UserMixin, db.Model):
             "signatureImage": "present" if self.signature_image else None,
             "hasSignature": bool(self.signature_image),
             "status": getattr(self, "status", "active"),
+            "useAdAuth": getattr(self, "use_ad_auth", True),
             "createdAt": (
                 created_local.strftime("%d-%m-%Y %H:%M") if created_local else "-"
             ),
@@ -884,6 +886,141 @@ class LoginLog(db.Model):
             "failureReason": self.failure_reason or "-",
         }
 
+
+class SystemSetting(db.Model):
+    __tablename__ = "system_settings"
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    value = db.Column(db.Text, nullable=True)
+    description = db.Column(db.String(250), nullable=True)
+    category = db.Column(db.String(50), default="general", index=True)
+    data_type = db.Column(db.String(20), default="string")  # string, boolean, integer, encrypted
+    updated_at = db.Column(db.DateTime, default=now_bangkok, onupdate=now_bangkok)
+
+    @classmethod
+    def get_value(cls, key: str, default=None):
+        try:
+            setting = cls.query.filter_by(key=key).first()
+            if not setting or setting.value is None:
+                return default
+            if setting.data_type == "boolean":
+                return str(setting.value).strip().lower() in ("true", "1", "yes")
+            if setting.data_type == "integer":
+                try:
+                    return int(setting.value)
+                except Exception:
+                    return default
+            return setting.value
+        except Exception:
+            return default
+
+    @classmethod
+    def set_value(cls, key: str, value, description=None, category="central_iam", data_type="string"):
+        setting = cls.query.filter_by(key=key).first()
+        val_str = str(value) if value is not None else None
+        if not setting:
+            setting = cls(
+                key=key,
+                value=val_str,
+                description=description,
+                category=category,
+                data_type=data_type,
+                updated_at=now_bangkok(),
+            )
+            db.session.add(setting)
+        else:
+            setting.value = val_str
+            if description:
+                setting.description = description
+            if category:
+                setting.category = category
+            if data_type:
+                setting.data_type = data_type
+            setting.updated_at = now_bangkok()
+        db.session.commit()
+        return setting
+
+    def to_dict(self):
+        updated_local = ensure_bangkok(self.updated_at)
+        return {
+            "id": self.id,
+            "key": self.key,
+            "value": self.value,
+            "description": self.description,
+            "category": self.category,
+            "dataType": self.data_type,
+            "updatedAt": updated_local.strftime("%d-%m-%Y %H:%M:%S") if updated_local else None,
+        }
+
+
+class TransactionLog(db.Model):
+    __tablename__ = "transaction_logs"
+    id = db.Column(db.Integer, primary_key=True)
+    category = db.Column(db.String(50), nullable=False, index=True)  # ciam_sso, security_break_glass, system_setting
+    action = db.Column(db.String(100), nullable=False)
+    status = db.Column(db.String(20), default="success")  # success, failed, warning, info
+    message = db.Column(db.String(500), nullable=False)
+    details = db.Column(db.Text, nullable=True)  # JSON string
+    records_count = db.Column(db.Integer, default=0)
+    duration_ms = db.Column(db.Integer, default=0)
+    triggered_by = db.Column(db.String(100), nullable=False)  # user:<username>, system:ciam
+    created_at = db.Column(db.DateTime, default=now_bangkok, index=True)
+
+    @classmethod
+    def log(
+        cls,
+        category: str,
+        action: str,
+        message: str,
+        status: str = "success",
+        details=None,
+        triggered_by: str = "system",
+        records_count: int = 0,
+        duration_ms: int = 0,
+    ):
+        try:
+            if isinstance(details, (dict, list)):
+                import json
+                details_str = json.dumps(details, ensure_ascii=False)
+            else:
+                details_str = str(details) if details is not None else None
+
+            log_entry = cls(
+                category=category,
+                action=action,
+                status=status,
+                message=message[:500],
+                details=details_str,
+                records_count=records_count,
+                duration_ms=duration_ms,
+                triggered_by=triggered_by[:100],
+                created_at=now_bangkok(),
+            )
+            db.session.add(log_entry)
+            db.session.commit()
+            return log_entry
+        except Exception:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+            return None
+
+    def to_dict(self):
+        created_local = ensure_bangkok(self.created_at)
+        return {
+            "id": self.id,
+            "category": self.category,
+            "action": self.action,
+            "status": self.status,
+            "message": self.message,
+            "details": self.details,
+            "recordsCount": self.records_count,
+            "durationMs": self.duration_ms,
+            "triggeredBy": self.triggered_by,
+            "createdAt": created_local.strftime("%d-%m-%Y %H:%M:%S") if created_local else None,
+            "createdAtIso": created_local.isoformat() if created_local else None,
+        }
 
 
 # --- CRUD Helpers ---
