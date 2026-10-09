@@ -212,3 +212,17 @@ equest.host_url ภายในคอนเทนเนอร์เป็น htt
     - **ข้อจำกัดเชิงสถาปัตยกรรม:** ใน `docker-compose.yml` มีการ Mount Volume เฉพาะ `./instance` และ `./uploads` ส่วนซอร์สโค้ดของแอปพลิเคชัน (`app.py`, `login.html`, `utils_ciam.py`, etc.) ถูกฝัง (bake) เข้าไปใน Image ผ่านคำสั่ง `COPY . .` ใน `Dockerfile`
     - **ผลกระทบ:** คำสั่ง `docker compose restart web` จะเพียงแค่หยุดและรัน Container เดิมจาก Image เก่าซ้ำ โดยไม่นำโค้ดใหม่ที่ดึงมาจาก `git pull` ไปใช้งาน
     - **แนวทางปฏิบัติที่ถูกต้อง:** ในทุกครั้งที่มีการอัปเดตโค้ดบน VPS **ต้องใช้คำสั่ง `docker compose up -d --build web` เสมอ** เพื่อให้ Docker ทำการ Rebuild Image ด้วยโค้ดล่าสุด (ใช้เวลาเพียง 1-3 วินาทีเนื่องจากใช้ Docker Cache) และ Recreate Container อัตโนมัติ
+
+14. **การแก้ไขข้อผิดพลาด SyntaxError จากการประกาศตัวแปร passwordInput ซ้ำซ้อน (Fix Identifier has already been declared):**
+    - **อาการที่พบ:**
+      1. ผู้ใช้กดไอคอนลูกตาเพื่อดูรหัสผ่านไม่ได้ (Password Toggle ไม่ทำงาน)
+      2. ผู้ใช้กดปุ่ม 'Mobile QR Login' แล้วไม่มีปฏิกิริยาตอบสนอง (QR Container ไม่เปิด)
+      3. ไม่สามารถกด Login เข้าสู่ระบบได้
+      4. บน DevTools Console ปรากฏ Error สีแดง: Uncaught SyntaxError: Identifier 'passwordInput' has already been declared (at login:563:15)
+    - **สาเหตุเชิงเทคนิค:**
+      - ในแท็ก <script> ของ [login.html](login.html) มีการประกาศ const passwordInput = document.getElementById('password'); ซ้ำกัน 2 ครั้ง ในบรรทัดที่ 503 (สำหรับฟังก์ชัน Toggle Password) และบรรทัดที่ 563 (สำหรับฟังก์ชัน Auto-hide Error Box)
+      - ตามมาตรฐาน ECMAScript (ES6) การประกาศตัวแปรประเภท const หรือ let ชื่อซ้ำใน Scope เดียวกันจะทำให้เกิด **Compile/Parse-Time SyntaxError** ส่งผลให้ Browser ปฏิเสธการรันโค้ด JavaScript ในแท็ก <script> ทั้งบล็อกทันที
+      - ส่งผลให้ Event Listener ทั้งหมดในหน้านั้น (	ogglePassword, 	oggleQrBtn, loginForm.submit, initSsoConfig, handleCiamSsoLogin) ไม่ถูกลงทะเบียน
+    - **การแก้ไข:**
+      - นำการประกาศ const passwordInput บรรทัดที่ 563 ออก และรียูสตัวแปร passwordInput ที่ประกาศไว้แล้วที่บรรทัด 503
+      - ผลลัพธ์: โค้ด JavaScript ทั้งหมดในหน้า Login กลับมาประมวลผลได้อย่างสมบูรณ์ 100% ปุ่ม Toggle รหัสผ่าน, Mobile QR Login, และการ Submit Login/SSO ใช้งานได้ตามปกติ
