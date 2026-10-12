@@ -1014,6 +1014,24 @@ class TransactionLog(db.Model):
 
     def to_dict(self):
         created_local = ensure_bangkok(self.created_at)
+        formatted_date = created_local.strftime("%d-%m-%Y %H:%M:%S") if created_local else None
+
+        client_ip = None
+        user_name = None
+        if self.details:
+            try:
+                import json
+                details_obj = json.loads(self.details) if isinstance(self.details, str) else self.details
+                if isinstance(details_obj, dict):
+                    client_ip = details_obj.get("ip") or details_obj.get("client_ip") or details_obj.get("clientIp")
+                    user_name = details_obj.get("username")
+            except Exception:
+                pass
+
+        triggered_display = self.triggered_by or "-"
+        if triggered_display.startswith("user:"):
+            triggered_display = triggered_display[5:]
+
         return {
             "id": self.id,
             "category": self.category,
@@ -1022,10 +1040,19 @@ class TransactionLog(db.Model):
             "message": self.message,
             "details": self.details,
             "recordsCount": self.records_count,
+            "records_count": self.records_count,
             "durationMs": self.duration_ms,
-            "triggeredBy": self.triggered_by,
-            "createdAt": created_local.strftime("%d-%m-%Y %H:%M:%S") if created_local else None,
+            "duration_ms": self.duration_ms,
+            "triggeredBy": triggered_display,
+            "triggered_by": triggered_display,
+            "username": user_name or triggered_display,
+            "user_username": user_name or triggered_display,
+            "ip_address": client_ip or "-",
+            "ip": client_ip or "-",
+            "createdAt": formatted_date,
+            "created_at": formatted_date,
             "createdAtIso": created_local.isoformat() if created_local else None,
+            "created_at_iso": created_local.isoformat() if created_local else None,
         }
 
 

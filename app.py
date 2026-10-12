@@ -1289,6 +1289,7 @@ def manage_pos():
                 parts = [int(p) for p in month_param.split("-")]
                 if parts[0] > 2500:
                     parts[0] -= 543  # Convert Buddhist year to Gregorian
+                filter_col = func.coalesce(PurchaseOrder.updatedAt, PurchaseOrder.created)
                 if len(parts) == 2:
                     y, m = parts[0], parts[1]
                     start_dt = datetime(y, m, 1, 0, 0, 0)
@@ -1297,20 +1298,14 @@ def manage_pos():
                     else:
                         end_dt = datetime(y, m + 1, 1, 0, 0, 0)
                     query = query.filter(
-                        or_(
-                            and_(PurchaseOrder.created >= start_dt, PurchaseOrder.created < end_dt),
-                            and_(PurchaseOrder.updatedAt >= start_dt, PurchaseOrder.updatedAt < end_dt),
-                        )
+                        and_(filter_col >= start_dt, filter_col < end_dt)
                     )
                 elif len(parts) == 3:
                     y, m, d = parts[0], parts[1], parts[2]
                     start_dt = datetime(y, m, d, 0, 0, 0)
                     end_dt = start_dt + timedelta(days=1)
                     query = query.filter(
-                        or_(
-                            and_(PurchaseOrder.created >= start_dt, PurchaseOrder.created < end_dt),
-                            and_(PurchaseOrder.updatedAt >= start_dt, PurchaseOrder.updatedAt < end_dt),
-                        )
+                        and_(filter_col >= start_dt, filter_col < end_dt)
                     )
             except Exception as ex:
                 app.logger.warning(f"Invalid month filter format: {month_param}, error: {ex}")

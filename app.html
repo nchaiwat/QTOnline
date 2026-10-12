@@ -614,7 +614,7 @@
                     <div class="bg-white p-6 rounded-lg shadow-md border border-gray-200">
                         <!-- Filters -->
                         <div class="flex flex-col md:flex-row gap-4 mb-4">
-                            <input id="po-search-input" type="text" placeholder="Search QT..."
+                            <input id="po-search-input" type="text" placeholder="Search QT..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
                                 class="w-full md:w-1/3 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 oninput="handlePOSearch(event)">
                             <!-- Date/Month Filter -->
@@ -625,7 +625,7 @@
                                     <option value="date">Date</option>
                                 </select>
                                 <div class="relative w-full">
-                                    <input id="po-month-filter" type="month"
+                                    <input id="po-month-filter" type="month" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
                                         class="w-full pl-4 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                         onchange="handlePOMonthChange(event)">
                                     <div id="calendar-icon-container" class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-gray-400" style="display: none;">
@@ -732,7 +732,7 @@
                             <div class="relative w-full sm:w-64">
                                 <i data-lucide="search"
                                     class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4"></i>
-                                <input id="customer-search-input" type="text"
+                                <input id="customer-search-input" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
                                     class="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     placeholder="ค้นหาด้วยโค้ด ชื่อ เมือง หรือเบอร์โทร..."
                                     oninput="handleCustomerSearch(event)">
@@ -843,7 +843,7 @@
                             <div class="relative w-full sm:w-64">
                                 <i data-lucide="search"
                                     class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4"></i>
-                                <input id="product-search-input" type="text"
+                                <input id="product-search-input" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
                                     class="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     placeholder="ค้นหาด้วยรหัส ชื่อ กลุ่มสินค้า..."
                                     oninput="handleProductSearch(event)">
@@ -1855,7 +1855,7 @@
                                     </label>
                                     <p class="text-xs text-gray-500 mb-2">รหัสลับ Spoke Client สำหรับแลก Authorization Code (ปล่อยว่างหากไม่ต้องการเปลี่ยน)</p>
                                     <div class="relative">
-                                        <input type="password" id="ciam-client-secret"
+                                        <input type="password" id="ciam-client-secret" autocomplete="new-password"
                                             class="w-full font-mono text-sm border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:ring-2 focus:ring-blue-500 focus:outline-none pr-10"
                                             placeholder="•••••••• (ยังไม่ได้เปลี่ยนหรือใช้ค่าเดิม)">
                                         <button type="button" onclick="toggleCiamClientSecretVisibility()"
@@ -1910,7 +1910,7 @@
                                     <p class="text-xs text-gray-500 mb-2">Used by the Central Identity system to authenticate all Directory API requests.</p>
                                     <div class="flex items-center space-x-2">
                                         <div class="relative flex-1">
-                                            <input type="password" id="ciam-api-key" readonly
+                                            <input type="password" id="ciam-api-key" readonly autocomplete="off"
                                                 class="w-full font-mono text-sm bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 focus:outline-none cursor-text">
                                             <button type="button" onclick="toggleCiamApiKeyVisibility()"
                                                 class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700">
@@ -1979,7 +1979,7 @@
                         <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-wrap items-center justify-between gap-3">
                             <div class="flex items-center space-x-3 flex-1 min-w-[280px]">
                                 <div class="relative flex-1">
-                                    <input type="text" id="ciam-logs-search" placeholder="Search IP, endpoint, or username..."
+                                    <input type="text" id="ciam-logs-search" placeholder="Search IP, endpoint, or username..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
                                         class="w-full text-sm pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                         oninput="filterCiamLogs()">
                                     <i data-lucide="search" class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
@@ -2027,7 +2027,7 @@
                         <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-wrap items-center justify-between gap-3">
                             <div class="flex items-center space-x-3 flex-1 min-w-[280px]">
                                 <div class="relative flex-1">
-                                    <input type="text" id="login-logs-search" placeholder="Search username or IP address..."
+                                    <input type="text" id="login-logs-search" placeholder="Search username or IP address..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
                                         class="w-full text-sm pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                         oninput="filterLoginLogs()">
                                     <i data-lucide="search" class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
@@ -2072,7 +2072,7 @@
                         <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-wrap items-center justify-between gap-3">
                             <div class="flex items-center space-x-3 flex-1 min-w-[280px]">
                                 <div class="relative flex-1">
-                                    <input type="text" id="trans-logs-search" placeholder="Search action, category, or username..."
+                                    <input type="text" id="trans-logs-search" placeholder="Search action, category, or username..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
                                         class="w-full text-sm pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                         oninput="filterTransLogs()">
                                     <i data-lucide="search" class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
@@ -2219,7 +2219,7 @@
     <div id="user-form-modal"
         class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 hidden p-4">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
-            <form id="user-form" onsubmit="event.preventDefault(); saveUser();" class="flex flex-col flex-1 min-h-0">
+            <form id="user-form" autocomplete="off" onsubmit="event.preventDefault(); saveUser();" class="flex flex-col flex-1 min-h-0">
                 <!-- Modal Header -->
                 <div class="flex justify-between items-center p-5 border-b">
                     <h4 id="user-modal-title" class="text-xl font-semibold">Create New User</h4>
@@ -2233,39 +2233,39 @@
                     <input type="hidden" id="user-id">
                     <div>
                         <label for="user-username" class="block text-sm font-medium text-gray-700 mb-1">Username</label>
-                        <input type="text" id="user-username"
+                        <input type="text" id="user-username" autocomplete="off"
                             class="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                             required>
                     </div>
                     <div>
                         <label for="user-fullname" class="block text-sm font-medium text-gray-700 mb-1">Full
                             Name</label>
-                        <input type="text" id="user-fullname"
+                        <input type="text" id="user-fullname" autocomplete="off"
                             class="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                             required>
                     </div>
                     <div>
                         <label for="user-phone" class="block text-sm font-medium text-gray-700 mb-1">Phone
                             Number</label>
-                        <input type="text" id="user-phone"
+                        <input type="text" id="user-phone" autocomplete="off"
                             class="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                             placeholder="e.g. 081-234-5678">
                     </div>
                     <div>
                         <label for="user-email" class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                        <input type="email" id="user-email"
+                        <input type="email" id="user-email" autocomplete="off"
                             class="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                             placeholder="e.g. employee@windowasia.com">
                     </div>
                     <div>
                         <label for="user-telegram" class="block text-sm font-medium text-gray-700 mb-1">Telegram ID (Chat ID)</label>
-                        <input type="text" id="user-telegram"
+                        <input type="text" id="user-telegram" autocomplete="off"
                             class="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                             placeholder="e.g. @username หรือ Chat ID">
                     </div>
                     <div id="password-field">
                         <label for="user-password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                            <input type="password" id="user-password"
+                            <input type="password" id="user-password" autocomplete="new-password"
                                 class="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                             <p id="password-help" class="text-xs text-gray-500 mt-1">Leave blank if you don't want to
                                 change it (for editing).</p>
@@ -2764,25 +2764,25 @@
                 * รหัสผ่านใหม่ต้องมีความยาว <span class="font-semibold">8-10 ตัวอักษร</span><br>
                 * ต้องประกอบด้วย ตัวใหญ่, ตัวเล็ก, ตัวเลข และอักขระพิเศษ (@$!%*?&)
             </p>
-            <form id="change-password-form" onsubmit="handleChangePasswordSubmit(event)">
+            <form id="change-password-form" autocomplete="off" onsubmit="handleChangePasswordSubmit(event)">
                 <div class="mb-4">
                     <label for="cp-current-password"
                         class="block text-sm font-medium text-gray-700 mb-2">รหัสผ่านปัจจุบัน</label>
-                    <input type="password" id="cp-current-password"
+                    <input type="password" id="cp-current-password" autocomplete="current-password"
                         class="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                         required>
                 </div>
                 <div class="mb-4">
                     <label for="cp-new-password"
                         class="block text-sm font-medium text-gray-700 mb-2">รหัสผ่านใหม่</label>
-                    <input type="password" id="cp-new-password"
+                    <input type="password" id="cp-new-password" autocomplete="new-password"
                         class="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                         required>
                 </div>
                 <div class="mb-6">
                     <label for="cp-confirm-password"
                         class="block text-sm font-medium text-gray-700 mb-2">ยืนยันรหัสผ่านใหม่</label>
-                    <input type="password" id="cp-confirm-password"
+                    <input type="password" id="cp-confirm-password" autocomplete="new-password"
                         class="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                         required>
                 </div>
@@ -4419,37 +4419,24 @@
             console.log("Filtering POs. Date/Month:", monthFilter, "Status:", statusFilter, "Keyword:", keyword);
 
             const filtered = poRows.filter(po => {
-                // Month/Date Filter (Improved Robust check matching backend on created and updatedAt)
+                // Month/Date Filter: Filter by Updated Date ONLY
                 if (monthFilter) {
-                    const updatedAtIso = po.updatedAtIso || '';
-                    const updatedAtDisplay = po.updatedAt || ''; // format: "DD-MM-YYYY HH:MM"
-                    const createdIso = po.createdIso || '';
-                    const createdDisplay = po.created || ''; // format: "DD-MM-YYYY"
+                    const updatedAtIso = po.updatedAtIso || po.createdIso || '';
+                    const updatedAtDisplay = po.updatedAt || po.created || ''; // format: "DD-MM-YYYY HH:MM"
 
                     let matchFound = false;
 
                     if (monthFilter.split('-').length === 3) {
                         // Matching YYYY-MM-DD
-                        if (updatedAtIso.startsWith(monthFilter) || createdIso.startsWith(monthFilter)) {
+                        if (updatedAtIso.startsWith(monthFilter)) {
                             matchFound = true;
-                        } else {
+                        } else if (updatedAtDisplay) {
                             const [fYear, fMonth, fDay] = monthFilter.split('-').map(Number);
-                            if (updatedAtDisplay) {
-                                const dParts = updatedAtDisplay.split(' ')[0].split('-');
-                                if (dParts.length >= 3) {
-                                    const dDay = parseInt(dParts[0]), dMonth = parseInt(dParts[1]), dYear = parseInt(dParts[2]);
-                                    if (dDay === fDay && dMonth === fMonth && (dYear === fYear || dYear === (fYear + 543))) {
-                                        matchFound = true;
-                                    }
-                                }
-                            }
-                            if (!matchFound && createdDisplay) {
-                                const dParts = createdDisplay.split(' ')[0].split('-');
-                                if (dParts.length >= 3) {
-                                    const dDay = parseInt(dParts[0]), dMonth = parseInt(dParts[1]), dYear = parseInt(dParts[2]);
-                                    if (dDay === fDay && dMonth === fMonth && (dYear === fYear || dYear === (fYear + 543))) {
-                                        matchFound = true;
-                                    }
+                            const dParts = updatedAtDisplay.split(' ')[0].split('-');
+                            if (dParts.length >= 3) {
+                                const dDay = parseInt(dParts[0]), dMonth = parseInt(dParts[1]), dYear = parseInt(dParts[2]);
+                                if (dDay === fDay && dMonth === fMonth && (dYear === fYear || dYear === (fYear + 543))) {
+                                    matchFound = true;
                                 }
                             }
                         }
@@ -4460,19 +4447,8 @@
                             const [pYear, pMonth] = updatedAtIso.split('-');
                             if (parseInt(pYear) === fYear && parseInt(pMonth) === fMonth) matchFound = true;
                         }
-                        if (!matchFound && createdIso) {
-                            const [pYear, pMonth] = createdIso.split('-');
-                            if (parseInt(pYear) === fYear && parseInt(pMonth) === fMonth) matchFound = true;
-                        }
                         if (!matchFound && updatedAtDisplay) {
                             const dParts = updatedAtDisplay.split(' ')[0].split('-');
-                            if (dParts.length >= 3) {
-                                const dMonth = parseInt(dParts[1]), dYear = parseInt(dParts[2]);
-                                if (dMonth === fMonth && (dYear === fYear || dYear === (fYear + 543))) matchFound = true;
-                            }
-                        }
-                        if (!matchFound && createdDisplay) {
-                            const dParts = createdDisplay.split(' ')[0].split('-');
                             if (dParts.length >= 3) {
                                 const dMonth = parseInt(dParts[1]), dYear = parseInt(dParts[2]);
                                 if (dMonth === fMonth && (dYear === fYear || dYear === (fYear + 543))) matchFound = true;
@@ -4622,10 +4598,22 @@
             if (type === 'date') {
                 input.type = 'text'; // Flatpickr works best on text inputs
                 input.placeholder = 'dd/mm/yyyy';
+                input.setAttribute('autocomplete', 'off');
+                input.setAttribute('autocorrect', 'off');
+                input.setAttribute('autocapitalize', 'off');
+                input.setAttribute('spellcheck', 'false');
                 if (icon) icon.style.display = 'flex'; // Show custom calendar icon
                 filterDatePicker = flatpickr("#po-month-filter", {
                     dateFormat: "d/m/Y",
                     allowInput: true,
+                    onReady: function(selectedDates, dateStr, instance) {
+                        if (instance.input) {
+                            instance.input.setAttribute('autocomplete', 'off');
+                            instance.input.setAttribute('autocorrect', 'off');
+                            instance.input.setAttribute('autocapitalize', 'off');
+                            instance.input.setAttribute('spellcheck', 'false');
+                        }
+                    },
                     onChange: function(selectedDates, dateStr, instance) {
                         let newFilter = '';
                         if (selectedDates.length > 0) {
@@ -7925,10 +7913,11 @@
                 }
                 if (q) {
                     const action = (log.action || '').toLowerCase();
-                    const user = (log.user_username || log.username || log.triggered_by || '').toLowerCase();
-                    const ip = (log.ip_address || '').toLowerCase();
+                    const user = (log.user_username || log.username || log.triggered_by || log.triggeredBy || '').toLowerCase();
+                    const ip = (log.ip_address || log.ip || '').toLowerCase();
                     const msg = (log.message || '').toLowerCase();
-                    if (!action.includes(q) && !user.includes(q) && !ip.includes(q) && !msg.includes(q)) {
+                    const dt = (log.created_at || log.createdAt || '').toLowerCase();
+                    if (!action.includes(q) && !user.includes(q) && !ip.includes(q) && !msg.includes(q) && !dt.includes(q)) {
                         return false;
                     }
                 }
@@ -7941,12 +7930,12 @@
             }
 
             tbody.innerHTML = filtered.map(log => {
-                const createdAt = log.created_at || '';
+                const createdAt = log.created_at || log.createdAt || '';
                 const category = log.category || '-';
                 const action = log.action || '-';
                 const st = (log.status || 'success').toUpperCase();
-                const triggeredBy = log.user_username || log.triggered_by || '-';
-                const ip = log.ip_address || '-';
+                const triggeredBy = log.user_username || log.triggered_by || log.triggeredBy || log.username || '-';
+                const ip = log.ip_address || log.ip || '-';
                 const msg = log.message || '-';
 
                 let badgeClass = 'bg-gray-100 text-gray-800';
@@ -8507,13 +8496,41 @@
 
             initIcons();
 
+            // Global helper to disable browser autofill/autocomplete dropdowns across all inputs
+            window.disableBrowserAutofill = function() {
+                try {
+                    document.querySelectorAll('input:not([type="checkbox"]):not([type="radio"]):not([type="file"])').forEach(el => {
+                        if (!el.getAttribute('autocomplete')) {
+                            el.setAttribute('autocomplete', 'off');
+                        }
+                        el.setAttribute('autocorrect', 'off');
+                        el.setAttribute('autocapitalize', 'off');
+                        el.setAttribute('spellcheck', 'false');
+                    });
+                } catch(e) {}
+            };
+
             // Initialize Flatpickr for delivery date
             if (document.getElementById('po-delivery-date')) {
                 deliveryDatePicker = flatpickr("#po-delivery-date", {
                     altInput: true,
                     altFormat: "d/m/Y",
                     dateFormat: "Y-m-d",
-                    allowInput: true
+                    allowInput: true,
+                    onReady: function(selectedDates, dateStr, instance) {
+                        if (instance.altInput) {
+                            instance.altInput.setAttribute('autocomplete', 'off');
+                            instance.altInput.setAttribute('autocorrect', 'off');
+                            instance.altInput.setAttribute('autocapitalize', 'off');
+                            instance.altInput.setAttribute('spellcheck', 'false');
+                        }
+                        if (instance.input) {
+                            instance.input.setAttribute('autocomplete', 'off');
+                            instance.input.setAttribute('autocorrect', 'off');
+                            instance.input.setAttribute('autocapitalize', 'off');
+                            instance.input.setAttribute('spellcheck', 'false');
+                        }
+                    }
                 });
             }
 
@@ -8523,10 +8540,25 @@
                     altInput: true,
                     altFormat: "d/m/Y",
                     dateFormat: "Y-m-d",
-                    allowInput: true
+                    allowInput: true,
+                    onReady: function(selectedDates, dateStr, instance) {
+                        if (instance.altInput) {
+                            instance.altInput.setAttribute('autocomplete', 'off');
+                            instance.altInput.setAttribute('autocorrect', 'off');
+                            instance.altInput.setAttribute('autocapitalize', 'off');
+                            instance.altInput.setAttribute('spellcheck', 'false');
+                        }
+                        if (instance.input) {
+                            instance.input.setAttribute('autocomplete', 'off');
+                            instance.input.setAttribute('autocorrect', 'off');
+                            instance.input.setAttribute('autocapitalize', 'off');
+                            instance.input.setAttribute('spellcheck', 'false');
+                        }
+                    }
                 });
             }
 
+            disableBrowserAutofill();
             initApp(); // Start the app
         });
 

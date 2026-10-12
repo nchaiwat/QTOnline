@@ -283,3 +283,27 @@ emote_addr) มาบันทึกลงในฟิลด์ details JSON ข
          - เพิ่มปุ่ม `[ ⚡ ซิงก์บัญชีผู้ใช้กับ CIAM ทันที ]` บนแท็บ CIAM Parameters ในหน้า System Settings (`#page-settings`) เพื่อให้ผู้ดูแลระบบสามารถกดสั่ง Sync บัญชีได้แบบ Real-time โดยไม่ต้องรอรอบ Background Timer 120 วินาที
       3. **End-to-End SSO Portal Launch Verification:**
          - ทดสอบการกดเปิดเข้าสู่ระบบจาก Employee Portal ของ CIAM (`https://ciam.windowasia.com/portal`) ส่งมายัง Endpoint `/auth/start` และเชื่อมโยงต่อไปยัง Dashboard อย่างราบรื่น
+
+18. **การแก้ไขปัญหา Browser Autofill List, QT Management Updated-only Filter และ Transaction Log Timestamps (12 Oct 2026):**
+    - **รายการที่ได้รับการแก้ไข (3 ประเด็นหลัก):**
+      1. **การปิดกั้น Browser Autofill / Google Password Manager Dropdown กวนใจบนช่อง Input:**
+         - **สาเหตุ:** Browser (Chrome/Edge) นำข้อมูลประวัติฟอร์มและรหัสผ่านที่เคยเซฟไว้ในระบบ (เช่น มีการจำชื่อบัญชี หรือเผลอกดเซฟวันที่ "10/10/2026" เป็นรหัสผ่าน) มาแสดงเป็น Dropdown ทับช่องกรอกข้อมูล เช่น ช่องค้นหา, ช่องวันที่ Flatpickr และช่อง Login
+         - **การแก้ไข:**
+           - ใน [login.html](login.html): เพิ่ม `autocomplete="off"` บน `<form id="loginForm">`, เพิ่ม `autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"` บนช่อง Username
+           - ใน [app.html](app.html): เพิ่ม `autocomplete="off"` บนช่องค้นหาและตัวกรองทั้งหมด (`po-search-input`, `po-month-filter`, `customer-search-input`, `product-search-input`, `ciam-logs-search`, `login-logs-search`, `trans-logs-search`)
+           - ใน Flatpickr Datepicker (`po-month-filter`, `po-delivery-date`, `customer-form-creationDate`): เพิ่ม Hook `onReady` บังคับปิด autocomplete บน Element `input` และ `altInput`
+           - ใน Modal รหัสผ่าน (`ciam-client-secret`, `user-password`, `cp-current-password`, `cp-new-password`, `cp-confirm-password`): กำหนด `autocomplete="new-password"` และตั้งฟอร์มเป็น `autocomplete="off"` ป้องกัน Chrome คิดว่าช่องข้อความทั่วไปคือช่อง Username
+           - สร้างฟังก์ชัน Global `window.disableBrowserAutofill()` ทำงานอัตโนมัติเมื่อหน้าจอโหลดเสร็จ
+      2. **การปรับ Filter ในหน้า QT Management ให้กรองเฉพาะวันที่ Updated เท่านั้น:**
+         - **สาเหตุ:** เดิมใน [app.py](app.py) และ [app.html](app.html) มีเงื่อนไข `or_(created, updatedAt)` ทำให้เมื่อผู้ใช้เลือกกรองวันที่ `09/10/2026` เอกสารที่ถูกสร้างวันที่ 09/10/2026 แต่อัปเดตวันที่ 10/10/2026 (เช่น `QT26100018`) จึงติดเข้ามาในรายการด้วย
+         - **การแก้ไข:**
+           - ใน [app.py](app.py) (ฟังก์ชัน `manage_pos`): ปรับให้กรองจาก `func.coalesce(PurchaseOrder.updatedAt, PurchaseOrder.created)` เพียงอย่างเดียว ทั้งแบบ Month (`YYYY-MM`) และ Date (`YYYY-MM-DD`)
+           - ใน [app.html](app.html) (ฟังก์ชัน `renderFilteredPOList`): ปรับการคัดกรองในตารางให้เทียบเฉพาะค่า `updatedAt` (`updatedAtIso` / `updatedAtDisplay`) เท่านั้น ตัดการเปรียบเทียบ `createdIso` / `createdDisplay` ออก
+      3. **การแก้ไขหน้า Transaction Log (ISO 27001) ไม่แสดงวันที่-เวลา (Timestamp BKK), ผู้ใช้ และ IP:**
+         - **สาเหตุ:**
+           - ใน [models.py](models.py) ฟังก์ชัน `TransactionLog.to_dict()` คืนค่าคีย์ในรูปแบบ CamelCase (`createdAt`, `triggeredBy`) แต่ใน [app.html](app.html) ฟังก์ชัน `filterTransLogs()` เรียกอ่านในรูปแบบ SnakeCase (`log.created_at`, `log.triggered_by`) ส่งผลให้ตัวแปรเป็น undefined จึงแสดงเป็นค่าว่างและขีด `-`
+           - ไม่มีการ Parse ฟิลด์ `details` JSON เพื่อดึง Client IP ออกมา
+         - **การแก้ไข:**
+           - ใน [models.py](models.py): ปรับปรุง `to_dict()` ให้ส่งทั้ง `createdAt` และ `created_at` (ฟอร์แมต `DD-MM-YYYY HH:MM:SS`), ส่งทั้ง `triggeredBy` และ `triggered_by`, พร้อมทั้งแกะอ่าน `ip` และ `username` จากฟิลด์ `details` JSON
+           - ใน [app.html](app.html): ปรับปรุง `filterTransLogs()` ให้อ่านได้ทั้งสองรูปแบบ (`log.created_at || log.createdAt`, `log.triggered_by || log.triggeredBy`, `log.ip_address || log.ip`) รวมถึงรองรับการค้นหาผ่านช่อง Search ได้อย่างสมบูรณ์
+
