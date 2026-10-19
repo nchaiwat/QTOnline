@@ -383,3 +383,6 @@ emote_addr) มาบันทึกลงในฟิลด์ details JSON ข
          - ใน [app.html](app.html): รวมแท็บเป็น **"Audit & Activity Logs"** ตารางเดียว แสดง Badge ประเภท Log (`CIAM` สีฟ้า, `LOGIN` สีม่วง, `TRANS` สีเหลืองอำพัน) และ Badge สถานะ (`SUCCESS` / `FAILURE`) พร้อมช่องค้นหาและตัวกรอง Log Type และ Status แบบ Real-time
     - **ผลการทดสอบ:**
       - ทดสอบการดึงข้อมูลผ่าน Endpoint `/api/admin/unified-logs` ทั้งแบบรวมและกรองเฉพาะประเภท พบว่าคืนค่า 200 OK ข้อมูลถูกต้องครบถ้วน
+      3. **Hotfix อาการหน้าจอว่างเปล่า (Blank Screen / หายหมด):**
+         - **สาเหตุ:** ฟังก์ชัน `saveCiamSettings()` ขาดเครื่องหมายปีกกาปิด `}` ส่งผลให้ Engine ของ Browser เกิด JavaScript SyntaxError (`Unexpected end of input`) และหยุดการรันสคริปต์หน้าจอทั้งหมด
+         - **การแก้ไข:** เติมเครื่องหมายปีกกาปิด `}` ให้กับฟังก์ชัน `saveCiamSettings()` และใช้ Node.js ทำ AST Check สคริปต์ทุกบล็อกใน `app.html` ผ่าน 100% ไร้ข้อผิดพลาด
