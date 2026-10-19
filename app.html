@@ -1738,40 +1738,30 @@
 
                     <!-- Navigation Tabs -->
                     <div class="flex border-b border-gray-200 mb-6 bg-white rounded-t-lg px-4 pt-2 shadow-sm overflow-x-auto">
-                        <button id="tab-btn-ciam-config" onclick="switchSettingsTab('config')"
+                        <button id="tab-btn-config" onclick="switchSettingsTab('config')"
                             class="settings-tab-btn flex items-center py-3 px-5 border-b-2 font-semibold text-sm transition-colors border-blue-600 text-blue-600 whitespace-nowrap">
                             <i data-lucide="shield-check" class="w-4 h-4 mr-2"></i>
                             CIAM Parameters & SSO
                         </button>
-                        <button id="tab-btn-telegram-config" onclick="switchSettingsTab('telegram')"
+                        <button id="tab-btn-telegram" onclick="switchSettingsTab('telegram')"
                             class="settings-tab-btn flex items-center py-3 px-5 border-b-2 font-medium text-sm transition-colors border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap">
                             <i data-lucide="send" class="w-4 h-4 mr-2"></i>
                             Telegram Notification
                         </button>
-                        <button id="tab-btn-sap-config" onclick="switchSettingsTab('sap')"
+                        <button id="tab-btn-sap" onclick="switchSettingsTab('sap')"
                             class="settings-tab-btn flex items-center py-3 px-5 border-b-2 font-medium text-sm transition-colors border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap">
                             <i data-lucide="database" class="w-4 h-4 mr-2"></i>
                             SAP B1 Integration
                         </button>
-                        <button id="tab-btn-ai-config" onclick="switchSettingsTab('ai')"
+                        <button id="tab-btn-ai" onclick="switchSettingsTab('ai')"
                             class="settings-tab-btn flex items-center py-3 px-5 border-b-2 font-medium text-sm transition-colors border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap">
                             <i data-lucide="sparkles" class="w-4 h-4 mr-2"></i>
                             AI Copilot (v2.8.0)
                         </button>
-                        <button id="tab-btn-ciam-logs" onclick="switchSettingsTab('ciam-logs')"
+                        <button id="tab-btn-logs" onclick="switchSettingsTab('logs')"
                             class="settings-tab-btn flex items-center py-3 px-5 border-b-2 font-medium text-sm transition-colors border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap">
-                            <i data-lucide="activity" class="w-4 h-4 mr-2"></i>
-                            CIAM Connection Logs
-                        </button>
-                        <button id="tab-btn-login-logs" onclick="switchSettingsTab('login-logs')"
-                            class="settings-tab-btn flex items-center py-3 px-5 border-b-2 font-medium text-sm transition-colors border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap">
-                            <i data-lucide="log-in" class="w-4 h-4 mr-2"></i>
-                            Login Activity Logs
-                        </button>
-                        <button id="tab-btn-trans-logs" onclick="switchSettingsTab('trans-logs')"
-                            class="settings-tab-btn flex items-center py-3 px-5 border-b-2 font-medium text-sm transition-colors border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap">
-                            <i data-lucide="file-check" class="w-4 h-4 mr-2"></i>
-                            Transaction Logs (ISO 27001)
+                            <i data-lucide="clipboard-list" class="w-4 h-4 mr-2"></i>
+                            Audit & Activity Logs
                         </button>
                     </div>
 
@@ -1989,151 +1979,62 @@
                         </div>
                     </div>
 
-                    <!-- TAB 2: CIAM Connection Logs -->
-                    <div id="settings-tab-content-ciam-logs" class="settings-tab-pane hidden space-y-4">
+                    <!-- TAB 5: Audit & Activity Logs (Unified CIAM, Login Activity & ISO 27001 Transaction Logs) -->
+                    <div id="settings-tab-content-logs" class="settings-tab-pane hidden space-y-4">
+                        <!-- Filters & Action Bar -->
                         <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-wrap items-center justify-between gap-3">
-                            <div class="flex items-center space-x-3 flex-1 min-w-[280px]">
-                                <div class="relative flex-1">
-                                    <input type="text" id="ciam-logs-search" placeholder="Search IP, endpoint, or username..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                            <div class="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
+                                <!-- Search -->
+                                <div class="relative flex-1 min-w-[200px]">
+                                    <input type="text" id="unified-logs-search" placeholder="Search action, user, IP, or details..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
                                         class="w-full text-sm pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        oninput="filterCiamLogs()">
+                                        oninput="filterUnifiedLogs()">
                                     <i data-lucide="search" class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
                                 </div>
-                                <select id="ciam-logs-status-filter" onchange="filterCiamLogs()"
-                                    class="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                    <option value="">All Statuses</option>
-                                    <option value="200">200 OK</option>
-                                    <option value="201">201 Created</option>
-                                    <option value="401">401 Unauthorized</option>
-                                    <option value="403">403 Forbidden</option>
-                                    <option value="404">404 Not Found</option>
-                                    <option value="500">500 Server Error</option>
+                                <!-- Type Filter -->
+                                <select id="unified-logs-type-filter" onchange="filterUnifiedLogs()"
+                                    class="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-gray-700">
+                                    <option value="">All Log Types (บันทึกทุกประเภท)</option>
+                                    <option value="CIAM">CIAM Connection</option>
+                                    <option value="LOGIN">Login Activity</option>
+                                    <option value="TRANSACTION">Transaction (ISO 27001)</option>
                                 </select>
-                            </div>
-                            <button type="button" onclick="loadCiamLogs()"
-                                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg flex items-center border border-gray-300 shadow-sm transition-colors">
-                                <i data-lucide="refresh-cw" class="w-4 h-4 mr-1.5"></i> Refresh Logs
-                            </button>
-                        </div>
-
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                            <div class="overflow-x-auto">
-                                <table class="w-full text-left text-sm whitespace-nowrap">
-                                    <thead class="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
-                                        <tr>
-                                            <th class="px-4 py-3">Timestamp</th>
-                                            <th class="px-4 py-3">Client IP</th>
-                                            <th class="px-4 py-3">Action</th>
-                                            <th class="px-4 py-3">Target User</th>
-                                            <th class="px-4 py-3 text-center">Status</th>
-                                            <th class="px-4 py-3">Details / Reason</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="ciam-logs-table-body" class="divide-y divide-gray-200">
-                                        <tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">Loading audit logs...</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- TAB 3: User Login Activity Logs -->
-                    <div id="settings-tab-content-login-logs" class="settings-tab-pane hidden space-y-4">
-                        <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-wrap items-center justify-between gap-3">
-                            <div class="flex items-center space-x-3 flex-1 min-w-[280px]">
-                                <div class="relative flex-1">
-                                    <input type="text" id="login-logs-search" placeholder="Search username or IP address..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
-                                        class="w-full text-sm pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        oninput="filterLoginLogs()">
-                                    <i data-lucide="search" class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
-                                </div>
-                                <select id="login-logs-status-filter" onchange="filterLoginLogs()"
-                                    class="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                    <option value="">All Statuses</option>
+                                <!-- Status Filter -->
+                                <select id="unified-logs-status-filter" onchange="filterUnifiedLogs()"
+                                    class="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-gray-700">
+                                    <option value="">All Statuses (ทุกสถานะ)</option>
                                     <option value="SUCCESS">SUCCESS</option>
-                                    <option value="FAILED_CREDENTIALS">FAILED_CREDENTIALS</option>
-                                    <option value="ACCOUNT_DISABLED">ACCOUNT_DISABLED</option>
-                                    <option value="USER_NOT_FOUND">USER_NOT_FOUND</option>
+                                    <option value="FAILURE">FAILURE</option>
                                 </select>
                             </div>
-                            <button type="button" onclick="loadLoginLogs()"
+                            <button type="button" onclick="loadUnifiedLogs()"
                                 class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg flex items-center border border-gray-300 shadow-sm transition-colors">
                                 <i data-lucide="refresh-cw" class="w-4 h-4 mr-1.5"></i> Refresh Logs
                             </button>
                         </div>
 
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                            <div class="overflow-x-auto">
-                                <table class="w-full text-left text-sm whitespace-nowrap">
-                                    <thead class="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
-                                        <tr>
-                                            <th class="px-4 py-3">Timestamp</th>
-                                            <th class="px-4 py-3">Username</th>
-                                            <th class="px-4 py-3 text-center">Status</th>
-                                            <th class="px-4 py-3">IP Address</th>
-                                            <th class="px-4 py-3">Failure Reason / Note</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="login-logs-table-body" class="divide-y divide-gray-200">
-                                        <tr><td colspan="5" class="px-4 py-8 text-center text-gray-500">Loading login logs...</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- TAB 4: Transaction Logs (ISO 27001) -->
-                    <div id="settings-tab-content-trans-logs" class="settings-tab-pane hidden space-y-4">
-                        <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-wrap items-center justify-between gap-3">
-                            <div class="flex items-center space-x-3 flex-1 min-w-[280px]">
-                                <div class="relative flex-1">
-                                    <input type="text" id="trans-logs-search" placeholder="Search action, category, or username..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
-                                        class="w-full text-sm pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        oninput="filterTransLogs()">
-                                    <i data-lucide="search" class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
-                                </div>
-                                <select id="trans-logs-category-filter" onchange="filterTransLogs()"
-                                    class="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                    <option value="">All Categories</option>
-                                    <option value="auth">Authentication (auth)</option>
-                                    <option value="system_setting">Settings (system_setting)</option>
-                                    <option value="directory_sync">Directory Sync (directory_sync)</option>
-                                    <option value="quotation">Quotation (quotation)</option>
-                                    <option value="break_glass">Break Glass (break_glass)</option>
-                                </select>
-                                <select id="trans-logs-status-filter" onchange="filterTransLogs()"
-                                    class="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                    <option value="">All Statuses</option>
-                                    <option value="success">SUCCESS</option>
-                                    <option value="failure">FAILURE</option>
-                                    <option value="warning">WARNING</option>
-                                    <option value="error">ERROR</option>
-                                </select>
-                            </div>
-                            <button type="button" onclick="loadTransactionLogs()"
-                                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg flex items-center border border-gray-300 shadow-sm transition-colors">
-                                <i data-lucide="refresh-cw" class="w-4 h-4 mr-1.5"></i> Refresh Logs
-                            </button>
-                        </div>
-
+                        <!-- Table Card -->
                         <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
                             <div class="overflow-x-auto">
                                 <table class="w-full text-left text-sm whitespace-nowrap">
                                     <thead class="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
                                         <tr>
                                             <th class="px-4 py-3">Timestamp (BKK)</th>
-                                            <th class="px-4 py-3">Category</th>
-                                            <th class="px-4 py-3">Action</th>
+                                            <th class="px-4 py-3 text-center">Log Type</th>
+                                            <th class="px-4 py-3">Event / Action</th>
                                             <th class="px-4 py-3 text-center">Status</th>
-                                            <th class="px-4 py-3">Triggered By</th>
+                                            <th class="px-4 py-3">User / Actor</th>
                                             <th class="px-4 py-3">Client IP</th>
-                                            <th class="px-4 py-3">Message / Audit Details</th>
+                                            <th class="px-4 py-3">Audit Details / Message</th>
                                         </tr>
                                     </thead>
-                                    <tbody id="trans-logs-table-body" class="divide-y divide-gray-200">
-                                        <tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Loading ISO 27001 transaction logs...</td></tr>
+                                    <tbody id="unified-logs-table-body" class="divide-y divide-gray-200">
+                                        <tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Loading audit & activity logs...</td></tr>
                                     </tbody>
                                 </table>
+                            </div>
+                        </div>
+                    </div>
                     <!-- TAB 2: Telegram Notification Settings -->
                     <div id="settings-tab-content-telegram" class="settings-tab-pane hidden space-y-6">
                         <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
@@ -3603,7 +3504,7 @@
                     loadProductList(productCurrentPage || 1);
                 }
                 if (pageId === 'page-settings') {
-                    loadCiamSettings();
+                    switchSettingsTab('config');
                 }
 
                 // BUG FIX: Call setUIVisibility() *every time* a page loads
@@ -7798,7 +7699,7 @@
         let loginLogsData = [];
 
         function switchSettingsTab(tabName) {
-            const tabs = ['config', 'telegram', 'sap', 'ai', 'ciam-logs', 'login-logs', 'trans-logs'];
+            const tabs = ['config', 'telegram', 'sap', 'ai', 'logs'];
             tabs.forEach(t => {
                 const btn = document.getElementById(`tab-btn-${t}`);
                 const pane = document.getElementById(`settings-tab-content-${t}`);
@@ -7823,12 +7724,8 @@
                 loadSapSettings();
             } else if (tabName === 'ai') {
                 loadAiSettings();
-            } else if (tabName === 'ciam-logs') {
-                loadCiamLogs();
-            } else if (tabName === 'login-logs') {
-                loadLoginLogs();
-            } else if (tabName === 'trans-logs') {
-                loadTransactionLogs();
+            } else if (tabName === 'logs') {
+                loadUnifiedLogs();
             }
 
             if (window.lucide) lucide.createIcons();
@@ -8139,6 +8036,88 @@
                     if (window.lucide) lucide.createIcons();
                 }
             }
+        // --- UNIFIED AUDIT & ACTIVITY LOGS (CIAM, Login Activity & ISO 27001) ---
+        let unifiedLogsData = [];
+
+        async function loadUnifiedLogs() {
+            const tbody = document.getElementById('unified-logs-table-body');
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500 font-sans">Loading audit & activity logs...</td></tr>';
+            }
+            try {
+                const logs = await fetchApi('/api/admin/unified-logs?limit=250');
+                unifiedLogsData = Array.isArray(logs) ? logs : [];
+                filterUnifiedLogs();
+            } catch (err) {
+                console.error('Failed to load unified logs:', err);
+                if (tbody) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-red-500 font-sans">Failed to load audit & activity logs</td></tr>';
+                }
+            }
+        }
+
+        function filterUnifiedLogs() {
+            const tbody = document.getElementById('unified-logs-table-body');
+            if (!tbody) return;
+
+            const q = (document.getElementById('unified-logs-search')?.value || '').toLowerCase().trim();
+            const typeFilter = document.getElementById('unified-logs-type-filter')?.value || '';
+            const statusFilter = document.getElementById('unified-logs-status-filter')?.value || '';
+
+            const filtered = unifiedLogsData.filter(log => {
+                const lt = log.logType || '';
+                const st = log.status || '';
+                if (typeFilter && lt !== typeFilter) return false;
+                if (statusFilter && st !== statusFilter) return false;
+
+                if (q) {
+                    const searchStr = `${log.createdAt || ''} ${lt} ${log.action || ''} ${st} ${log.actor || ''} ${log.ip || ''} ${log.details || ''}`.toLowerCase();
+                    if (!searchStr.includes(q)) return false;
+                }
+                return true;
+            });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-400 font-sans">No audit & activity logs found matching filter</td></tr>';
+                return;
+            }
+
+            const htmlParts = [];
+            filtered.forEach(log => {
+                // Type badge
+                let typeBadge = '';
+                if (log.logType === 'CIAM') {
+                    typeBadge = '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200"><i data-lucide="shield" class="w-3 h-3 mr-1"></i> CIAM</span>';
+                } else if (log.logType === 'LOGIN') {
+                    typeBadge = '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-200"><i data-lucide="log-in" class="w-3 h-3 mr-1"></i> LOGIN</span>';
+                } else {
+                    typeBadge = '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200"><i data-lucide="file-check" class="w-3 h-3 mr-1"></i> TRANS</span>';
+                }
+
+                // Status badge
+                let statusBadge = '';
+                const isSuccess = log.status === 'SUCCESS';
+                if (isSuccess) {
+                    statusBadge = '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">SUCCESS</span>';
+                } else {
+                    statusBadge = '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">' + escapeHtml(log.status || 'FAILED') + '</span>';
+                }
+
+                htmlParts.push(`
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-3 font-mono text-xs text-gray-600">${escapeHtml(log.createdAt || '-')}</td>
+                        <td class="px-4 py-3 text-center">${typeBadge}</td>
+                        <td class="px-4 py-3 font-medium text-gray-900">${escapeHtml(log.action || '-')}</td>
+                        <td class="px-4 py-3 text-center">${statusBadge}</td>
+                        <td class="px-4 py-3 font-medium text-gray-700">${escapeHtml(log.actor || '-')}</td>
+                        <td class="px-4 py-3 font-mono text-xs text-gray-500">${escapeHtml(log.ip || '-')}</td>
+                        <td class="px-4 py-3 text-xs text-gray-600 max-w-xs truncate" title="${escapeHtml(log.details || '')}">${escapeHtml(log.details || '-')}</td>
+                    </tr>
+                `);
+            });
+
+            tbody.innerHTML = htmlParts.join('');
+            if (window.lucide) lucide.createIcons();
         }
 
         async function loadCiamLogs() {

@@ -360,3 +360,26 @@ emote_addr) มาบันทึกลงในฟิลด์ details JSON ข
       4. **Migration Script สำหรับอัปเดต Database:**
          - จัดทำสคริปต์ [scripts/migrate_sap_and_telegram_settings.py](scripts/migrate_sap_and_telegram_settings.py) เพิ่มคอลัมน์ในตาราง `users` และบันทึกค่า Default ลงใน `system_settings`
          - ทดสอบรันบน Local Database ด้วย `.\venv\Scripts\python.exe` สำเร็จเรียบร้อย 100% ไร้ข้อผิดพลาด
+
+20. **การแก้ไขการแสดงผลหน้า Setting Tabs และการรวม 3 Log เข้าสู่ Unified Audit & Activity Logs (19 Oct 2026):**
+    - **ปัญหาที่พบและสาเหตุ:**
+      1. **หน้า Setting ใหม่ (Telegram, SAP B1, AI Copilot) ไม่แสดงผลเมื่อกดสลับแท็บ:**
+         - ใน [app.html](app.html) ส่วนแท็บ Log ก่อนหน้า (`trans-logs`) ขาดแท็กปิด `</div>` ทำให้แท็บใหม่ถูก Nest อยู่ภายใน Container ที่มี Class `hidden`
+         - ID ของปุ่มกด (`tab-btn-telegram-config`, `tab-btn-sap-config`, `tab-btn-ai-config`) ไม่ตรงกับตัวแปรที่ค้นหาใน `switchSettingsTab(tabName)` (`tab-btn-${t}`)
+      2. **แท็บ Log แยกเป็น 3 แท็บ ทำให้การตรวจสอบภาพรวมระบบยุ่งยาก:**
+         - ผู้ใช้ต้องการให้รวม Log ทั้ง 3 ตัว (CIAM, Login Activity, ISO 27001) เข้าด้วยกันเป็นตารางเดียว และมี Badge ระบุประเภท Log ในแต่ละแถว
+    - **การแก้ไขและผลลัพธ์:**
+      1. **แก้ไขโครงสร้าง HTML และระบบสลับแท็บใน Settings:**
+         - กำหนดคู่ ID ให้ตรงกัน 100%:
+           - `tab-btn-config` <-> `settings-tab-content-config`
+           - `tab-btn-telegram` <-> `settings-tab-content-telegram`
+           - `tab-btn-sap` <-> `settings-tab-content-sap`
+           - `tab-btn-ai` <-> `settings-tab-content-ai`
+           - `tab-btn-logs` <-> `settings-tab-content-logs`
+         - ปิดแท็ก `</div>` ครบถ้วนทุกแท็บ แยกเป็น Sibling Containers อิสระ
+         - เมื่อเปิดหน้า Settings ระบบจะเรียก `switchSettingsTab('config')` อัตโนมัติ แสดงผลอย่างถูกต้อง
+      2. **พัฒนาระบบ Unified Audit & Activity Logs (รวม 3 Log ในแท็บเดียว):**
+         - ใน [app.py](app.py): เพิ่ม Endpoint `GET /api/admin/unified-logs` ดึงข้อมูลจาก `CiamAuditLog`, `LoginLog`, และ `TransactionLog` มารวมกัน พร้อมจัดรูปแบบฟิลด์มาตรฐาน (`id`, `logType`, `createdAt`, `action`, `status`, `actor`, `ip`, `details`) และเรียงลำดับเวลาล่าสุด (BKK Timestamp Sort) ลงมา
+         - ใน [app.html](app.html): รวมแท็บเป็น **"Audit & Activity Logs"** ตารางเดียว แสดง Badge ประเภท Log (`CIAM` สีฟ้า, `LOGIN` สีม่วง, `TRANS` สีเหลืองอำพัน) และ Badge สถานะ (`SUCCESS` / `FAILURE`) พร้อมช่องค้นหาและตัวกรอง Log Type และ Status แบบ Real-time
+    - **ผลการทดสอบ:**
+      - ทดสอบการดึงข้อมูลผ่าน Endpoint `/api/admin/unified-logs` ทั้งแบบรวมและกรองเฉพาะประเภท พบว่าคืนค่า 200 OK ข้อมูลถูกต้องครบถ้วน

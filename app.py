@@ -4532,6 +4532,95 @@ def get_transaction_logs_api():
     return jsonify([log.to_dict() for log in logs]), 200
 
 
+@app.route("/api/admin/unified-logs", methods=["GET"])
+@roles_required("Administrator")
+def get_unified_logs_api():
+    """
+    Consolidated audit logs from CIAM, Login Activity, and Transaction Logs (ISO 27001).
+    """
+    limit = request.args.get("limit", 200, type=int)
+    log_type = request.args.get("type", "").strip().upper()
+
+    unified_list = []
+
+    # 1. CIAM Connection Logs
+    if not log_type or log_type == "CIAM":
+        try:
+            ciam_records = CiamAuditLog.query.order_by(CiamAuditLog.id.desc()).limit(min(limit, 250)).all()
+            for c in ciam_records:
+                created_local = ensure_bangkok(c.created_at)
+                is_ok = bool(c.status_code and c.status_code < 400)
+                status_text = "SUCCESS" if is_ok else "FAILURE"
+                unified_list.append({
+                    "id": f"ciam_{c.id}",
+                    "logType": "CIAM",
+                    "createdAt": created_local.strftime("%d-%m-%Y %H:%M:%S") if created_local else "-",
+                    "createdAtIso": created_local.isoformat() if created_local else "",
+                    "timestampSort": created_local.timestamp() if created_local else 0,
+                    "action": c.action or "-",
+                    "status": status_text,
+                    "statusCode": c.status_code or 200,
+                    "actor": c.updated_by or c.target_username or "system",
+                    "ip": c.client_ip or "-",
+                    "details": f"{c.message or ''} {c.reason or ''}".strip() or "-"
+                })
+        except Exception as e:
+            print(f"[UNIFIED LOGS] Error loading CIAM logs: {e}")
+
+    # 2. Login Activity Logs
+    if not log_type or log_type == "LOGIN":
+        try:
+            login_records = LoginLog.query.order_by(LoginLog.id.desc()).limit(min(limit, 250)).all()
+            for l in login_records:
+                created_local = ensure_bangkok(l.created_at)
+                is_success = (l.status and l.status.upper() == "SUCCESS")
+                status_text = "SUCCESS" if is_success else "FAILURE"
+                msg = l.failure_reason if l.failure_reason else ("Login successful" if is_success else l.status)
+                unified_list.append({
+                    "id": f"login_{l.id}",
+                    "logType": "LOGIN",
+                    "createdAt": created_local.strftime("%d-%m-%Y %H:%M:%S") if created_local else "-",
+                    "createdAtIso": created_local.isoformat() if created_local else "",
+                    "timestampSort": created_local.timestamp() if created_local else 0,
+                    "action": f"User Login ({l.status})",
+                    "status": status_text,
+                    "statusCode": 200 if is_success else 401,
+                    "actor": l.username or "-",
+                    "ip": l.ip_address or "-",
+                    "details": msg or "-"
+                })
+        except Exception as e:
+            print(f"[UNIFIED LOGS] Error loading Login logs: {e}")
+
+    # 3. Transaction Logs (ISO 27001)
+    if not log_type or log_type == "TRANSACTION":
+        try:
+            trans_records = TransactionLog.query.order_by(TransactionLog.id.desc()).limit(min(limit, 250)).all()
+            for t in trans_records:
+                d = t.to_dict()
+                created_local = ensure_bangkok(t.created_at)
+                status_val = (t.status or "SUCCESS").upper()
+                unified_list.append({
+                    "id": f"trans_{t.id}",
+                    "logType": "TRANSACTION",
+                    "createdAt": d.get("createdAt") or (created_local.strftime("%d-%m-%Y %H:%M:%S") if created_local else "-"),
+                    "createdAtIso": d.get("createdAtIso") or (created_local.isoformat() if created_local else ""),
+                    "timestampSort": created_local.timestamp() if created_local else 0,
+                    "action": f"[{t.category}] {t.action}",
+                    "status": status_val,
+                    "statusCode": 200 if status_val == "SUCCESS" else (400 if status_val == "FAILURE" else 0),
+                    "actor": d.get("triggeredBy") or "-",
+                    "ip": d.get("ip") or "-",
+                    "details": t.message or "-"
+                })
+        except Exception as e:
+            print(f"[UNIFIED LOGS] Error loading Transaction logs: {e}")
+
+    # Sort unified records by timestamp descending
+    unified_list.sort(key=lambda x: x["timestampSort"], reverse=True)
+    return jsonify(unified_list[:limit]), 200
+
+
 # =================================================================================
 # [START] Telegram Bot, SAP B1 & AI Copilot (CIAM Spec v2.8.0) Settings APIs
 # =================================================================================
