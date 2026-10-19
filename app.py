@@ -4936,68 +4936,157 @@ def ai_chat_api():
     model = SystemSetting.get_value("ai_model", "gemini-1.5-flash")
     system_prompt = SystemSetting.get_value("ai_system_prompt", "คุณคือ AI ผู้ช่วยอัจฉริยะประจำระบบ QT-Online บริษัท วินโดว์ เอเชีย จำกัด (มหาชน)")
 
-    # Build Live Read-Only DB Context (Scoped to RBAC)
+    # Build Comprehensive Live Read-Only DB Intelligence (Scoped strictly to RBAC)
     now = now_bangkok()
     current_date_str = now.strftime("%d/%m/%Y %H:%M")
     current_month_name = now.strftime("%B %Y")
+    current_year_str = str(now.year)
     start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).replace(tzinfo=None)
+    start_of_year = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0).replace(tzinfo=None)
 
     is_admin = current_user.role in ["Administrator", "Sale Admin"]
     if is_admin:
-        role_cond = or_(PurchaseOrder.status != "Cancelled", PurchaseOrder.sale_user_id == current_user.id)
+        po_role_cond = (PurchaseOrder.status != "Cancelled")
     else:
-        role_cond = (PurchaseOrder.sale_user_id == current_user.id)
+        po_role_cond = and_(PurchaseOrder.status != "Cancelled", PurchaseOrder.sale_user_id == current_user.id)
 
-    # Monthly Summary Stats
+    # 1. Monthly Summary
     month_row = db.session.query(
         func.count(PurchaseOrder.id),
         func.coalesce(func.sum(PurchaseOrder.amount), 0.0)
     ).filter(
-        role_cond,
-        PurchaseOrder.created >= start_of_month,
-        PurchaseOrder.status != "Cancelled"
+        po_role_cond,
+        PurchaseOrder.created >= start_of_month
     ).first()
-    month_qt_cnt = month_row[0] if month_row else 0
-    month_qt_val = float(month_row[1]) if month_row else 0.0
+    month_cnt = month_row[0] if month_row else 0
+    month_val = float(month_row[1]) if month_row else 0.0
 
-    # Status counts this month
+    # 2. Yearly Summary
+    year_row = db.session.query(
+        func.count(PurchaseOrder.id),
+        func.coalesce(func.sum(PurchaseOrder.amount), 0.0)
+    ).filter(
+        po_role_cond,
+        PurchaseOrder.created >= start_of_year
+    ).first()
+    year_cnt = year_row[0] if year_row else 0
+    year_val = float(year_row[1]) if year_row else 0.0
+
+    # 3. Status Breakdown
     status_rows = db.session.query(
         PurchaseOrder.status, func.count(PurchaseOrder.id)
     ).filter(
-        role_cond,
-        PurchaseOrder.created >= start_of_month
+        po_role_cond,
+        PurchaseOrder.created >= start_of_year
     ).group_by(PurchaseOrder.status).all()
     status_summary = ", ".join([f"{st}: {cnt} ใบ" for st, cnt in status_rows]) or "ไม่มีรายการ"
 
-    # Recent 5 QTs
-    recent_pos = PurchaseOrder.query.filter(role_cond).order_by(PurchaseOrder.created.desc()).limit(5).all()
+    # 4. Top 10 Best-Selling Products (Qty, Sales Amount, Last Sold Date)
+    top_products = db.session.query(
+        POItem.productCode,
+        POItem.name,
+        func.sum(POItem.qty).label('total_qty'),
+        func.sum(POItem.total).label('total_sales'),
+        func.max(PurchaseOrder.created).label('last_sold')
+    ).join(PurchaseOrder, POItem.po_id == PurchaseOrder.id).filter(
+        po_role_cond
+    ).group_by(POItem.productCode, POItem.name).order_by(desc('total_sales')).limit(10).all()
+
+    top_prod_lines = []
+    for idx, p in enumerate(top_products, 1):
+        last_sold_fmt = p.last_sold.strftime("%d/%m/%Y %H:%M น.") if p.last_sold else "-"
+        p_code = p.productCode or "-"
+        p_name = p.name or "-"
+        qty = p.total_qty or 0
+        sales = float(p.total_sales or 0.0)
+        top_prod_lines.append(
+            f"อันดับ {idx}: รหัสสินค้า: {p_code} | ชื่อสินค้า: {p_name} | ยอดขายรวม: {sales:,.2f} บาท | จำนวนที่ขายได้: {qty:,} ชิ้น | วันที่ขายล่าสุด: {last_sold_fmt}"
+        )
+    top_prod_str = "\n".join(top_prod_lines) if top_prod_lines else "ยังไม่มีข้อมูลสินค้าขายในระบบ"
+
+    # 5. Top 10 Customers (Spend, Quotation Count, Last Order Date)
+    top_customers = db.session.query(
+        PurchaseOrder.customerName,
+        func.count(PurchaseOrder.id).label('qt_count'),
+        func.coalesce(func.sum(PurchaseOrder.amount), 0.0).label('total_spent'),
+        func.max(PurchaseOrder.created).label('last_order')
+    ).filter(
+        po_role_cond
+    ).group_by(PurchaseOrder.customerName).order_by(desc('total_spent')).limit(10).all()
+
+    top_cust_lines = []
+    for idx, c in enumerate(top_customers, 1):
+        last_ord_fmt = c.last_order.strftime("%d/%m/%Y %H:%M น.") if c.last_order else "-"
+        c_name = c.customerName or "ไม่ระบุชื่อ"
+        spent = float(c.total_spent or 0.0)
+        top_cust_lines.append(
+            f"อันดับ {idx}: ลูกค้า: {c_name} | ยอดซื้อรวม: {spent:,.2f} บาท | จำนวน QT: {c.qt_count:,} ใบ | สั่งซื้อล่าสุด: {last_ord_fmt}"
+        )
+    top_cust_str = "\n".join(top_cust_lines) if top_cust_lines else "ยังไม่มีข้อมูลลูกค้าในระบบ"
+
+    # 6. Sales Performance (If Admin or Sale Admin)
+    sales_rep_str = ""
+    if is_admin:
+        sales_rep_rows = db.session.query(
+            User.fullName,
+            User.username,
+            func.count(PurchaseOrder.id).label('qt_count'),
+            func.coalesce(func.sum(PurchaseOrder.amount), 0.0).label('total_sales')
+        ).join(PurchaseOrder, PurchaseOrder.sale_user_id == User.id).filter(
+            po_role_cond,
+            PurchaseOrder.created >= start_of_month
+        ).group_by(User.fullName, User.username).order_by(desc('total_sales')).all()
+        if sales_rep_rows:
+            rep_lines = [f"- {r.fullName or r.username}: {r.qt_count} ใบ | ยอดรวม {float(r.total_sales):,.2f} บาท" for r in sales_rep_rows]
+            sales_rep_str = "\n[สรุปยอดขายพนักงานขายประจำเดือนนี้]:\n" + "\n".join(rep_lines)
+
+    # 7. Recent 10 Quotations
+    recent_pos = PurchaseOrder.query.filter(po_role_cond).order_by(PurchaseOrder.created.desc()).limit(10).all()
     recent_items = []
     for p in recent_pos:
-        c_date = p.created.strftime("%d/%m/%Y") if p.created else "-"
+        c_date = p.created.strftime("%d/%m/%Y %H:%M น.") if p.created else "-"
         p_num = p.poNumber or f"QT-{p.id}"
         recent_items.append(f"- เลขที่ {p_num} | ลูกค้า: {p.customerName or '-'} | ยอดเงิน: {p.amount:,.2f} บาท | สถานะ: {p.status} | วันที่: {c_date}")
     recent_str = "\n".join(recent_items) or "ไม่มีรายการ"
 
-    # Context & Readability Instructions
+    # 8. Check for specific keywords in user query (e.g. search specific PO)
+    specific_context = ""
+    po_matches = re.findall(r"(?:QT[-_\s]*)?([0-9]{4,10})", user_query_clean, re.IGNORECASE)
+    if po_matches:
+        for po_id_candidate in po_matches[:2]:
+            target_po = None
+            if po_id_candidate.isdigit():
+                target_po = PurchaseOrder.query.filter(or_(PurchaseOrder.id == int(po_id_candidate), PurchaseOrder.poNumber.ilike(f"%{po_id_candidate}%"))).first()
+            if target_po and (is_admin or target_po.sale_user_id == current_user.id):
+                items = POItem.query.filter_by(po_id=target_po.id).all()
+                item_details = [f"    * รหัส {it.productCode or '-'}: {it.name or '-'} จำนวน {it.qty} ชิ้น @ {it.price:,.2f} รวม {it.total:,.2f} บาท" for it in items]
+                specific_context += f"\n[ข้อมูลเจาะจงใบเสนอราคา {target_po.poNumber or target_po.id}]:\n  - ลูกค้า: {target_po.customerName}\n  - วันที่: {target_po.created.strftime('%d/%m/%Y') if target_po.created else '-'}\n  - ยอดรวม: {target_po.amount:,.2f} บาท\n  - สถานะ: {target_po.status}\n  - รายการสินค้า:\n" + "\n".join(item_details) + "\n"
+
     live_context = (
-        f"\n\n[บริบทข้อมูลจริงจากฐานข้อมูลระบบ ณ ปัจจุบัน (เวลาประเทศไทย UTC+7)]:\n"
-        f"- วันและเวลาปัจจุบัน: {current_date_str}\n"
-        f"- ผู้ใช้ที่กำลังสอบถาม: {current_user.fullName or current_user.username} (สิทธิ์: {current_user.role})\n"
-        f"- ข้อมูลสรุปประจำเดือน {current_month_name}:\n"
-        f"  * จำนวนใบเสนอราคา (QT) ทั้งหมดในเดือนนี้: {month_qt_cnt:,} ใบ\n"
-        f"  * ยอดรวมมูลค่าทั้งหมดในเดือนนี้: {month_qt_val:,.2f} บาท\n"
-        f"  * สถานะรายการ: {status_summary}\n"
-        f"- รายการใบเสนอราคาล่าสุด 5 รายการ:\n"
+        f"[ข้อมูลจริงจากฐานข้อมูลระบบ QT-Online (สิทธิ์การเข้าถึงของผู้ใช้: {current_user.fullName or current_user.username} - บทบาท: {current_user.role})]:\n"
+        f"- วันและเวลาปัจจุบัน: {current_date_str} (เวลาประเทศไทย UTC+7)\n"
+        f"- สรุปภาพรวมยอดขายประจำเดือน {current_month_name}:\n"
+        f"  * จำนวนใบเสนอราคาในเดือนนี้: {month_cnt:,} ใบ\n"
+        f"  * ยอดเงินรวมในเดือนนี้: {month_val:,.2f} บาท\n"
+        f"- สรุปภาพรวมประจำปี {current_year_str}:\n"
+        f"  * จำนวนใบเสนอราคาในปีนี้: {year_cnt:,} ใบ\n"
+        f"  * ยอดเงินรวมในปีนี้: {year_val:,.2f} บาท\n"
+        f"  * สถานะรายการในปีนี้: {status_summary}\n\n"
+        f"[ข้อมูล 10 อันดับสินค้าขายดีที่สุด (Top 10 Best-Selling Products by Revenue & Qty)]:\n"
+        f"{top_prod_str}\n\n"
+        f"[ข้อมูล 10 อันดับลูกค้าที่มียอดซื้อสูงสุด (Top 10 Customers by Revenue)]:\n"
+        f"{top_cust_str}\n"
+        f"{sales_rep_str}\n"
+        f"{specific_context}\n"
+        f"[10 รายการใบเสนอราคาล่าสุดในระบบ]:\n"
         f"{recent_str}\n\n"
-        f"[คำสั่งการจัดรูปแบบคำตอบ (Strict Readability & Formatting)]:\n"
-        f"1. **จัดรูปแบบให้อ่านง่าย สบายตาที่สุด ห้ามเขียนข้อความยาวติดกันเป็นก้อนเดียวเด็ดขาด**\n"
-        f"2. ใช้ Markdown Formatting อย่างเต็มประสิทธิภาพ:\n"
-        f"   - ใช้หัวข้อแยกหมวดหมู่ (เช่น ### หรือ **...**)\n"
-        f"   - แจกแจงรายการหรือสถิติเป็นข้อๆ (Bullet points หรือ Numbered list) เสมอ\n"
-        f"   - ตัวเลขจำนวนเงินหรือจำนวนใบ ให้ทำตัวหนาและมีคอมม่า เช่น **3,850,000.00 บาท**\n"
-        f"   - เว้นบรรทัดระหว่างหัวข้อและรายการย่อยให้อ่านสบายตา\n"
-        f"3. อ้างอิงตัวเลขจาก [บริบทข้อมูลจริงจากฐานข้อมูลระบบ] ด้านบนในการตอบ\n"
-        f"4. ตอบเป็นภาษาไทยอย่างสุภาพ กระชับ ชัดเจน และเป็นมืออาชีพ\n"
+        f"[ข้อกำหนดและกฎเหล็กในการตอบคำถาม (Mandatory Response Rules)]:\n"
+        f"1. **ทุกข้อมูลข้างต้นเป็นข้อมูลจริงที่มีอยู่ในระบบ QT-Online ณ ปัจจุบัน ซึ่งผู้ใช้คนนี้มีสิทธิ์เข้าถึงได้อย่างถูกต้อง 100%**\n"
+        f"2. คุณมีหน้าที่นำข้อมูลจริงเหล่านี้มาแสดง เปรียบเทียบ คำนวณบวกลบสถิติ หรือตอบคำถามของผู้ใช้อย่างครบถ้วน ถูกต้อง ชัดเจนที่สุด\n"
+        f"3. **ห้ามตอบเด็ดขาดว่า 'ระบบยังไม่มีการจัดเก็บข้อมูลเชิงลึกในระดับสินค้า/ลูกค้า' หรือ 'ข้อมูลจำกัด'** เพราะข้อมูลจริงทั้งหมดรวมถึง 10 อันดับสินค้าขายดี (จำนวนขาย, ยอดเงินรวม, วันที่ขายล่าสุด) ถูกส่งมาให้คุณในบริบทนี้แล้ว\n"
+        f"4. **เมื่อผู้ใช้ถามถึงสินค้าขายดี 10 อันดับ หรือคำถามเกี่ยวกับสินค้า/ลูกค้า/ยอดขาย ให้ตอบโดยใช้ข้อมูลจริงจากหัวข้อ [ข้อมูล 10 อันดับสินค้าขายดีที่สุด] หรือหัวข้อที่เกี่ยวข้องทันที** โดยแสดงผลเป็นตาราง Markdown Table หรือรายการจัดหมวดหมู่สวยงาม แสดง: อันดับ, รหัสสินค้า, ชื่อสินค้า, จำนวนที่ขายได้, ยอดเงินรวม (บาท), และวันที่ขายล่าสุด\n"
+        f"5. **จัดรูปแบบให้อ่านง่าย สบายตา**: ใช้ตาราง Markdown (|...|) หรือหัวข้อ (###) และข้อย่อย (- **...**) มีการเว้นบรรทัดชัดเจน ห้ามพิมพ์ข้อความยาวติดกันเป็นก้อนเดียว\n"
+        f"6. ตอบเป็นภาษาไทยอย่างสุภาพ มืออาชีพ และกระชับตรงประเด็น\n"
     )
 
     # If API key configured and provider is Google Gemini:
