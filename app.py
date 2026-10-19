@@ -4910,10 +4910,55 @@ def _safe_date_str(val, fmt="%d/%m/%Y %H:%M น."):
     return str(val)
 
 
-def build_direct_local_answer(user_query, current_user, top_products, top_customers, month_cnt, month_val, current_month_name, year_cnt, year_val, current_year_str, status_summary, sales_rep_rows, recent_pos):
+def build_direct_local_answer(
+    user_query, current_user, top_products, top_customers,
+    month_cnt, month_val, current_month_name, year_cnt, year_val, current_year_str,
+    status_summary, status_dict, sales_rep_rows, recent_pos, pending_pos,
+    user_target, target_achievement_pct
+):
     q = user_query.lower()
 
-    # 1. Top Customers
+    # 1. Pending Review / Waiting Approval ("รอตรวจสอบ", "รออนุมัติ", "อนุมัติ", "pending")
+    if any(k in q for k in ["รอตรวจสอบ", "รออนุมัติ", "รอตรวจ", "ค้างตรวจ", "pending", "รอการอนุมัติ", "ตรวจ"]):
+        if not pending_pos:
+            return (
+                "### ⏳ สรุปใบเสนอราคาที่รอตรวจสอบและรออนุมัติ (Pending Review / Approval)\n\n"
+                f"ขณะนี้ **ไม่มีใบเสนอราคาที่ค้างสถานะรอตรวจสอบหรือรออนุมัติ** ในระบบครับ (0 ใบ)\n\n"
+                f"💡 *ตรวจสอบข้อมูลล่าสุดจากฐานข้อมูลตามสิทธิ์ของ {current_user.fullName or current_user.username} ({current_user.role})*"
+            )
+        lines = [
+            f"### ⏳ สรุปใบเสนอราคาที่รอตรวจสอบและรออนุมัติ (Pending Review / Approval)\n",
+            f"พบรายการที่รอตรวจสอบ/รออนุมัติทั้งหมด **{len(pending_pos):,} ใบ** ในระบบ (ตามสิทธิ์ของ {current_user.fullName or current_user.username}):\n",
+            "| เลขที่ QT | ชื่อลูกค้า | ยอดเงินรวม (บาท) | สถานะปัจจุบัน | พนักงานขาย | วันที่สร้าง |",
+            "| :---: | :--- | :---: | :---: | :---: | :---: |"
+        ]
+        for p in pending_pos:
+            p_num = p.poNumber or f"QT-{p.id}"
+            c_name = p.customerName or "-"
+            amt = float(p.amount or 0.0)
+            st = p.status or "-"
+            sale_name = p.creator.fullName if p.creator else (p.creator.username if p.creator else "-")
+            c_date = _safe_date_str(p.created)
+            lines.append(f"| `{p_num}` | {c_name} | {amt:,.2f} บาท | **{st}** | {sale_name} | {c_date} |")
+        lines.append(f"\n💡 *สามารถคลิกดูหรือดำเนินการตรวจสอบใบเสนอราคาดังกล่าวได้ในแท็บ 'รายการใบเสนอราคา' บนหน้าจอระบบครับ*")
+        return "\n".join(lines)
+
+    # 2. Status Breakdown / Status Summary ("สถานะ", "status", "อนุมัติแล้ว", "ยกเลิกแล้ว", "ขอยกเลิก", "ฉบับร่าง")
+    if any(k in q for k in ["สถานะ", "status", "อนุมัติแล้ว", "ยกเลิกแล้ว", "ขอยกเลิก", "ฉบับร่าง", "เสร็จสิ้น", "ร่าง"]):
+        lines = [
+            "### 📊 สรุปจำนวนและยอดเงินใบเสนอราคาแยกตามสถานะ (Status Breakdown)\n",
+            "| สถานะ (Status) | จำนวน (ใบ) | ยอดเงินรวม (บาท) |",
+            "| :--- | :---: | :---: |"
+        ]
+        if status_dict:
+            for st_name, st_info in status_dict.items():
+                cnt = st_info.get("count", 0)
+                tot = st_info.get("total", 0.0)
+                lines.append(f"| **{st_name}** | {cnt:,} ใบ | {tot:,.2f} บาท |")
+        lines.append(f"\n💡 *ข้อมูลจริง Real-Time ตามสิทธิ์ของผู้ใช้ {current_user.fullName or current_user.username}*")
+        return "\n".join(lines)
+
+    # 3. Top Customers
     if any(k in q for k in ["ลูกค้า", "customer", "ยอดซื้อสูงสุด", "ซื้อรวม", "ซื้อเยอะ"]):
         if not top_customers:
             return "### 👥 สรุป 10 อันดับลูกค้าที่มียอดซื้อสูงสุด\n\nยังไม่มีข้อมูลคำสั่งซื้อหรือลูกค้าในระบบขณะนี้ครับ"
@@ -4931,7 +4976,7 @@ def build_direct_local_answer(user_query, current_user, top_products, top_custom
         lines.append(f"\n💡 *ข้อมูลคำนวณแบบ Real-Time จากฐานข้อมูลระบบ QT-Online ตามสิทธิ์ของ {current_user.fullName or current_user.username}*")
         return "\n".join(lines)
 
-    # 2. Top Products
+    # 4. Top Products
     if any(k in q for k in ["สินค้า", "product", "ขายดี", "ขายได้เท่าไร", "ขายดีที่สุด", "อันดับสินค้า"]):
         if not top_products:
             return "### 🏆 สรุป 10 อันดับสินค้าขายดีที่สุด\n\nยังไม่มีข้อมูลการขายสินค้าในระบบขณะนี้ครับ"
@@ -4950,7 +4995,33 @@ def build_direct_local_answer(user_query, current_user, top_products, top_custom
         lines.append(f"\n💡 *ข้อมูลคำนวณแบบ Real-Time จากฐานข้อมูลระบบ QT-Online ตามสิทธิ์ของ {current_user.fullName or current_user.username}*")
         return "\n".join(lines)
 
-    # 3. Monthly / Yearly Summary
+    # 5. Target / Sales Rep Performance
+    if any(k in q for k in ["เป้า", "target", "ผลงาน", "ยอดขายพนักงาน"]):
+        rep_section = ""
+        if sales_rep_rows:
+            rep_lines = [
+                "| พนักงานขาย | จำนวน QT | ยอดขายรวม (บาท) |",
+                "| :--- | :---: | :---: |"
+            ]
+            for r in sales_rep_rows:
+                r_name = r.fullName or r.username or "-"
+                r_cnt = r.qt_count or 0
+                r_tot = float(r.total_sales or 0.0)
+                rep_lines.append(f"| **{r_name}** | {r_cnt:,} ใบ | {r_tot:,.2f} บาท |")
+            rep_section = "\n\n#### 👥 ยอดขายแยกตามพนักงานขายเดือนนี้:\n" + "\n".join(rep_lines)
+
+        target_display = f"{user_target:,.2f} บาท" if user_target > 0 else "ไม่ได้กำหนดเป้า"
+        pct_display = f"{target_achievement_pct:.1f}%" if user_target > 0 else "-"
+        return (
+            f"### 🎯 ข้อมูลเป้าขายและผลงาน (Sales Performance & Target)\n\n"
+            f"- **พนักงาน:** {current_user.fullName or current_user.username} ({current_user.role})\n"
+            f"- **ยอดขายเดือน {current_month_name}:** `{month_val:,.2f}` บาท ({month_cnt:,} ใบ)\n"
+            f"- **เป้าขายประจำเดือน (Target Amount):** `{target_display}`\n"
+            f"- **อัตราความสำเร็จ (Achievement):** `{pct_display}`"
+            f"{rep_section}"
+        )
+
+    # 6. Monthly / Yearly Summary
     if any(k in q for k in ["เดือนนี้", "ประจำเดือน", "สรุปยอด", "ยอดขายเดือน", "ยอดขายปีนี้", "สถิติ"]):
         return (
             f"### 📊 สรุปยอดขายและสถิติใบเสนอราคา (QT)\n\n"
@@ -4964,7 +5035,7 @@ def build_direct_local_answer(user_query, current_user, top_products, top_custom
             f"💡 *ข้อมูลคำนวณจากระบบสดตามสิทธิ์ของ {current_user.fullName or current_user.username} ({current_user.role})*"
         )
 
-    # 4. Recent QTs
+    # 7. Recent QTs
     if any(k in q for k in ["ล่าสุด", "recent", "ใบเสนอราคาล่าสุด", "รายการ qt ล่าสุด"]):
         if not recent_pos:
             return "### 📋 รายการใบเสนอราคาล่าสุด\n\nไม่พบรายการใบเสนอราคาในระบบ"
@@ -4982,15 +5053,47 @@ def build_direct_local_answer(user_query, current_user, top_products, top_custom
             lines.append(f"| `{p_num}` | {c_name} | {amt:,.2f} บาท | **{st}** | {c_date} |")
         return "\n".join(lines)
 
-    # 5. Default overview
+    # 8. Specific Quotation Inspection
+    po_matches = re.findall(r"(?:QT[-_\s]*)?([0-9]{3,10})", q, re.IGNORECASE)
+    if po_matches:
+        for cand in po_matches:
+            target_po = PurchaseOrder.query.filter(
+                or_(PurchaseOrder.poNumber.ilike(f"%{cand}%"), PurchaseOrder.id == int(cand) if cand.isdigit() else False)
+            ).first()
+            if target_po and (current_user.role in ["Administrator", "Sale Admin"] or target_po.sale_user_id == current_user.id):
+                items = POItem.query.filter_by(po_id=target_po.id).all()
+                p_num = target_po.poNumber or f"QT-{target_po.id}"
+                c_date = _safe_date_str(target_po.created)
+                del_date = _safe_date_str(target_po.deliveryDate, "%d/%m/%Y")
+                items_table = [
+                    "| รหัสสินค้า | รายการสินค้า | จำนวน | ราคา/หน่วย | รวม (บาท) |",
+                    "| :---: | :--- | :---: | :---: | :---: |"
+                ]
+                for it in items:
+                    items_table.append(f"| `{it.productCode or '-'}` | {it.name or '-'} | {it.qty} ชิ้น | {it.price:,.2f} | {it.total:,.2f} |")
+                items_str = "\n".join(items_table) if items else "ไม่มีรายการสินค้า"
+                return (
+                    f"### 📄 รายละเอียดใบเสนอราคา {p_num}\n\n"
+                    f"- **ชื่อลูกค้า:** **{target_po.customerName or '-'}**\n"
+                    f"- **ยอดเงินรวม:** `{target_po.amount:,.2f}` บาท\n"
+                    f"- **สถานะปัจจุบัน:** **{target_po.status}**\n"
+                    f"- **วันที่สร้าง:** {c_date}\n"
+                    f"- **กำหนดส่งมอบ:** {del_date}\n"
+                    f"- **สถานที่จัดส่ง:** {target_po.poShipTo or '-'}\n\n"
+                    f"#### 📦 รายการสินค้าในใบเสนอราคานี้:\n"
+                    f"{items_str}\n"
+                )
+
+    # 9. Default overview
     return (
         f"🤖 **QT-Online AI Copilot (Real-Time Database):**\n\n"
         f"ยินดีให้บริการครับ จากการตรวจสอบข้อมูลในระบบตามสิทธิ์ของ **{current_user.fullName or current_user.username}**:\n\n"
+        f"- ⏳ **ใบเสนอราคาที่รอตรวจสอบ/รออนุมัติ:** {len(pending_pos):,} ใบ\n"
         f"- 📈 **ยอดขายเดือน {current_month_name}:** {month_cnt:,} ใบ รวม `{month_val:,.2f}` บาท\n"
         f"- 📊 **ยอดขายทั้งปี {current_year_str}:** {year_cnt:,} ใบ รวม `{year_val:,.2f}` บาท\n"
         f"- 👥 **ลูกค้าที่มีการสั่งซื้อสูงสุด:** {len(top_customers)} รายการ\n"
         f"- 🏆 **สินค้าขายดีในระบบ:** {len(top_products)} รายการ\n\n"
-        f"💡 *สามารถกดปุ่มคำถามแนะนำด้านล่าง หรือพิมพ์ถามเจาะจง เช่น '10 สินค้าขายดี' หรือ '10 ลูกค้ายอดซื้อสูงสุด' ได้ทันทีครับ*"
+        f"💡 *สามารถกดปุ่มคำถามแนะนำด้านล่าง หรือพิมพ์ถามเจาะจง เช่น 'QT รอตรวจสอบ/อนุมัติ', '10 สินค้าขายดี' หรือ '10 ลูกค้ายอดซื้อสูงสุด' ได้ทันทีครับ*"
     )
 
 
@@ -5022,13 +5125,25 @@ def ai_chat_api():
         user_query_clean = re.sub(r"sec_[A-Za-z0-9_]{6,}", "[REDACTED_SECRET]", user_query)
         user_query_clean = re.sub(r'("(?:password|hashed_password|sap_password|client_secret|api_key)"\s*:\s*)"[^"]*"', r'\1"[REDACTED]"', user_query_clean, flags=re.IGNORECASE)
 
-        # Check for mutation keywords (Spec v2.8.0 11.1 rule 3: Strict Zero-Mutation)
-        mutation_keywords = ["แก้ไข", "อัปเดต", "ลบ", "เปลี่ยนสถานะ", "อนุมัติ", "delete", "update", "drop", "truncate"]
-        if any(k in user_query_clean.lower() for k in mutation_keywords):
+        # Check for imperative mutation commands (Spec v2.8.0 11.1 rule 3: Strict Zero-Mutation)
+        # MUST NOT block read queries asking about status ("รออนุมัติ", "อนุมัติแล้ว", "ขอยกเลิก", "ขอแก้ไข", "มีกี่ใบ", etc.)
+        q_lower = user_query_clean.lower()
+        is_query_intent = any(k in q_lower for k in [
+            "กี่ใบ", "มีกี่", "อะไรบ้าง", "แสดง", "ดู", "ค้นหา", "สรุป", "รายงาน", "เช็ค",
+            "สถานะ", "ประวัติ", "เท่าไร", "รายชื่อ", "รายการ", "รายละเอียด", "ใคร", "ไหน", "เท่าใด", "?"
+        ])
+        
+        imperative_mutation_patterns = [
+            r"(?:ช่วย|ทำการ|สั่ง|ให้)\s*(?:อนุมัติ|ลบ|แก้ไข|อัปเดต|เปลี่ยนสถานะ|ยกเลิก)",
+            r"^(?:อนุมัติ|ลบ|แก้ไข|อัปเดต|เปลี่ยนสถานะ|ยกเลิก)\s+(?:ใบเสนอราคา|qt|po|[0-9]+)",
+            r"(?:delete\s+from|drop\s+table|drop\s+database|truncate\s+table|update\s+\w+\s+set)",
+        ]
+        is_mutation_action = not is_query_intent and any(re.search(pat, q_lower) for pat in imperative_mutation_patterns)
+        if is_mutation_action:
             return jsonify({
                 "message": {
                     "role": "assistant",
-                    "content": "🛡️ <b>นโยบายความปลอดภัย (Strict Read-Only):</b> AI Copilot ได้รับการออกแบบให้สืบค้น คำนวณสรุปสถิติ และวิเคราะห์ข้อมูลในรูปแบบอ่านอย่างเดียว (Read-Only) เท่านั้น <u>ไม่สามารถแก้ไข ลบ หรือเปลี่ยนสถานะข้อมูลในระบบได้</u><br><br>💡 หากต้องการดำเนินการดังกล่าว กรุณาใช้ปุ่มหรือเมนูบนหน้าจอระบบด้วยตนเองครับ"
+                    "content": "🛡️ <b>นโยบายความปลอดภัย (Strict Read-Only):</b> AI Copilot ได้รับการออกแบบให้สืบค้น คำนวณสรุปสถิติ และวิเคราะห์ข้อมูลในรูปแบบอ่านอย่างเดียว (Read-Only) เท่านั้น <u>ไม่สามารถแก้ไข ลบ หรือเปลี่ยนสถานะข้อมูลในระบบได้</u><br><br>💡 หากต้องการอนุมัติ ลบ หรือเปลี่ยนสถานะ กรุณาใช้ปุ่มดำเนินการบนหน้าจอระบบด้วยตนเองครับ"
                 }
             }), 200
 
@@ -5073,16 +5188,34 @@ def ai_chat_api():
         year_cnt = year_row[0] if year_row else 0
         year_val = float(year_row[1]) if year_row else 0.0
 
-        # 3. Status Breakdown
-        status_rows = db.session.query(
-            PurchaseOrder.status, func.count(PurchaseOrder.id)
-        ).filter(
-            po_role_cond,
-            PurchaseOrder.created >= start_of_year
-        ).group_by(PurchaseOrder.status).all()
-        status_summary = ", ".join([f"{st}: {cnt} ใบ" for st, cnt in status_rows]) or "ไม่มีรายการ"
+        # 3. Status Breakdown with Counts & Amount
+        status_order = ["Draft", "Pending Review", "Changes Requested", "Approved", "Completed", "Cancellation Requested", "Cancelled"]
+        status_stat_rows = db.session.query(
+            PurchaseOrder.status,
+            func.count(PurchaseOrder.id).label("cnt"),
+            func.coalesce(func.sum(PurchaseOrder.amount), 0.0).label("total")
+        ).filter(po_role_cond).group_by(PurchaseOrder.status).all()
+        status_dict = {s: {"count": 0, "total": 0.0} for s in status_order}
+        for st_name, st_cnt, st_tot in status_stat_rows:
+            status_dict[st_name] = {"count": st_cnt, "total": float(st_tot)}
+        status_summary = ", ".join([f"{st}: {status_dict[st]['count']} ใบ ({status_dict[st]['total']:,.2f} บาท)" for st in status_order if status_dict[st]['count'] > 0]) or "ไม่มีรายการ"
 
-        # 4. Top 10 Best-Selling Products (Qty, Sales Amount, Last Sold Date)
+        # 4. Pending Review / Waiting Approval QTs
+        pending_pos = PurchaseOrder.query.filter(
+            po_role_cond,
+            PurchaseOrder.status.in_(["Pending Review", "Waiting Approval", "Wait Review", "Cancellation Requested"])
+        ).order_by(PurchaseOrder.created.desc()).limit(20).all()
+        pending_lines = []
+        for p in pending_pos:
+            c_date = _safe_date_str(p.created)
+            p_num = p.poNumber or f"QT-{p.id}"
+            sale_name = p.creator.fullName if p.creator else (p.creator.username if p.creator else "-")
+            pending_lines.append(
+                f"- เลขที่: {p_num} | ลูกค้า: {p.customerName or '-'} | ยอดเงิน: {p.amount:,.2f} บาท | สถานะ: {p.status} | ผู้สร้าง: {sale_name} | วันที่: {c_date}"
+            )
+        pending_str = "\n".join(pending_lines) if pending_lines else "ไม่มีรายการใบเสนอราคาที่ค้างสถานะรอตรวจสอบหรือรออนุมัติในขณะนี้ (0 ใบ)"
+
+        # 5. Top 10 Best-Selling Products (Qty, Sales Amount, Last Sold Date)
         sum_sales = func.coalesce(func.sum(POItem.total), 0.0)
         top_products = db.session.query(
             POItem.productCode,
@@ -5106,7 +5239,7 @@ def ai_chat_api():
             )
         top_prod_str = "\n".join(top_prod_lines) if top_prod_lines else "ยังไม่มีข้อมูลสินค้าขายในระบบ"
 
-        # 5. Top 10 Customers (Spend, Quotation Count, Last Order Date)
+        # 6. Top 10 Customers (Spend, Quotation Count, Last Order Date)
         sum_spent = func.coalesce(func.sum(PurchaseOrder.amount), 0.0)
         top_customers = db.session.query(
             PurchaseOrder.customerName,
@@ -5127,7 +5260,9 @@ def ai_chat_api():
             )
         top_cust_str = "\n".join(top_cust_lines) if top_cust_lines else "ยังไม่มีข้อมูลลูกค้าในระบบ"
 
-        # 6. Sales Performance (If Admin or Sale Admin)
+        # 7. Sales Target & Rep Performance
+        user_target = float(current_user.target_amount or 0.0)
+        target_achievement_pct = (month_val / user_target * 100.0) if user_target > 0 else 0.0
         sales_rep_rows = None
         sales_rep_str = ""
         if is_admin:
@@ -5145,7 +5280,7 @@ def ai_chat_api():
                 rep_lines = [f"- {r.fullName or r.username}: {r.qt_count} ใบ | ยอดรวม {float(r.total_sales):,.2f} บาท" for r in sales_rep_rows]
                 sales_rep_str = "\n[สรุปยอดขายพนักงานขายประจำเดือนนี้]:\n" + "\n".join(rep_lines)
 
-        # 7. Recent 10 Quotations
+        # 8. Recent 10 Quotations
         recent_pos = PurchaseOrder.query.filter(po_role_cond).order_by(PurchaseOrder.created.desc()).limit(10).all()
         recent_items = []
         for p in recent_pos:
@@ -5154,7 +5289,7 @@ def ai_chat_api():
             recent_items.append(f"- เลขที่ {p_num} | ลูกค้า: {p.customerName or '-'} | ยอดเงิน: {p.amount:,.2f} บาท | สถานะ: {p.status} | วันที่: {c_date}")
         recent_str = "\n".join(recent_items) or "ไม่มีรายการ"
 
-        # 8. Check for specific keywords in user query (e.g. search specific PO)
+        # 9. Check for specific keywords in user query (e.g. search specific PO)
         specific_context = ""
         po_matches = re.findall(r"(?:QT[-_\s]*)?([0-9]{4,10})", user_query_clean, re.IGNORECASE)
         if po_matches:
@@ -5170,6 +5305,7 @@ def ai_chat_api():
         live_context = (
             f"[ข้อมูลจริงจากฐานข้อมูลระบบ QT-Online (สิทธิ์การเข้าถึงของผู้ใช้: {current_user.fullName or current_user.username} - บทบาท: {current_user.role})]:\n"
             f"- วันและเวลาปัจจุบัน: {current_date_str} (เวลาประเทศไทย UTC+7)\n"
+            f"- เป้าหมายยอดขายของผู้ใช้: {user_target:,.2f} บาท (บรรลุแล้ว {target_achievement_pct:.1f}%)\n"
             f"- สรุปภาพรวมยอดขายประจำเดือน {current_month_name}:\n"
             f"  * จำนวนใบเสนอราคาในเดือนนี้: {month_cnt:,} ใบ\n"
             f"  * ยอดเงินรวมในเดือนนี้: {month_val:,.2f} บาท\n"
@@ -5177,6 +5313,8 @@ def ai_chat_api():
             f"  * จำนวนใบเสนอราคาในปีนี้: {year_cnt:,} ใบ\n"
             f"  * ยอดเงินรวมในปีนี้: {year_val:,.2f} บาท\n"
             f"  * สถานะรายการในปีนี้: {status_summary}\n\n"
+            f"[รายการใบเสนอราคาที่สถานะรอตรวจสอบ/รออนุมัติ (Pending Review / Approval)]:\n"
+            f"{pending_str}\n\n"
             f"[ข้อมูล 10 อันดับสินค้าขายดีที่สุด (Top 10 Best-Selling Products by Revenue & Qty)]:\n"
             f"{top_prod_str}\n\n"
             f"[ข้อมูล 10 อันดับลูกค้าที่มียอดซื้อสูงสุด (Top 10 Customers by Revenue)]:\n"
@@ -5188,8 +5326,8 @@ def ai_chat_api():
             f"[ข้อกำหนดและกฎเหล็กในการตอบคำถาม (Mandatory Response Rules)]:\n"
             f"1. **ทุกข้อมูลข้างต้นเป็นข้อมูลจริงที่มีอยู่ในระบบ QT-Online ณ ปัจจุบัน ซึ่งผู้ใช้คนนี้มีสิทธิ์เข้าถึงได้อย่างถูกต้อง 100%**\n"
             f"2. คุณมีหน้าที่นำข้อมูลจริงเหล่านี้มาแสดง เปรียบเทียบ คำนวณบวกลบสถิติ หรือตอบคำถามของผู้ใช้อย่างครบถ้วน ถูกต้อง ชัดเจนที่สุด\n"
-            f"3. **ห้ามตอบเด็ดขาดว่า 'ระบบยังไม่มีการจัดเก็บข้อมูลเชิงลึกในระดับสินค้า/ลูกค้า' หรือ 'ข้อมูลจำกัด'** เพราะข้อมูลจริงทั้งหมดรวมถึง 10 อันดับสินค้าขายดี (จำนวนขาย, ยอดเงินรวม, วันที่ขายล่าสุด) ถูกส่งมาให้คุณในบริบทนี้แล้ว\n"
-            f"4. **เมื่อผู้ใช้ถามถึงสินค้าขายดี 10 อันดับ หรือคำถามเกี่ยวกับสินค้า/ลูกค้า/ยอดขาย ให้ตอบโดยใช้ข้อมูลจริงจากหัวข้อ [ข้อมูล 10 อันดับสินค้าขายดีที่สุด] หรือหัวข้อที่เกี่ยวข้องทันที** โดยแสดงผลเป็นตาราง Markdown Table หรือรายการจัดหมวดหมู่สวยงาม แสดง: อันดับ, รหัสสินค้า, ชื่อสินค้า, จำนวนที่ขายได้, ยอดเงินรวม (บาท), และวันที่ขายล่าสุด\n"
+            f"3. **เมื่อผู้ใช้ถามถึง 'QT รอตรวจสอบ/รออนุมัติ' หรือคำถามว่ามีใบเสนอราคารอตรวจสอบกี่ใบ ให้ตอบโดยใช้ข้อมูลจากหัวข้อ [รายการใบเสนอราคาที่สถานะรอตรวจสอบ/รออนุมัติ] ทันที** ระบุจำนวนใบที่พบและแจกแจงรายการเป็นตาราง Markdown\n"
+            f"4. **ห้ามตอบเด็ดขาดว่า 'ระบบยังไม่มีการจัดเก็บข้อมูล' หรือ 'ข้อมูลจำกัด' หรือปฏิเสธคำถาม** เพราะข้อมูลจริงทั้งหมดถูกส่งมาให้คุณในบริบทนี้แล้ว\n"
             f"5. **จัดรูปแบบให้อ่านง่าย สบายตา**: ใช้ตาราง Markdown (|...|) หรือหัวข้อ (###) และข้อย่อย (- **...**) มีการเว้นบรรทัดชัดเจน ห้ามพิมพ์ข้อความยาวติดกันเป็นก้อนเดียว\n"
             f"6. ตอบเป็นภาษาไทยอย่างสุภาพ มืออาชีพ และกระชับตรงประเด็น\n"
         )
@@ -5249,8 +5387,12 @@ def ai_chat_api():
             year_val=year_val,
             current_year_str=current_year_str,
             status_summary=status_summary,
+            status_dict=status_dict,
             sales_rep_rows=sales_rep_rows if is_admin else None,
-            recent_pos=recent_pos
+            recent_pos=recent_pos,
+            pending_pos=pending_pos,
+            user_target=user_target,
+            target_achievement_pct=target_achievement_pct
         )
         return jsonify({
             "message": {
