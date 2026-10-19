@@ -386,3 +386,24 @@ emote_addr) มาบันทึกลงในฟิลด์ details JSON ข
       3. **Hotfix อาการหน้าจอว่างเปล่า (Blank Screen / หายหมด):**
          - **สาเหตุ:** ฟังก์ชัน `saveCiamSettings()` ขาดเครื่องหมายปีกกาปิด `}` ส่งผลให้ Engine ของ Browser เกิด JavaScript SyntaxError (`Unexpected end of input`) และหยุดการรันสคริปต์หน้าจอทั้งหมด
          - **การแก้ไข:** เติมเครื่องหมายปีกกาปิด `}` ให้กับฟังก์ชัน `saveCiamSettings()` และใช้ Node.js ทำ AST Check สคริปต์ทุกบล็อกใน `app.html` ผ่าน 100% ไร้ข้อผิดพลาด
+
+21. **การแก้ไขปัญหา AI Copilot "Api Key ใส่แล้วไม่ Save" และปรับปรุงระบบทดสอบการเชื่อมต่อ (19 Oct 2026):**
+    - **ปัญหาที่พบและสาเหตุ:**
+      1. **API Key ใส่แล้วดูเหมือนไม่บันทึก และไม่สามารถกดเซฟซ้ำได้:**
+         - ใน `loadAiSettings()` มีการนำสตริงที่ถูก Mask เช่น `AQ.Ab0...pshw` ไปใส่ใน `input.value` โดยตรง ทำให้เมื่อเปิดหน้าจอขึ้นมา กล่อง Input จะมีจุดไข่ปลา `...` ฝังอยู่ข้างใน
+         - เมื่อกดปุ่ม "บันทึกการตั้งค่า AI Copilot" ฟังก์ชัน `saveAiSettings()` มีเงื่อนไข `if (apiKey && !apiKey.includes('...'))` ส่งผลให้คีย์ที่ถูก Mask ไว้ไม่ถูกส่งไปยัง Server
+      2. **ระบบทดสอบการเชื่อมต่อแจ้งเตือน "Invalid Key" แม้จะกรอกคีย์ถูกต้อง:**
+         - ใน `test_ai_connection_api()` บน [app.py](file:///d:/Python/PO-Online/app.py) ใช้ URL ที่ฮาร์ดโค้ดโมเดล `gemini-2.5-flash` ซึ่งไม่มีอยู่จริงใน Google Gemini v1beta ส่งผลให้ Google ตอบกลับเป็น `404 Not Found`
+         - เมื่อเกิด Error ทาง Server ส่ง HTTP Status Code `400` กลับไป ทำให้ฟังก์ชัน `fetchApi()` บน Frontend รีเทิร์นค่าเป็น `null` และหน้าจอแสดงข้อความ Hardcoded ว่า `Invalid Key / API Key ไม่ถูกต้อง` แทนที่จะแสดง Error จาก Google จริงๆ
+    - **การแก้ไขและผลลัพธ์:**
+      1. **ปรับปรุง UX/UI การจัดการ Secret API Key ใน [app.html](file:///d:/Python/PO-Online/app.html):**
+         - ใน `loadAiSettings()`: กำหนดให้ `keyInput.value = ''` (ปล่อยเป็นค่าว่างเสมอ ป้องกันการส่งสตริง `...` ซ้ำ) และนำ Masked Key ไปแสดงผลใน `placeholder` แทน เช่น `•••••••••••••••••••• (AQ.Ab0...pshw) - บันทึกในระบบแล้ว`
+         - เพิ่ม Badge **"มี API Key บันทึกไว้ในระบบแล้ว"** (`#ai-key-saved-badge`) สีเขียว พร้อมข้อความแนะนำความปลอดภัย `#ai-key-note` แจ้งให้ผู้ใช้ทราบว่าระบบมีคีย์ที่บันทึกไว้อย่างปลอดภัยแล้ว หากไม่ต้องการเปลี่ยนสามารถปล่อยว่างได้เลย
+         - ใน `saveAiSettings()`: ตรวจสอบและส่งคีย์ใหม่เฉพาะเมื่อผู้ใช้กรอกคีย์ใหม่จริง (ไม่มี `...` หรือ `****`) และหลังจากบันทึกเสร็จจะเรียก `loadAiSettings()` ทันที
+      2. **ปรับปรุง Backend Validation ใน [app.py](file:///d:/Python/PO-Online/app.py):**
+         - ใน `test_ai_connection_api()`: ปรับการตรวจสอบคีย์ของ Google ให้ยิงทดสอบไปยัง Canonical Endpoint `https://generativelanguage.googleapis.com/v1beta/models?key={api_key}` โดยตรง ซึ่งเป็นการตรวจสอบความถูกต้องของ API Key ในระดับบัญชีโดยไม่ขึ้นกับชื่อโมเดลเฉพาะเจาะจง
+         - เปลี่ยนการคืนค่าเมื่อเกิดข้อผิดพลาดให้เป็น HTTP `200` พร้อม `{"success": False, "message": "..."}` เพื่อให้ Frontend ได้รับ JSON และนำ Error Message จาก Google API มาแสดงผลบนหน้าจอได้อย่างชัดเจน
+         - รองรับกรณีที่ผู้ใช้ปล่อยช่อง API Key ว่างไว้ขณะกดทดสอบ โดยระบบจะดึงคีย์ที่บันทึกไว้ในฐานข้อมูลมาทดสอบให้อัตโนมัติ
+    - **ผลการทดสอบ:**
+      - ทดสอบการนำเข้าโมดูล `app.py` ด้วย Local Python (`.\venv\Scripts\python.exe`) สำเร็จ 100%
+      - ทดสอบตรวจสอบไวยากรณ์ JavaScript ทุกบล็อกใน `app.html` ผ่าน Node.js สำเร็จ ไร้ข้อผิดพลาด

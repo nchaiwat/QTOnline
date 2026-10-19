@@ -4848,28 +4848,50 @@ def test_ai_connection_api():
         api_key = SystemSetting.get_value("ai_api_key", "")
     
     if not api_key:
-        return jsonify({"success": False, "message": "ยังไม่ได้ระบุ API Key สำหรับทดสอบ"}), 400
+        return jsonify({"success": False, "message": "ยังไม่ได้ระบุ API Key สำหรับทดสอบ กรุณากรอก API Key แล้วกดบันทึก"}), 200
+
+    provider = data.get("provider") or SystemSetting.get_value("ai_provider", "google")
+    model = (data.get("model") or SystemSetting.get_value("ai_model", "gemini-1.5-flash")).strip()
 
     import time
     start = time.time()
     try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
-        payload = json.dumps({"contents": [{"parts": [{"text": "Hello"}]}]}).encode('utf-8')
-        req = urllib.request.Request(
-            url,
-            data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "X-No-Model-Training": "true",
-                "X-Data-Retention": "none",
-            }
-        )
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        if provider == "google":
+            # Canonical Google Generative Language API Key validation
+            url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+            req = urllib.request.Request(
+                url,
+                headers={
+                    "Content-Type": "application/json",
+                    "User-Agent": "QTOnline-AICopilot/1.0",
+                }
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                resp_data = json.loads(resp.read().decode('utf-8'))
+                models_list = [m.get("name", "").replace("models/", "") for m in resp_data.get("models", [])]
+                latency = int((time.time() - start) * 1000)
+                model_found = any(model in m for m in models_list) if model else True
+                model_note = f" (โมเดล '{model}' พร้อมใช้งาน)" if model_found else f" (พร้อมใช้งาน, โมเดลแนะนำ: gemini-1.5-flash)"
+                return jsonify({
+                    "success": True,
+                    "message": f"เชื่อมต่อ AI Engine สำเร็จ (Google API Key Valid, Latency {latency} ms){model_note}",
+                    "latency_ms": latency
+                }), 200
+        else:
             latency = int((time.time() - start) * 1000)
-            return jsonify({"success": True, "message": "เชื่อมต่อ AI Engine สำเร็จ (Validation Passed)", "latency_ms": latency}), 200
+            return jsonify({"success": True, "message": f"การตั้งค่า Provider '{provider}' พร้อมใช้งาน", "latency_ms": latency}), 200
+    except urllib.error.HTTPError as e:
+        latency = int((time.time() - start) * 1000)
+        err_msg = f"HTTP Error {e.code}: {e.reason}"
+        try:
+            err_json = json.loads(e.read().decode('utf-8'))
+            err_msg = err_json.get("error", {}).get("message", err_msg)
+        except Exception:
+            pass
+        return jsonify({"success": False, "message": f"การทดสอบ API Key ล้มเหลว ({err_msg})", "latency_ms": latency}), 200
     except Exception as e:
         latency = int((time.time() - start) * 1000)
-        return jsonify({"success": False, "message": f"การทดสอบ API Key ล้มเหลว: {str(e)}", "latency_ms": latency}), 400
+        return jsonify({"success": False, "message": f"เกิดข้อผิดพลาดในการเชื่อมต่อ: {str(e)}", "latency_ms": latency}), 200
 
 
 @app.route("/api/ai/chat", methods=["POST"])

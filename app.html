@@ -2264,9 +2264,14 @@
 
                                 <!-- AI API Key -->
                                 <div>
-                                    <label for="ai-api-key" class="block text-sm font-semibold text-gray-700 mb-1">
-                                        AI Provider API Key <span class="text-red-500">*</span>
-                                    </label>
+                                    <div class="flex items-center justify-between mb-1">
+                                        <label for="ai-api-key" class="block text-sm font-semibold text-gray-700">
+                                            AI Provider API Key <span class="text-red-500">*</span>
+                                        </label>
+                                        <span id="ai-key-saved-badge" class="hidden text-xs px-2.5 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                            <i data-lucide="check-circle-2" class="w-3.5 h-3.5 inline mr-1 text-emerald-600"></i>มี API Key บันทึกไว้ในระบบแล้ว
+                                        </span>
+                                    </div>
                                     <p class="text-xs text-gray-500 mb-2">API Key สำหรับเรียกใช้งานโมเดล AI (จัดเก็บแบบเข้ารหัสความปลอดภัยในระบบ)</p>
                                     <div class="relative">
                                         <input type="password" id="ai-api-key" autocomplete="off"
@@ -2277,6 +2282,9 @@
                                             <i data-lucide="eye" class="w-4 h-4"></i>
                                         </button>
                                     </div>
+                                    <p id="ai-key-note" class="text-xs text-blue-600 mt-1.5 hidden">
+                                        💡 <strong>ปลอดภัย:</strong> ระบบได้บันทึก API Key ไว้แล้ว หากไม่ต้องการเปลี่ยนคีย์ สามารถเว้นว่างช่องนี้ไว้ได้เลย หรือกรอกคีย์ใหม่ทับเพื่อเปลี่ยน
+                                    </p>
                                 </div>
 
                                 <!-- System Prompt -->
@@ -8645,12 +8653,27 @@
                     const provSelect = document.getElementById('ai-provider');
                     if (provSelect) provSelect.value = res.settings.provider || 'google';
                     const modelInput = document.getElementById('ai-model');
-                    if (modelInput) modelInput.value = res.settings.model || 'gemini-2.5-flash';
+                    if (modelInput) modelInput.value = res.settings.model || 'gemini-1.5-flash';
+                    
                     const keyInput = document.getElementById('ai-api-key');
-                    if (keyInput) keyInput.value = res.settings.api_key_masked || '';
+                    const keyBadge = document.getElementById('ai-key-saved-badge');
+                    const keyNote = document.getElementById('ai-key-note');
+                    if (keyInput) {
+                        keyInput.value = ''; // Always clear raw input so user doesn't submit masked '...' strings
+                        if (res.settings.has_api_key) {
+                            keyInput.placeholder = `•••••••••••••••••••• (${res.settings.api_key_masked}) - บันทึกในระบบแล้ว`;
+                            if (keyBadge) keyBadge.classList.remove('hidden');
+                            if (keyNote) keyNote.classList.remove('hidden');
+                        } else {
+                            keyInput.placeholder = 'AIzaSy... หรือ sk-...';
+                            if (keyBadge) keyBadge.classList.add('hidden');
+                            if (keyNote) keyNote.classList.add('hidden');
+                        }
+                    }
                     const promptArea = document.getElementById('ai-system-prompt');
                     if (promptArea) promptArea.value = res.settings.system_prompt || '';
 
+                    if (window.lucide) lucide.createIcons();
                     initAiCopilotWidget(res.settings);
                 }
             } catch (err) {
@@ -8682,7 +8705,7 @@
                 model: document.getElementById('ai-model')?.value?.trim(),
                 system_prompt: document.getElementById('ai-system-prompt')?.value?.trim()
             };
-            if (apiKey && !apiKey.includes('...')) {
+            if (apiKey && !apiKey.includes('...') && !apiKey.startsWith('****')) {
                 payload.api_key = apiKey;
             }
 
@@ -8690,9 +8713,9 @@
                 const res = await fetchApi('/api/settings/ai', 'PUT', payload);
                 if (res && res.success) {
                     alert("บันทึกการตั้งค่า AI Copilot เรียบร้อยแล้ว");
-                    loadAiSettings();
+                    await loadAiSettings();
                 } else {
-                    alert(res?.error || "เกิดข้อผิดพลาดในการบันทึก");
+                    alert(res?.error || res?.message || "เกิดข้อผิดพลาดในการบันทึก");
                 }
             } catch (err) {
                 alert("เกิดข้อผิดพลาด: " + err.message);
@@ -8716,12 +8739,22 @@
                 btn.innerHTML = '<i data-lucide="loader" class="w-3.5 h-3.5 mr-1.5 animate-spin"></i> กำลังทดสอบ...';
             }
             if (indicator) indicator.className = 'w-3 h-3 rounded-full bg-yellow-400 animate-pulse';
-            if (statusText) statusText.textContent = 'กำลังทดสอบ...';
+            if (statusText) {
+                statusText.className = 'ml-2 text-xs font-mono px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 font-bold';
+                statusText.textContent = 'Testing...';
+            }
+            if (details) details.textContent = 'กำลังส่งคำขอตรวจสอบความถูกต้องของ API Key ไปยัง AI Provider...';
 
             const apiKey = document.getElementById('ai-api-key')?.value?.trim();
+            const provider = document.getElementById('ai-provider')?.value || 'google';
+            const model = document.getElementById('ai-model')?.value?.trim() || 'gemini-1.5-flash';
 
             try {
-                const res = await fetchApi('/api/settings/ai/test', 'POST', { api_key: apiKey });
+                const res = await fetchApi('/api/settings/ai/test', 'POST', {
+                    api_key: apiKey,
+                    provider: provider,
+                    model: model
+                });
                 if (res && res.success) {
                     if (indicator) indicator.className = 'w-3 h-3 rounded-full bg-green-500';
                     if (statusText) {
@@ -8735,7 +8768,7 @@
                         statusText.className = 'ml-2 text-xs font-mono px-2 py-0.5 rounded bg-red-100 text-red-800 font-bold';
                         statusText.textContent = 'Invalid Key';
                     }
-                    if (details) details.textContent = res?.message || 'API Key ไม่ถูกต้อง';
+                    if (details) details.textContent = res?.message || 'API Key ไม่ถูกต้อง หรือไม่สามารถเชื่อมต่อไปยัง Provider ได้';
                 }
             } catch (err) {
                 if (indicator) indicator.className = 'w-3 h-3 rounded-full bg-red-500';
