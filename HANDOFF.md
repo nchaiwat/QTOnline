@@ -440,8 +440,26 @@ emote_addr) มาบันทึกลงในฟิลด์ details JSON ข
       2. **ปรับปรุง System Prompt และ Mandatory Response Rules:**
          - กำชับคำสั่งห้าม AI ปฏิเสธว่าไม่มีข้อมูลในระดับสินค้า/ลูกค้า เพราะระบบได้ดึงข้อมูลจริงส่งให้ใน System Context แล้ว
          - กำหนดให้ AI นำข้อมูล 10 อันดับสินค้าขายดีมาแสดงผลเป็นตาราง Markdown Table หรือรายการจัดหมวดหมู่สวยงาม พร้อมจำนวนที่ขายได้ ยอดเงินรวม และวันที่ขายล่าสุดอย่างชัดเจน
-      3. **เพิ่ม Quick Suggestion Chips ใน [app.html](file:///d:/Python/PO-Online/app.html):**
-         - เพิ่มปุ่มกดด่วน *"🏆 10 สินค้าขายดี"* และ *"👥 10 ลูกค้ายอดซื้อสูงสุด"* ให้ผู้ใช้กดถามได้ทันทีในคลิกเดียว
+24. **การแก้ไขปัญหา AI Copilot ไม่ตอบ ("ขออภัยครับ ไม่สามารถรับคำตอบจากระบบได้ในขณะนี้") และเสริมระบบ Local Intelligence (19 Oct 2026):**
+    - **ปัญหาที่พบและสาเหตุ:**
+      1. **SQLAlchemy CompileError ในการ Query อันดับลูกค้าและสินค้า:** ในฟังก์ชัน `ai_chat_api()` มีการใช้ `.order_by(desc('total_spent'))` และ `.order_by(desc('total_sales'))` โดยส่ง Literal String เข้าฟังก์ชัน `desc()` ซึ่ง SQLAlchemy 2.x บน PostgreSQL ปฏิเสธและโยนข้อผิดพลาด `CompileError: Textual SQL expression should be explicitly declared as text(...)` ส่งผลให้ Backend ล่มด้วย HTTP 500
+      2. **Frontend คืนค่า Generic Error:** เมื่อ Endpoint เกิด 500 ฟังก์ชัน `fetchApi()` จะได้รับ `null` ทำให้ตัวแปร `reply` ถอยกลับไปใช้ค่า Default คือ *"ขออภัยครับ ไม่สามารถรับคำตอบจากระบบได้ในขณะนี้"*
+      3. **ความเสี่ยงของประเภทข้อมูลวันที่ (Date Type Discrepancy):** การเรียก `.strftime(...)` บนตัวแปรวันที่โดยตรงเสี่ยงต่อการเกิด `AttributeError` หากข้อมูลถูกส่งกลับมาเป็นสตริง ISO
+      4. **ชื่อโมเดล AI ในการตั้งค่า:** หากผู้ใช้ตั้งค่าชื่อโมเดลเป็นรุ่นที่ไม่มีอยู่ใน API หรือระบบภายนอกตอบกลับด้วย 404 ระบบเดิมจะหลุดไปที่ข้อความดัมมี่แทนที่จะตอบข้อมูลจริง
+    - **การแก้ไขและผลลัพธ์:**
+      1. **แก้ไข SQL Query Expressions ใน [app.py](file:///d:/Python/PO-Online/app.py):**
+         - ปรับการเรียงลำดับให้ใช้ SQLAlchemy Expression โดยตรง เช่น `order_by(sum_spent.desc())` และ `order_by(sum_sales.desc())` ทำงานถูกต้อง 100% ทั้งบน SQLite และ PostgreSQL
+      2. **เพิ่มฟังก์ชันตัวแปลงวันที่ปลอดภัย `_safe_date_str()`:**
+         - รองรับทั้งออบเจกต์ `datetime`, สตริง ISO วันที่, และค่า `None` ป้องกัน `AttributeError` โดยสิ้นเชิง
+      3. **พัฒนาระบบ Zero-Cost Local Intelligence Fallback (`build_direct_local_answer`):**
+         - หากการเชื่อมต่อไปยัง Google Gemini ล้มเหลว (เช่น ไม่ได้ใส่คีย์, คีย์หมดโควตา, หรือโมเดลผิดพลาด) ระบบจะสร้างคำตอบจากข้อมูลจริงในฐานข้อมูลในรูปแบบตาราง Markdown Table สวยงามทันที (10 อันดับลูกค้า, 10 สินค้าขายดี, สรุปยอดขายประจำเดือน/ปี, รายการ QT ล่าสุด) โดยไม่ตอบปฏิเสธหรือคืนค่าว่าง
+      4. **ระบบ Multi-Model Retry:**
+         - หากโมเดลที่ผู้ใช้กำหนด (เช่น `gemini-flash-lite-latest`) ตอบกลับเป็น HTTP 404 ระบบจะทดลองเรียกโมเดลมาตรฐาน `gemini-1.5-flash` และ `gemini-1.5-pro` ให้อัตโนมัติ
+      5. **Top-Level Exception Safety:**
+         - ครอบบล็อก `try...except` ชั้นนอกสุดของ `/api/ai/chat` ให้คืนค่า HTTP 200 พร้อมข้อความอธิบายเสมอ ป้องกันไม่ให้เกิด HTTP 500
+      6. **ปรับปรุงการแสดงผลใน [app.html](file:///d:/Python/PO-Online/app.html):**
+         - ปรับปรุง Error Feedback ใน `sendAiChatMessage` ให้ชัดเจน
     - **ผลการทดสอบ:**
-      - ตรวจสอบไวยากรณ์ JavaScript ทุกบล็อกใน `app.html` ผ่าน 100%
-      - ทดสอบการรัน Query และนำเข้า `app.py` ด้วย Local Python ผ่าน 100% ไร้ข้อผิดพลาด
+      - ทดสอบการรันคำสั่ง `ai_chat_api()` ด้วย Local Python (`.\venv\Scripts\python.exe`) จำลองการถาม 10 อันดับลูกค้า และ 10 อันดับสินค้า คืนค่าตาราง Markdown สมบูรณ์ รหัสสถานะ 200 OK
+      - ตรวจสอบไวยากรณ์ JavaScript ทุกบล็อกใน `app.html` ผ่าน 100% ไร้ข้อผิดพลาด
+

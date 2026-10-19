@@ -9078,7 +9078,7 @@
                     messages: aiChatHistory
                 });
 
-                const reply = res?.message?.content || "ขออภัยครับ ไม่สามารถรับคำตอบจากระบบได้ในขณะนี้";
+                const reply = res?.message?.content || "⚠️ ไม่สามารถรับข้อมูลจาก AI Copilot ได้ในขณะนี้ กรุณาตรวจสอบสถานะการเชื่อมต่อหรือรีเฟรชหน้าเว็บ";
                 aiChatHistory.push({ role: "assistant", content: reply });
 
                 const formattedHtml = formatAiMessage(reply);

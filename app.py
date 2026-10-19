@@ -4894,6 +4894,106 @@ def test_ai_connection_api():
         return jsonify({"success": False, "message": f"เกิดข้อผิดพลาดในการเชื่อมต่อ: {str(e)}", "latency_ms": latency}), 200
 
 
+def _safe_date_str(val, fmt="%d/%m/%Y %H:%M น."):
+    if not val:
+        return "-"
+    if isinstance(val, str):
+        try:
+            from datetime import datetime
+            clean_val = val.replace("T", " ").split(".")[0]
+            dt = datetime.strptime(clean_val, "%Y-%m-%d %H:%M:%S")
+            return dt.strftime(fmt)
+        except Exception:
+            return str(val)
+    if hasattr(val, "strftime"):
+        return val.strftime(fmt)
+    return str(val)
+
+
+def build_direct_local_answer(user_query, current_user, top_products, top_customers, month_cnt, month_val, current_month_name, year_cnt, year_val, current_year_str, status_summary, sales_rep_rows, recent_pos):
+    q = user_query.lower()
+
+    # 1. Top Customers
+    if any(k in q for k in ["ลูกค้า", "customer", "ยอดซื้อสูงสุด", "ซื้อรวม", "ซื้อเยอะ"]):
+        if not top_customers:
+            return "### 👥 สรุป 10 อันดับลูกค้าที่มียอดซื้อสูงสุด\n\nยังไม่มีข้อมูลคำสั่งซื้อหรือลูกค้าในระบบขณะนี้ครับ"
+        lines = [
+            "### 👥 สรุป 10 อันดับลูกค้าที่มียอดซื้อสูงสุด (Top 10 Customers)\n",
+            "| อันดับ | ชื่อลูกค้า | ยอดซื้อรวม (บาท) | จำนวนใบเสนอราคา (QT) | สั่งซื้อล่าสุด |",
+            "| :---: | :--- | :---: | :---: | :---: |"
+        ]
+        for idx, c in enumerate(top_customers, 1):
+            c_name = c.customerName or "ไม่ระบุชื่อ"
+            spent = float(c.total_spent or 0.0)
+            qt_count = c.qt_count or 0
+            last_dt = _safe_date_str(c.last_order)
+            lines.append(f"| {idx} | **{c_name}** | {spent:,.2f} บาท | {qt_count:,} ใบ | {last_dt} |")
+        lines.append(f"\n💡 *ข้อมูลคำนวณแบบ Real-Time จากฐานข้อมูลระบบ QT-Online ตามสิทธิ์ของ {current_user.fullName or current_user.username}*")
+        return "\n".join(lines)
+
+    # 2. Top Products
+    if any(k in q for k in ["สินค้า", "product", "ขายดี", "ขายได้เท่าไร", "ขายดีที่สุด", "อันดับสินค้า"]):
+        if not top_products:
+            return "### 🏆 สรุป 10 อันดับสินค้าขายดีที่สุด\n\nยังไม่มีข้อมูลการขายสินค้าในระบบขณะนี้ครับ"
+        lines = [
+            "### 🏆 สรุป 10 อันดับสินค้าขายดีที่สุด (Top 10 Best Sellers)\n",
+            "| อันดับ | รหัสสินค้า | ชื่อสินค้า | จำนวนที่ขายได้ | ยอดขายรวม (บาท) | ขายล่าสุดเมื่อ |",
+            "| :---: | :---: | :--- | :---: | :---: | :---: |"
+        ]
+        for idx, p in enumerate(top_products, 1):
+            p_code = p.productCode or "-"
+            p_name = p.name or "-"
+            qty = p.total_qty or 0
+            sales = float(p.total_sales or 0.0)
+            last_dt = _safe_date_str(p.last_sold)
+            lines.append(f"| {idx} | `{p_code}` | **{p_name}** | {qty:,} ชิ้น | {sales:,.2f} บาท | {last_dt} |")
+        lines.append(f"\n💡 *ข้อมูลคำนวณแบบ Real-Time จากฐานข้อมูลระบบ QT-Online ตามสิทธิ์ของ {current_user.fullName or current_user.username}*")
+        return "\n".join(lines)
+
+    # 3. Monthly / Yearly Summary
+    if any(k in q for k in ["เดือนนี้", "ประจำเดือน", "สรุปยอด", "ยอดขายเดือน", "ยอดขายปีนี้", "สถิติ"]):
+        return (
+            f"### 📊 สรุปยอดขายและสถิติใบเสนอราคา (QT)\n\n"
+            f"#### 🗓️ สรุปประจำเดือน {current_month_name}:\n"
+            f"- **จำนวนใบเสนอราคา:** `{month_cnt:,}` ใบ\n"
+            f"- **ยอดเงินรวม:** `{month_val:,.2f}` บาท\n\n"
+            f"#### 📅 สรุปภาพรวมทั้งปี {current_year_str}:\n"
+            f"- **จำนวนใบเสนอราคาทั้งหมด:** `{year_cnt:,}` ใบ\n"
+            f"- **ยอดเงินรวมทั้งปี:** `{year_val:,.2f}` บาท\n"
+            f"- **สถานะรายการในปีนี้:** {status_summary}\n\n"
+            f"💡 *ข้อมูลคำนวณจากระบบสดตามสิทธิ์ของ {current_user.fullName or current_user.username} ({current_user.role})*"
+        )
+
+    # 4. Recent QTs
+    if any(k in q for k in ["ล่าสุด", "recent", "ใบเสนอราคาล่าสุด", "รายการ qt ล่าสุด"]):
+        if not recent_pos:
+            return "### 📋 รายการใบเสนอราคาล่าสุด\n\nไม่พบรายการใบเสนอราคาในระบบ"
+        lines = [
+            "### 📋 รายการใบเสนอราคา (QT) 10 รายการล่าสุด\n",
+            "| เลขที่ QT | ลูกค้า | ยอดเงิน (บาท) | สถานะ | วันที่สร้าง |",
+            "| :---: | :--- | :---: | :---: | :---: |"
+        ]
+        for p in recent_pos:
+            p_num = p.poNumber or f"QT-{p.id}"
+            c_name = p.customerName or "-"
+            amt = float(p.amount or 0.0)
+            st = p.status or "-"
+            c_date = _safe_date_str(p.created)
+            lines.append(f"| `{p_num}` | {c_name} | {amt:,.2f} บาท | **{st}** | {c_date} |")
+        return "\n".join(lines)
+
+    # 5. Default overview
+    return (
+        f"🤖 **QT-Online AI Copilot (Real-Time Database):**\n\n"
+        f"ยินดีให้บริการครับ จากการตรวจสอบข้อมูลในระบบตามสิทธิ์ของ **{current_user.fullName or current_user.username}**:\n\n"
+        f"- 📈 **ยอดขายเดือน {current_month_name}:** {month_cnt:,} ใบ รวม `{month_val:,.2f}` บาท\n"
+        f"- 📊 **ยอดขายทั้งปี {current_year_str}:** {year_cnt:,} ใบ รวม `{year_val:,.2f}` บาท\n"
+        f"- 👥 **ลูกค้าที่มีการสั่งซื้อสูงสุด:** {len(top_customers)} รายการ\n"
+        f"- 🏆 **สินค้าขายดีในระบบ:** {len(top_products)} รายการ\n\n"
+        f"💡 *สามารถกดปุ่มคำถามแนะนำด้านล่าง หรือพิมพ์ถามเจาะจง เช่น '10 สินค้าขายดี' หรือ '10 ลูกค้ายอดซื้อสูงสุด' ได้ทันทีครับ*"
+    )
+
+
 @app.route("/api/ai/chat", methods=["POST"])
 @login_required
 def ai_chat_api():
@@ -4901,226 +5001,273 @@ def ai_chat_api():
     Spec v2.8.0 11.3 & 11.5: In-App AI Copilot chat endpoint
     Strict Read-Only, DLP Scrubber, Zero-Training privacy headers & RBAC scoped.
     """
-    enabled = SystemSetting.get_value("ai_copilot_enabled", False)
-    if not enabled:
-        return jsonify({
-            "message": {
-                "role": "assistant",
-                "content": "⚠️ ระบบ AI Copilot ถูกปิดใช้งานอยู่ กรุณาติดต่อผู้ดูแลระบบเพื่อเปิดใช้งานในหน้า System Settings"
-            }
-        }), 200
+    try:
+        enabled = SystemSetting.get_value("ai_copilot_enabled", False)
+        if not enabled:
+            return jsonify({
+                "message": {
+                    "role": "assistant",
+                    "content": "⚠️ ระบบ AI Copilot ถูกปิดใช้งานอยู่ กรุณาติดต่อผู้ดูแลระบบเพื่อเปิดใช้งานในหน้า System Settings"
+                }
+            }), 200
 
-    req_data = request.json or {}
-    messages = req_data.get("messages", [])
-    if not messages:
-        return jsonify({"error": "No messages provided"}), 400
+        req_data = request.json or {}
+        messages = req_data.get("messages", [])
+        if not messages:
+            return jsonify({"error": "No messages provided"}), 400
 
-    user_query = messages[-1].get("content", "")
-    
-    # DLP Scrubber (Spec v2.8.0): Redact secrets/passwords
-    user_query_clean = re.sub(r"sec_[A-Za-z0-9_]{6,}", "[REDACTED_SECRET]", user_query)
-    user_query_clean = re.sub(r'("(?:password|hashed_password|sap_password|client_secret|api_key)"\s*:\s*)"[^"]*"', r'\1"[REDACTED]"', user_query_clean, flags=re.IGNORECASE)
+        user_query = messages[-1].get("content", "")
+        
+        # DLP Scrubber (Spec v2.8.0): Redact secrets/passwords
+        user_query_clean = re.sub(r"sec_[A-Za-z0-9_]{6,}", "[REDACTED_SECRET]", user_query)
+        user_query_clean = re.sub(r'("(?:password|hashed_password|sap_password|client_secret|api_key)"\s*:\s*)"[^"]*"', r'\1"[REDACTED]"', user_query_clean, flags=re.IGNORECASE)
 
-    # Check for mutation keywords (Spec v2.8.0 11.1 rule 3: Strict Zero-Mutation)
-    mutation_keywords = ["แก้ไข", "อัปเดต", "ลบ", "เปลี่ยนสถานะ", "อนุมัติ", "delete", "update", "drop", "truncate"]
-    if any(k in user_query_clean.lower() for k in mutation_keywords):
-        return jsonify({
-            "message": {
-                "role": "assistant",
-                "content": "🛡️ <b>นโยบายความปลอดภัย (Strict Read-Only):</b> AI Copilot ได้รับการออกแบบให้สืบค้น คำนวณสรุปสถิติ และวิเคราะห์ข้อมูลในรูปแบบอ่านอย่างเดียว (Read-Only) เท่านั้น <u>ไม่สามารถแก้ไข ลบ หรือเปลี่ยนสถานะข้อมูลในระบบได้</u><br><br>💡 หากต้องการดำเนินการดังกล่าว กรุณาใช้ปุ่มหรือเมนูบนหน้าจอระบบด้วยตนเองครับ"
-            }
-        }), 200
+        # Check for mutation keywords (Spec v2.8.0 11.1 rule 3: Strict Zero-Mutation)
+        mutation_keywords = ["แก้ไข", "อัปเดต", "ลบ", "เปลี่ยนสถานะ", "อนุมัติ", "delete", "update", "drop", "truncate"]
+        if any(k in user_query_clean.lower() for k in mutation_keywords):
+            return jsonify({
+                "message": {
+                    "role": "assistant",
+                    "content": "🛡️ <b>นโยบายความปลอดภัย (Strict Read-Only):</b> AI Copilot ได้รับการออกแบบให้สืบค้น คำนวณสรุปสถิติ และวิเคราะห์ข้อมูลในรูปแบบอ่านอย่างเดียว (Read-Only) เท่านั้น <u>ไม่สามารถแก้ไข ลบ หรือเปลี่ยนสถานะข้อมูลในระบบได้</u><br><br>💡 หากต้องการดำเนินการดังกล่าว กรุณาใช้ปุ่มหรือเมนูบนหน้าจอระบบด้วยตนเองครับ"
+                }
+            }), 200
 
-    api_key = SystemSetting.get_value("ai_api_key", "")
-    provider = SystemSetting.get_value("ai_provider", "google")
-    model = SystemSetting.get_value("ai_model", "gemini-1.5-flash")
-    system_prompt = SystemSetting.get_value("ai_system_prompt", "คุณคือ AI ผู้ช่วยอัจฉริยะประจำระบบ QT-Online บริษัท วินโดว์ เอเชีย จำกัด (มหาชน)")
+        api_key = SystemSetting.get_value("ai_api_key", "")
+        provider = SystemSetting.get_value("ai_provider", "google")
+        model = SystemSetting.get_value("ai_model", "gemini-1.5-flash")
+        system_prompt = SystemSetting.get_value("ai_system_prompt", "คุณคือ AI ผู้ช่วยอัจฉริยะประจำระบบ QT-Online บริษัท วินโดว์ เอเชีย จำกัด (มหาชน)")
 
-    # Build Comprehensive Live Read-Only DB Intelligence (Scoped strictly to RBAC)
-    now = now_bangkok()
-    current_date_str = now.strftime("%d/%m/%Y %H:%M")
-    current_month_name = now.strftime("%B %Y")
-    current_year_str = str(now.year)
-    start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).replace(tzinfo=None)
-    start_of_year = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0).replace(tzinfo=None)
+        # Build Comprehensive Live Read-Only DB Intelligence (Scoped strictly to RBAC)
+        now = now_bangkok()
+        current_date_str = now.strftime("%d/%m/%Y %H:%M")
+        current_month_name = now.strftime("%B %Y")
+        current_year_str = str(now.year)
+        start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).replace(tzinfo=None)
+        start_of_year = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0).replace(tzinfo=None)
 
-    is_admin = current_user.role in ["Administrator", "Sale Admin"]
-    if is_admin:
-        po_role_cond = (PurchaseOrder.status != "Cancelled")
-    else:
-        po_role_cond = and_(PurchaseOrder.status != "Cancelled", PurchaseOrder.sale_user_id == current_user.id)
+        is_admin = current_user.role in ["Administrator", "Sale Admin"]
+        if is_admin:
+            po_role_cond = (PurchaseOrder.status != "Cancelled")
+        else:
+            po_role_cond = and_(PurchaseOrder.status != "Cancelled", PurchaseOrder.sale_user_id == current_user.id)
 
-    # 1. Monthly Summary
-    month_row = db.session.query(
-        func.count(PurchaseOrder.id),
-        func.coalesce(func.sum(PurchaseOrder.amount), 0.0)
-    ).filter(
-        po_role_cond,
-        PurchaseOrder.created >= start_of_month
-    ).first()
-    month_cnt = month_row[0] if month_row else 0
-    month_val = float(month_row[1]) if month_row else 0.0
-
-    # 2. Yearly Summary
-    year_row = db.session.query(
-        func.count(PurchaseOrder.id),
-        func.coalesce(func.sum(PurchaseOrder.amount), 0.0)
-    ).filter(
-        po_role_cond,
-        PurchaseOrder.created >= start_of_year
-    ).first()
-    year_cnt = year_row[0] if year_row else 0
-    year_val = float(year_row[1]) if year_row else 0.0
-
-    # 3. Status Breakdown
-    status_rows = db.session.query(
-        PurchaseOrder.status, func.count(PurchaseOrder.id)
-    ).filter(
-        po_role_cond,
-        PurchaseOrder.created >= start_of_year
-    ).group_by(PurchaseOrder.status).all()
-    status_summary = ", ".join([f"{st}: {cnt} ใบ" for st, cnt in status_rows]) or "ไม่มีรายการ"
-
-    # 4. Top 10 Best-Selling Products (Qty, Sales Amount, Last Sold Date)
-    top_products = db.session.query(
-        POItem.productCode,
-        POItem.name,
-        func.sum(POItem.qty).label('total_qty'),
-        func.sum(POItem.total).label('total_sales'),
-        func.max(PurchaseOrder.created).label('last_sold')
-    ).join(PurchaseOrder, POItem.po_id == PurchaseOrder.id).filter(
-        po_role_cond
-    ).group_by(POItem.productCode, POItem.name).order_by(desc('total_sales')).limit(10).all()
-
-    top_prod_lines = []
-    for idx, p in enumerate(top_products, 1):
-        last_sold_fmt = p.last_sold.strftime("%d/%m/%Y %H:%M น.") if p.last_sold else "-"
-        p_code = p.productCode or "-"
-        p_name = p.name or "-"
-        qty = p.total_qty or 0
-        sales = float(p.total_sales or 0.0)
-        top_prod_lines.append(
-            f"อันดับ {idx}: รหัสสินค้า: {p_code} | ชื่อสินค้า: {p_name} | ยอดขายรวม: {sales:,.2f} บาท | จำนวนที่ขายได้: {qty:,} ชิ้น | วันที่ขายล่าสุด: {last_sold_fmt}"
-        )
-    top_prod_str = "\n".join(top_prod_lines) if top_prod_lines else "ยังไม่มีข้อมูลสินค้าขายในระบบ"
-
-    # 5. Top 10 Customers (Spend, Quotation Count, Last Order Date)
-    top_customers = db.session.query(
-        PurchaseOrder.customerName,
-        func.count(PurchaseOrder.id).label('qt_count'),
-        func.coalesce(func.sum(PurchaseOrder.amount), 0.0).label('total_spent'),
-        func.max(PurchaseOrder.created).label('last_order')
-    ).filter(
-        po_role_cond
-    ).group_by(PurchaseOrder.customerName).order_by(desc('total_spent')).limit(10).all()
-
-    top_cust_lines = []
-    for idx, c in enumerate(top_customers, 1):
-        last_ord_fmt = c.last_order.strftime("%d/%m/%Y %H:%M น.") if c.last_order else "-"
-        c_name = c.customerName or "ไม่ระบุชื่อ"
-        spent = float(c.total_spent or 0.0)
-        top_cust_lines.append(
-            f"อันดับ {idx}: ลูกค้า: {c_name} | ยอดซื้อรวม: {spent:,.2f} บาท | จำนวน QT: {c.qt_count:,} ใบ | สั่งซื้อล่าสุด: {last_ord_fmt}"
-        )
-    top_cust_str = "\n".join(top_cust_lines) if top_cust_lines else "ยังไม่มีข้อมูลลูกค้าในระบบ"
-
-    # 6. Sales Performance (If Admin or Sale Admin)
-    sales_rep_str = ""
-    if is_admin:
-        sales_rep_rows = db.session.query(
-            User.fullName,
-            User.username,
-            func.count(PurchaseOrder.id).label('qt_count'),
-            func.coalesce(func.sum(PurchaseOrder.amount), 0.0).label('total_sales')
-        ).join(PurchaseOrder, PurchaseOrder.sale_user_id == User.id).filter(
+        # 1. Monthly Summary
+        month_row = db.session.query(
+            func.count(PurchaseOrder.id),
+            func.coalesce(func.sum(PurchaseOrder.amount), 0.0)
+        ).filter(
             po_role_cond,
             PurchaseOrder.created >= start_of_month
-        ).group_by(User.fullName, User.username).order_by(desc('total_sales')).all()
-        if sales_rep_rows:
-            rep_lines = [f"- {r.fullName or r.username}: {r.qt_count} ใบ | ยอดรวม {float(r.total_sales):,.2f} บาท" for r in sales_rep_rows]
-            sales_rep_str = "\n[สรุปยอดขายพนักงานขายประจำเดือนนี้]:\n" + "\n".join(rep_lines)
+        ).first()
+        month_cnt = month_row[0] if month_row else 0
+        month_val = float(month_row[1]) if month_row else 0.0
 
-    # 7. Recent 10 Quotations
-    recent_pos = PurchaseOrder.query.filter(po_role_cond).order_by(PurchaseOrder.created.desc()).limit(10).all()
-    recent_items = []
-    for p in recent_pos:
-        c_date = p.created.strftime("%d/%m/%Y %H:%M น.") if p.created else "-"
-        p_num = p.poNumber or f"QT-{p.id}"
-        recent_items.append(f"- เลขที่ {p_num} | ลูกค้า: {p.customerName or '-'} | ยอดเงิน: {p.amount:,.2f} บาท | สถานะ: {p.status} | วันที่: {c_date}")
-    recent_str = "\n".join(recent_items) or "ไม่มีรายการ"
+        # 2. Yearly Summary
+        year_row = db.session.query(
+            func.count(PurchaseOrder.id),
+            func.coalesce(func.sum(PurchaseOrder.amount), 0.0)
+        ).filter(
+            po_role_cond,
+            PurchaseOrder.created >= start_of_year
+        ).first()
+        year_cnt = year_row[0] if year_row else 0
+        year_val = float(year_row[1]) if year_row else 0.0
 
-    # 8. Check for specific keywords in user query (e.g. search specific PO)
-    specific_context = ""
-    po_matches = re.findall(r"(?:QT[-_\s]*)?([0-9]{4,10})", user_query_clean, re.IGNORECASE)
-    if po_matches:
-        for po_id_candidate in po_matches[:2]:
-            target_po = None
-            if po_id_candidate.isdigit():
-                target_po = PurchaseOrder.query.filter(or_(PurchaseOrder.id == int(po_id_candidate), PurchaseOrder.poNumber.ilike(f"%{po_id_candidate}%"))).first()
-            if target_po and (is_admin or target_po.sale_user_id == current_user.id):
-                items = POItem.query.filter_by(po_id=target_po.id).all()
-                item_details = [f"    * รหัส {it.productCode or '-'}: {it.name or '-'} จำนวน {it.qty} ชิ้น @ {it.price:,.2f} รวม {it.total:,.2f} บาท" for it in items]
-                specific_context += f"\n[ข้อมูลเจาะจงใบเสนอราคา {target_po.poNumber or target_po.id}]:\n  - ลูกค้า: {target_po.customerName}\n  - วันที่: {target_po.created.strftime('%d/%m/%Y') if target_po.created else '-'}\n  - ยอดรวม: {target_po.amount:,.2f} บาท\n  - สถานะ: {target_po.status}\n  - รายการสินค้า:\n" + "\n".join(item_details) + "\n"
+        # 3. Status Breakdown
+        status_rows = db.session.query(
+            PurchaseOrder.status, func.count(PurchaseOrder.id)
+        ).filter(
+            po_role_cond,
+            PurchaseOrder.created >= start_of_year
+        ).group_by(PurchaseOrder.status).all()
+        status_summary = ", ".join([f"{st}: {cnt} ใบ" for st, cnt in status_rows]) or "ไม่มีรายการ"
 
-    live_context = (
-        f"[ข้อมูลจริงจากฐานข้อมูลระบบ QT-Online (สิทธิ์การเข้าถึงของผู้ใช้: {current_user.fullName or current_user.username} - บทบาท: {current_user.role})]:\n"
-        f"- วันและเวลาปัจจุบัน: {current_date_str} (เวลาประเทศไทย UTC+7)\n"
-        f"- สรุปภาพรวมยอดขายประจำเดือน {current_month_name}:\n"
-        f"  * จำนวนใบเสนอราคาในเดือนนี้: {month_cnt:,} ใบ\n"
-        f"  * ยอดเงินรวมในเดือนนี้: {month_val:,.2f} บาท\n"
-        f"- สรุปภาพรวมประจำปี {current_year_str}:\n"
-        f"  * จำนวนใบเสนอราคาในปีนี้: {year_cnt:,} ใบ\n"
-        f"  * ยอดเงินรวมในปีนี้: {year_val:,.2f} บาท\n"
-        f"  * สถานะรายการในปีนี้: {status_summary}\n\n"
-        f"[ข้อมูล 10 อันดับสินค้าขายดีที่สุด (Top 10 Best-Selling Products by Revenue & Qty)]:\n"
-        f"{top_prod_str}\n\n"
-        f"[ข้อมูล 10 อันดับลูกค้าที่มียอดซื้อสูงสุด (Top 10 Customers by Revenue)]:\n"
-        f"{top_cust_str}\n"
-        f"{sales_rep_str}\n"
-        f"{specific_context}\n"
-        f"[10 รายการใบเสนอราคาล่าสุดในระบบ]:\n"
-        f"{recent_str}\n\n"
-        f"[ข้อกำหนดและกฎเหล็กในการตอบคำถาม (Mandatory Response Rules)]:\n"
-        f"1. **ทุกข้อมูลข้างต้นเป็นข้อมูลจริงที่มีอยู่ในระบบ QT-Online ณ ปัจจุบัน ซึ่งผู้ใช้คนนี้มีสิทธิ์เข้าถึงได้อย่างถูกต้อง 100%**\n"
-        f"2. คุณมีหน้าที่นำข้อมูลจริงเหล่านี้มาแสดง เปรียบเทียบ คำนวณบวกลบสถิติ หรือตอบคำถามของผู้ใช้อย่างครบถ้วน ถูกต้อง ชัดเจนที่สุด\n"
-        f"3. **ห้ามตอบเด็ดขาดว่า 'ระบบยังไม่มีการจัดเก็บข้อมูลเชิงลึกในระดับสินค้า/ลูกค้า' หรือ 'ข้อมูลจำกัด'** เพราะข้อมูลจริงทั้งหมดรวมถึง 10 อันดับสินค้าขายดี (จำนวนขาย, ยอดเงินรวม, วันที่ขายล่าสุด) ถูกส่งมาให้คุณในบริบทนี้แล้ว\n"
-        f"4. **เมื่อผู้ใช้ถามถึงสินค้าขายดี 10 อันดับ หรือคำถามเกี่ยวกับสินค้า/ลูกค้า/ยอดขาย ให้ตอบโดยใช้ข้อมูลจริงจากหัวข้อ [ข้อมูล 10 อันดับสินค้าขายดีที่สุด] หรือหัวข้อที่เกี่ยวข้องทันที** โดยแสดงผลเป็นตาราง Markdown Table หรือรายการจัดหมวดหมู่สวยงาม แสดง: อันดับ, รหัสสินค้า, ชื่อสินค้า, จำนวนที่ขายได้, ยอดเงินรวม (บาท), และวันที่ขายล่าสุด\n"
-        f"5. **จัดรูปแบบให้อ่านง่าย สบายตา**: ใช้ตาราง Markdown (|...|) หรือหัวข้อ (###) และข้อย่อย (- **...**) มีการเว้นบรรทัดชัดเจน ห้ามพิมพ์ข้อความยาวติดกันเป็นก้อนเดียว\n"
-        f"6. ตอบเป็นภาษาไทยอย่างสุภาพ มืออาชีพ และกระชับตรงประเด็น\n"
-    )
+        # 4. Top 10 Best-Selling Products (Qty, Sales Amount, Last Sold Date)
+        sum_sales = func.coalesce(func.sum(POItem.total), 0.0)
+        top_products = db.session.query(
+            POItem.productCode,
+            POItem.name,
+            func.coalesce(func.sum(POItem.qty), 0).label('total_qty'),
+            sum_sales.label('total_sales'),
+            func.max(PurchaseOrder.created).label('last_sold')
+        ).join(PurchaseOrder, POItem.po_id == PurchaseOrder.id).filter(
+            po_role_cond
+        ).group_by(POItem.productCode, POItem.name).order_by(sum_sales.desc()).limit(10).all()
 
-    # If API key configured and provider is Google Gemini:
-    if api_key and provider == "google":
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+        top_prod_lines = []
+        for idx, p in enumerate(top_products, 1):
+            last_sold_fmt = _safe_date_str(p.last_sold)
+            p_code = p.productCode or "-"
+            p_name = p.name or "-"
+            qty = p.total_qty or 0
+            sales = float(p.total_sales or 0.0)
+            top_prod_lines.append(
+                f"อันดับ {idx}: รหัสสินค้า: {p_code} | ชื่อสินค้า: {p_name} | ยอดขายรวม: {sales:,.2f} บาท | จำนวนที่ขายได้: {qty:,} ชิ้น | วันที่ขายล่าสุด: {last_sold_fmt}"
+            )
+        top_prod_str = "\n".join(top_prod_lines) if top_prod_lines else "ยังไม่มีข้อมูลสินค้าขายในระบบ"
+
+        # 5. Top 10 Customers (Spend, Quotation Count, Last Order Date)
+        sum_spent = func.coalesce(func.sum(PurchaseOrder.amount), 0.0)
+        top_customers = db.session.query(
+            PurchaseOrder.customerName,
+            func.count(PurchaseOrder.id).label('qt_count'),
+            sum_spent.label('total_spent'),
+            func.max(PurchaseOrder.created).label('last_order')
+        ).filter(
+            po_role_cond
+        ).group_by(PurchaseOrder.customerName).order_by(sum_spent.desc()).limit(10).all()
+
+        top_cust_lines = []
+        for idx, c in enumerate(top_customers, 1):
+            last_ord_fmt = _safe_date_str(c.last_order)
+            c_name = c.customerName or "ไม่ระบุชื่อ"
+            spent = float(c.total_spent or 0.0)
+            top_cust_lines.append(
+                f"อันดับ {idx}: ลูกค้า: {c_name} | ยอดซื้อรวม: {spent:,.2f} บาท | จำนวน QT: {c.qt_count:,} ใบ | สั่งซื้อล่าสุด: {last_ord_fmt}"
+            )
+        top_cust_str = "\n".join(top_cust_lines) if top_cust_lines else "ยังไม่มีข้อมูลลูกค้าในระบบ"
+
+        # 6. Sales Performance (If Admin or Sale Admin)
+        sales_rep_rows = None
+        sales_rep_str = ""
+        if is_admin:
+            sum_rep_sales = func.coalesce(func.sum(PurchaseOrder.amount), 0.0)
+            sales_rep_rows = db.session.query(
+                User.fullName,
+                User.username,
+                func.count(PurchaseOrder.id).label('qt_count'),
+                sum_rep_sales.label('total_sales')
+            ).join(PurchaseOrder, PurchaseOrder.sale_user_id == User.id).filter(
+                po_role_cond,
+                PurchaseOrder.created >= start_of_month
+            ).group_by(User.fullName, User.username).order_by(sum_rep_sales.desc()).all()
+            if sales_rep_rows:
+                rep_lines = [f"- {r.fullName or r.username}: {r.qt_count} ใบ | ยอดรวม {float(r.total_sales):,.2f} บาท" for r in sales_rep_rows]
+                sales_rep_str = "\n[สรุปยอดขายพนักงานขายประจำเดือนนี้]:\n" + "\n".join(rep_lines)
+
+        # 7. Recent 10 Quotations
+        recent_pos = PurchaseOrder.query.filter(po_role_cond).order_by(PurchaseOrder.created.desc()).limit(10).all()
+        recent_items = []
+        for p in recent_pos:
+            c_date = _safe_date_str(p.created)
+            p_num = p.poNumber or f"QT-{p.id}"
+            recent_items.append(f"- เลขที่ {p_num} | ลูกค้า: {p.customerName or '-'} | ยอดเงิน: {p.amount:,.2f} บาท | สถานะ: {p.status} | วันที่: {c_date}")
+        recent_str = "\n".join(recent_items) or "ไม่มีรายการ"
+
+        # 8. Check for specific keywords in user query (e.g. search specific PO)
+        specific_context = ""
+        po_matches = re.findall(r"(?:QT[-_\s]*)?([0-9]{4,10})", user_query_clean, re.IGNORECASE)
+        if po_matches:
+            for po_id_candidate in po_matches[:2]:
+                target_po = None
+                if po_id_candidate.isdigit():
+                    target_po = PurchaseOrder.query.filter(or_(PurchaseOrder.id == int(po_id_candidate), PurchaseOrder.poNumber.ilike(f"%{po_id_candidate}%"))).first()
+                if target_po and (is_admin or target_po.sale_user_id == current_user.id):
+                    items = POItem.query.filter_by(po_id=target_po.id).all()
+                    item_details = [f"    * รหัส {it.productCode or '-'}: {it.name or '-'} จำนวน {it.qty} ชิ้น @ {it.price:,.2f} รวม {it.total:,.2f} บาท" for it in items]
+                    specific_context += f"\n[ข้อมูลเจาะจงใบเสนอราคา {target_po.poNumber or target_po.id}]:\n  - ลูกค้า: {target_po.customerName}\n  - วันที่: {_safe_date_str(target_po.created, '%d/%m/%Y')}\n  - ยอดรวม: {target_po.amount:,.2f} บาท\n  - สถานะ: {target_po.status}\n  - รายการสินค้า:\n" + "\n".join(item_details) + "\n"
+
+        live_context = (
+            f"[ข้อมูลจริงจากฐานข้อมูลระบบ QT-Online (สิทธิ์การเข้าถึงของผู้ใช้: {current_user.fullName or current_user.username} - บทบาท: {current_user.role})]:\n"
+            f"- วันและเวลาปัจจุบัน: {current_date_str} (เวลาประเทศไทย UTC+7)\n"
+            f"- สรุปภาพรวมยอดขายประจำเดือน {current_month_name}:\n"
+            f"  * จำนวนใบเสนอราคาในเดือนนี้: {month_cnt:,} ใบ\n"
+            f"  * ยอดเงินรวมในเดือนนี้: {month_val:,.2f} บาท\n"
+            f"- สรุปภาพรวมประจำปี {current_year_str}:\n"
+            f"  * จำนวนใบเสนอราคาในปีนี้: {year_cnt:,} ใบ\n"
+            f"  * ยอดเงินรวมในปีนี้: {year_val:,.2f} บาท\n"
+            f"  * สถานะรายการในปีนี้: {status_summary}\n\n"
+            f"[ข้อมูล 10 อันดับสินค้าขายดีที่สุด (Top 10 Best-Selling Products by Revenue & Qty)]:\n"
+            f"{top_prod_str}\n\n"
+            f"[ข้อมูล 10 อันดับลูกค้าที่มียอดซื้อสูงสุด (Top 10 Customers by Revenue)]:\n"
+            f"{top_cust_str}\n"
+            f"{sales_rep_str}\n"
+            f"{specific_context}\n"
+            f"[10 รายการใบเสนอราคาล่าสุดในระบบ]:\n"
+            f"{recent_str}\n\n"
+            f"[ข้อกำหนดและกฎเหล็กในการตอบคำถาม (Mandatory Response Rules)]:\n"
+            f"1. **ทุกข้อมูลข้างต้นเป็นข้อมูลจริงที่มีอยู่ในระบบ QT-Online ณ ปัจจุบัน ซึ่งผู้ใช้คนนี้มีสิทธิ์เข้าถึงได้อย่างถูกต้อง 100%**\n"
+            f"2. คุณมีหน้าที่นำข้อมูลจริงเหล่านี้มาแสดง เปรียบเทียบ คำนวณบวกลบสถิติ หรือตอบคำถามของผู้ใช้อย่างครบถ้วน ถูกต้อง ชัดเจนที่สุด\n"
+            f"3. **ห้ามตอบเด็ดขาดว่า 'ระบบยังไม่มีการจัดเก็บข้อมูลเชิงลึกในระดับสินค้า/ลูกค้า' หรือ 'ข้อมูลจำกัด'** เพราะข้อมูลจริงทั้งหมดรวมถึง 10 อันดับสินค้าขายดี (จำนวนขาย, ยอดเงินรวม, วันที่ขายล่าสุด) ถูกส่งมาให้คุณในบริบทนี้แล้ว\n"
+            f"4. **เมื่อผู้ใช้ถามถึงสินค้าขายดี 10 อันดับ หรือคำถามเกี่ยวกับสินค้า/ลูกค้า/ยอดขาย ให้ตอบโดยใช้ข้อมูลจริงจากหัวข้อ [ข้อมูล 10 อันดับสินค้าขายดีที่สุด] หรือหัวข้อที่เกี่ยวข้องทันที** โดยแสดงผลเป็นตาราง Markdown Table หรือรายการจัดหมวดหมู่สวยงาม แสดง: อันดับ, รหัสสินค้า, ชื่อสินค้า, จำนวนที่ขายได้, ยอดเงินรวม (บาท), และวันที่ขายล่าสุด\n"
+            f"5. **จัดรูปแบบให้อ่านง่าย สบายตา**: ใช้ตาราง Markdown (|...|) หรือหัวข้อ (###) และข้อย่อย (- **...**) มีการเว้นบรรทัดชัดเจน ห้ามพิมพ์ข้อความยาวติดกันเป็นก้อนเดียว\n"
+            f"6. ตอบเป็นภาษาไทยอย่างสุภาพ มืออาชีพ และกระชับตรงประเด็น\n"
+        )
+
+        # If API key configured and provider is Google Gemini:
+        if api_key and provider == "google":
+            candidate_models = [model]
+            for fallback_m in ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-flash"]:
+                if fallback_m not in candidate_models:
+                    candidate_models.append(fallback_m)
+
             full_prompt = f"System: {system_prompt}\n{live_context}\nUser Question: {user_query_clean}"
             payload = json.dumps({
                 "contents": [{"parts": [{"text": full_prompt}]}]
             }).encode('utf-8')
-            req = urllib.request.Request(
-                url,
-                data=payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "X-No-Model-Training": "true",
-                    "X-Data-Retention": "none",
-                    "X-OpenAI-Data-Usage-Opt-Out": "true",
-                }
-            )
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                resp_json = json.loads(resp.read().decode('utf-8'))
-                answer = resp_json["candidates"][0]["content"]["parts"][0]["text"]
-                return jsonify({"message": {"role": "assistant", "content": answer}}), 200
-        except Exception as e:
-            print(f"AI API call failed: {e}")
 
-    # Fallback: Local Rule-Based Data Lookup Assistant (Spec v2.8.0 11.2 Rule 4: Zero-Cost Fallback)
-    return jsonify({
-        "message": {
-            "role": "assistant",
-            "content": f"🤖 <b>AI Copilot (Internal Read-Only):</b> ได้รับคำถาม <i>'{user_query_clean}'</i> เรียบร้อยแล้ว ขณะนี้ระบบกำลังเชื่อมต่อข้อมูลภายในเพื่อประมวลผลตามสิทธิ์ของ <b>{current_user.fullName or current_user.username} ({current_user.role})</b> โดยไม่มีการส่งข้อมูลออกนอกองค์กร (Zero-Training 100%)"
-        }
-    }), 200
+            for candidate_model in candidate_models:
+                try:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{candidate_model}:generateContent?key={api_key}"
+                    req = urllib.request.Request(
+                        url,
+                        data=payload,
+                        headers={
+                            "Content-Type": "application/json",
+                            "X-No-Model-Training": "true",
+                            "X-Data-Retention": "none",
+                            "X-OpenAI-Data-Usage-Opt-Out": "true",
+                        }
+                    )
+                    with urllib.request.urlopen(req, timeout=20) as resp:
+                        resp_json = json.loads(resp.read().decode('utf-8'))
+                        if "candidates" in resp_json and resp_json["candidates"]:
+                            parts = resp_json["candidates"][0].get("content", {}).get("parts", [])
+                            if parts and "text" in parts[0]:
+                                answer = parts[0]["text"]
+                                return jsonify({"message": {"role": "assistant", "content": answer}}), 200
+                except urllib.error.HTTPError as http_err:
+                    print(f"Gemini API model {candidate_model} returned HTTP {http_err.code}: {http_err.reason}")
+                    if http_err.code == 404:
+                        continue  # Model name invalid, try next candidate
+                    else:
+                        break  # Other error (e.g. 400 Invalid Key or 429 Quota), stop loop
+                except Exception as e:
+                    print(f"Gemini API call failed for {candidate_model}: {e}")
+                    break
+
+        # Fallback: Real-Time Zero-Cost Local Intelligence Fallback (Spec v2.8.0 11.2 Rule 4)
+        local_answer = build_direct_local_answer(
+            user_query=user_query_clean,
+            current_user=current_user,
+            top_products=top_products,
+            top_customers=top_customers,
+            month_cnt=month_cnt,
+            month_val=month_val,
+            current_month_name=current_month_name,
+            year_cnt=year_cnt,
+            year_val=year_val,
+            current_year_str=current_year_str,
+            status_summary=status_summary,
+            sales_rep_rows=sales_rep_rows if is_admin else None,
+            recent_pos=recent_pos
+        )
+        return jsonify({
+            "message": {
+                "role": "assistant",
+                "content": local_answer
+            }
+        }), 200
+
+    except Exception as outer_err:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "message": {
+                "role": "assistant",
+                "content": f"⚠️ **เกิดข้อผิดพลาดในการประมวลผลคำถาม:** {escape(str(outer_err))}\n\nกรุณาลองใหม่อีกครั้ง หรือตรวจสอบความพร้อมของระบบฐานข้อมูลครับ"
+            }
+        }), 200
 
 # =================================================================================
 # [END] Centralized Identity Management (CIAM), Telegram, SAP & AI Settings APIs
