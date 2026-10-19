@@ -4933,14 +4933,78 @@ def ai_chat_api():
 
     api_key = SystemSetting.get_value("ai_api_key", "")
     provider = SystemSetting.get_value("ai_provider", "google")
-    model = SystemSetting.get_value("ai_model", "gemini-2.5-flash")
-    system_prompt = SystemSetting.get_value("ai_system_prompt", "คุณคือ AI ผู้ช่วยอัจฉริยะประจำระบบ QT-Online")
+    model = SystemSetting.get_value("ai_model", "gemini-1.5-flash")
+    system_prompt = SystemSetting.get_value("ai_system_prompt", "คุณคือ AI ผู้ช่วยอัจฉริยะประจำระบบ QT-Online บริษัท วินโดว์ เอเชีย จำกัด (มหาชน)")
+
+    # Build Live Read-Only DB Context (Scoped to RBAC)
+    now = now_bangkok()
+    current_date_str = now.strftime("%d/%m/%Y %H:%M")
+    current_month_name = now.strftime("%B %Y")
+    start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).replace(tzinfo=None)
+
+    is_admin = current_user.role in ["Administrator", "Sale Admin"]
+    if is_admin:
+        role_cond = or_(PurchaseOrder.status != "Cancelled", PurchaseOrder.sale_user_id == current_user.id)
+    else:
+        role_cond = (PurchaseOrder.sale_user_id == current_user.id)
+
+    # Monthly Summary Stats
+    month_row = db.session.query(
+        func.count(PurchaseOrder.id),
+        func.coalesce(func.sum(PurchaseOrder.amount), 0.0)
+    ).filter(
+        role_cond,
+        PurchaseOrder.created >= start_of_month,
+        PurchaseOrder.status != "Cancelled"
+    ).first()
+    month_qt_cnt = month_row[0] if month_row else 0
+    month_qt_val = float(month_row[1]) if month_row else 0.0
+
+    # Status counts this month
+    status_rows = db.session.query(
+        PurchaseOrder.status, func.count(PurchaseOrder.id)
+    ).filter(
+        role_cond,
+        PurchaseOrder.created >= start_of_month
+    ).group_by(PurchaseOrder.status).all()
+    status_summary = ", ".join([f"{st}: {cnt} ใบ" for st, cnt in status_rows]) or "ไม่มีรายการ"
+
+    # Recent 5 QTs
+    recent_pos = PurchaseOrder.query.filter(role_cond).order_by(PurchaseOrder.created.desc()).limit(5).all()
+    recent_items = []
+    for p in recent_pos:
+        c_date = p.created.strftime("%d/%m/%Y") if p.created else "-"
+        p_num = p.poNumber or f"QT-{p.id}"
+        recent_items.append(f"- เลขที่ {p_num} | ลูกค้า: {p.customerName or '-'} | ยอดเงิน: {p.amount:,.2f} บาท | สถานะ: {p.status} | วันที่: {c_date}")
+    recent_str = "\n".join(recent_items) or "ไม่มีรายการ"
+
+    # Context & Readability Instructions
+    live_context = (
+        f"\n\n[บริบทข้อมูลจริงจากฐานข้อมูลระบบ ณ ปัจจุบัน (เวลาประเทศไทย UTC+7)]:\n"
+        f"- วันและเวลาปัจจุบัน: {current_date_str}\n"
+        f"- ผู้ใช้ที่กำลังสอบถาม: {current_user.fullName or current_user.username} (สิทธิ์: {current_user.role})\n"
+        f"- ข้อมูลสรุปประจำเดือน {current_month_name}:\n"
+        f"  * จำนวนใบเสนอราคา (QT) ทั้งหมดในเดือนนี้: {month_qt_cnt:,} ใบ\n"
+        f"  * ยอดรวมมูลค่าทั้งหมดในเดือนนี้: {month_qt_val:,.2f} บาท\n"
+        f"  * สถานะรายการ: {status_summary}\n"
+        f"- รายการใบเสนอราคาล่าสุด 5 รายการ:\n"
+        f"{recent_str}\n\n"
+        f"[คำสั่งการจัดรูปแบบคำตอบ (Strict Readability & Formatting)]:\n"
+        f"1. **จัดรูปแบบให้อ่านง่าย สบายตาที่สุด ห้ามเขียนข้อความยาวติดกันเป็นก้อนเดียวเด็ดขาด**\n"
+        f"2. ใช้ Markdown Formatting อย่างเต็มประสิทธิภาพ:\n"
+        f"   - ใช้หัวข้อแยกหมวดหมู่ (เช่น ### หรือ **...**)\n"
+        f"   - แจกแจงรายการหรือสถิติเป็นข้อๆ (Bullet points หรือ Numbered list) เสมอ\n"
+        f"   - ตัวเลขจำนวนเงินหรือจำนวนใบ ให้ทำตัวหนาและมีคอมม่า เช่น **3,850,000.00 บาท**\n"
+        f"   - เว้นบรรทัดระหว่างหัวข้อและรายการย่อยให้อ่านสบายตา\n"
+        f"3. อ้างอิงตัวเลขจาก [บริบทข้อมูลจริงจากฐานข้อมูลระบบ] ด้านบนในการตอบ\n"
+        f"4. ตอบเป็นภาษาไทยอย่างสุภาพ กระชับ ชัดเจน และเป็นมืออาชีพ\n"
+    )
 
     # If API key configured and provider is Google Gemini:
     if api_key and provider == "google":
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-            full_prompt = f"System: {system_prompt}\nUser Role: {current_user.role} ({current_user.username})\nQuestion: {user_query_clean}"
+            full_prompt = f"System: {system_prompt}\n{live_context}\nUser Question: {user_query_clean}"
             payload = json.dumps({
                 "contents": [{"parts": [{"text": full_prompt}]}]
             }).encode('utf-8')
