@@ -155,12 +155,17 @@ class User(UserMixin, db.Model):
     signature_image = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(20), default="active")
     use_ad_auth = db.Column(db.Boolean, default=True)
+    sap_account = db.Column(db.String(100), nullable=True)
+    sap_password = db.Column(db.String(255), nullable=True)
+    can_use_sap_api = db.Column(db.Boolean, default=False)
     lastLogin = db.Column(db.DateTime)
     createdAt = db.Column(db.DateTime, default=now_bangkok)
 
     def to_dict(self):
         created_local = ensure_bangkok(self.createdAt)
         last_login_local = ensure_bangkok(self.lastLogin)
+        sap_acc = getattr(self, "sap_account", "") or ""
+        can_sap = bool(getattr(self, "can_use_sap_api", False))
         return {
             "id": self.id,
             "username": self.username,
@@ -176,6 +181,12 @@ class User(UserMixin, db.Model):
             "status": getattr(self, "status", "active"),
             "useAdAuth": getattr(self, "use_ad_auth", True),
             "use_ad_auth": getattr(self, "use_ad_auth", True),
+            "sapAccount": sap_acc,
+            "sap_account": sap_acc,
+            "canUseSapApi": can_sap,
+            "can_use_sap_api": can_sap,
+            "hasSapAccess": bool(sap_acc and can_sap),
+            "hasSapPassword": bool(getattr(self, "sap_password", None)),
             "createdAt": (
                 created_local.strftime("%d-%m-%Y %H:%M") if created_local else "-"
             ),

@@ -307,3 +307,56 @@ emote_addr) มาบันทึกลงในฟิลด์ details JSON ข
            - ใน [models.py](models.py): ปรับปรุง `to_dict()` ให้ส่งทั้ง `createdAt` และ `created_at` (ฟอร์แมต `DD-MM-YYYY HH:MM:SS`), ส่งทั้ง `triggeredBy` และ `triggered_by`, พร้อมทั้งแกะอ่าน `ip` และ `username` จากฟิลด์ `details` JSON
            - ใน [app.html](app.html): ปรับปรุง `filterTransLogs()` ให้อ่านได้ทั้งสองรูปแบบ (`log.created_at || log.createdAt`, `log.triggered_by || log.triggeredBy`, `log.ip_address || log.ip`) รวมถึงรองรับการค้นหาผ่านช่อง Search ได้อย่างสมบูรณ์
 
+
+19. **การพัฒนาระบบ Dynamic Telegram Settings, SAP B1 User Profile Integration และ In-App AI Copilot ตาม CIAM Spec v2.8.0 (19 Oct 2026):**
+    - **รายละเอียดการพัฒนาและการแก้ไข:**
+      1. **การตั้งค่า Telegram Bot Token และ Chat ID / Group ID ผ่านหน้า System Settings (UI):**
+         - **วัตถุประสงค์:** รองรับการปรับเปลี่ยน Telegram Bot Token, Group ID, Base URL และเปิด/ปิดระบบแจ้งเตือนผ่านหน้า System Settings (`#page-settings`) โดยไม่ต้องเข้าไปแก้ไฟล์ `.env` บน Server
+         - **Backend Implementation:**
+           - ใน [models.py](models.py): ใช้งานตาราง `SystemSetting` ที่มีระบบ `get_value()`, `set_value()`, และ `encrypt_value()`
+           - ใน [utils.py](utils.py): ปรับปรุง `_send_telegram_worker` ให้อ่าน Token และ Group ID จาก `SystemSetting` ในฐานข้อมูลเป็นลำดับแรก (หากไม่มีจึง Fallback ไปใช้ `.env`) พร้อมฟังก์ชัน `test_telegram_sync()` สำหรับทดสอบการเชื่อมต่อ
+           - ใน [app.py](app.py): เพิ่ม Endpoints สำหรับ Admin:
+             - `GET /api/settings/telegram`: ดึงค่าการตั้งค่า (พร้อม Mask Bot Token เช่น `821491...sVWI`)
+             - `PUT /api/settings/telegram`: บันทึกการตั้งค่าลงฐานข้อมูล (เข้ารหัส Token)
+             - `POST /api/settings/telegram/test`: ทดสอบยิงข้อความแจ้งเตือนเข้า Telegram ทันที
+         - **Frontend Implementation:**
+           - ใน [app.html](app.html): เพิ่มแท็บ **"Telegram Notification"** บนหน้า System Settings พร้อมฟอร์มระบุ Bot Token, Group ID, Base URL, Switch เปิด/ปิด, และปุ่ม **"ทดสอบส่งข้อความ (Test Telegram)"**
+      2. **การเพิ่ม Field บัญชี SAP B1 ใน User Profile และการควบคุมสิทธิ์ API:**
+         - **วัตถุประสงค์:** รองรับการกำหนด SAP Account และ SAP Password ของพนักงานแต่ละคน พร้อมระบบให้สิทธิ์ผู้ใช้ในการเชื่อมต่อ SAP B1 API (`can_use_sap_api`) และตั้งค่าระบบ SAP B1 ส่วนกลาง
+         - **Backend Implementation:**
+           - ใน [models.py](models.py): เพิ่มคอลัมน์ในตาราง `users`:
+             - `sap_account` (`VARCHAR(100)`): บัญชีผู้ใช้ SAP B1
+             - `sap_password` (`VARCHAR(255)`): รหัสผ่าน SAP B1 (เข้ารหัส Fernet AES-256 ผ่าน `encrypt_string`)
+             - `can_use_sap_api` (`BOOLEAN DEFAULT FALSE`): สิทธิ์การอนุญาตเรียกใช้ SAP Service Layer API
+             - ปรับปรุง `User.to_dict()` ส่งฟิลด์ `sapAccount`, `canUseSapApi`, `hasSapAccess`, `hasSapPassword` โดยไม่เปิดเผยรหัสผ่าน Plaintext
+           - ใน [utils.py](utils.py): เพิ่มฟังก์ชัน `encrypt_string()` และ `decrypt_string()`
+           - ใน [app.py](app.py):
+             - ปรับปรุง `POST /api/users` และ `PUT /api/users/<id>` รองรับการบันทึก SAP Account, SAP Password (เข้ารหัสอัตโนมัติหากมีการกรอกใหม่) และสิทธิ์ `can_use_sap_api`
+             - เพิ่ม Endpoints สำหรับ Admin:
+               - `GET /api/settings/sap`: ดึงค่า Service Layer URL, Company DB, Enabled Status
+               - `PUT /api/settings/sap`: บันทึกการตั้งค่า SAP B1 ส่วนกลาง
+               - `POST /api/settings/sap/test-connection`: ทดสอบ Ping ไปยัง SAP Service Layer URL
+         - **Frontend Implementation:**
+           - ใน [app.html](app.html):
+             - ในหน้าต่าง `#user-create-modal`: เพิ่มการ์ด **"SAP Business One Integration"** พร้อมช่องกรอก `SAP Account`, `SAP Password`, Toggle Switch `อนุญาตให้ใช้ SAP B1 API (can_use_sap_api)` และ Badge แสดงสถานะการเข้าถึง SAP
+             - ในตารางรายชื่อผู้ใช้ `renderUserTable()`: เพิ่ม Badge แสดงสถานะ SAP B1 (`SAP B1 API` สีเขียวมรกต, `SAP Configured` สีน้ำเงิน, หรือ `-`)
+             - ในหน้า System Settings: เพิ่มแท็บ **"SAP B1 Integration"** พร้อมช่อง Service Layer URL, Company DB, Switch เปิด/ปิด และปุ่ม **"ทดสอบการเชื่อมต่อ (Test Connection)"**
+      3. **การพัฒนา In-App AI Copilot ตาม CIAM Enterprise Spec v2.8.0 (Section E):**
+         - **วัตถุประสงค์:** ผู้ช่วยอัจฉริยะวิเคราะห์ สรุปยอดขาย และให้ข้อมูลในระบบ QT-Online แบบ Strict Read-Only ตามมาตรฐานองค์กร
+         - **การรับประกันความปลอดภัยและข้อกำหนด (Zero Regression & Strict Compliance):**
+           - **Strict Read-Only:** ตัวตรวจจับ Mutation Interceptor ดักจับคีย์เวิร์ดแก้ไขหรือลบข้อมูล ("ลบ", "แก้ไข", "เปลี่ยน", "update", "delete", "create", "drop", ฯลฯ) และปฏิเสธอย่างสุภาพทันที โดยแนะนำให้ทำผ่านปุ่มฟังก์ชันมาตรฐานในหน้าจอ
+           - **RBAC Data Scoping:** พนักงานขายทั่วไปดูได้เฉพาะข้อมูลใบเสนอราคาและลูกค้าของตนเองเท่านั้น ส่วน Administrator สามารถวิเคราะห์ได้ทั้งองค์กร
+           - **Data Loss Prevention (DLP):** สครับฟิลด์ข้อมูลสำคัญ เช่น รหัสผ่าน, Token, หมายเลขโทรศัพท์ ก่อนส่งให้โมเดล AI ประมวลผล
+           - **Zero-Training Privacy Headers:** ส่ง Header `X-Data-Governance-Mode: zero-retention` และ `X-Zero-Training: true`
+           - **Non-Invasive UI:** Floating AI Widget มีค่าเริ่มต้น `display: none` ซ่อนอยู่สนิท จะแสดงผลเฉพาะเมื่อผู้ดูแลระบบเปิดใช้งาน (`ai_copilot_enabled: true`) เท่านั้น ไม่กระทบ UX/UI เดิมใดๆ ทั้งสิ้น
+         - **Backend Implementation:**
+           - ใน [app.py](app.py): เพิ่ม Endpoints:
+             - `GET /api/settings/ai`, `PUT /api/settings/ai`, `POST /api/settings/ai/test`
+             - `POST /api/ai/chat`: ประมวลผลคำสั่ง แลกเปลี่ยนข้อความกับ AI พร้อม Context ข้อมูลระบบ
+         - **Frontend Implementation:**
+           - ใน [app.html](app.html):
+             - เพิ่มแท็บ **"AI Copilot (v2.8.0)"** ใน System Settings: ตั้งค่า Provider (Google Gemini / OpenAI / Anthropic), Model, API Key, System Prompt
+             - เพิ่ม Floating Chat Widget (`#ai-copilot-floating-container`) บริเวณมุมขวาล่าง สามารถกดเปิด/ปิดหน้าต่างแชต พิมพ์คำถาม ค้นหาข้อมูล และมี Quick Actions แนะนำคำถาม
+      4. **Migration Script สำหรับอัปเดต Database:**
+         - จัดทำสคริปต์ [scripts/migrate_sap_and_telegram_settings.py](scripts/migrate_sap_and_telegram_settings.py) เพิ่มคอลัมน์ในตาราง `users` และบันทึกค่า Default ลงใน `system_settings`
+         - ทดสอบรันบน Local Database ด้วย `.\venv\Scripts\python.exe` สำเร็จเรียบร้อย 100% ไร้ข้อผิดพลาด

@@ -99,11 +99,31 @@ def allowed_image_file(filename):
 import threading
 
 # --- Telegram Notification ---
-def _send_telegram_worker(message):
+def _send_telegram_worker(message, custom_bot_token=None, custom_group_id=None, custom_api_base=None):
     try:
-        bot_token = os.environ.get('TELEGRAM_BOT_TOKEN', '8214911655:AAG5RKU6m75AOc3Wws0FqVBqn1CicDLsVWI')
-        group_id = os.environ.get('TELEGRAM_GROUP_ID', '-5241471050')
-        api_base = os.environ.get('TELEGRAM_API_BASE_URL', 'https://api.telegram.org')
+        bot_token = custom_bot_token
+        group_id = custom_group_id
+        api_base = custom_api_base
+        
+        if not bot_token or not group_id:
+            try:
+                from models import SystemSetting
+                enabled = SystemSetting.get_value('telegram_enabled', True)
+                if not enabled and not custom_bot_token:
+                    return
+                if not bot_token:
+                    bot_token = SystemSetting.get_value('telegram_bot_token')
+                if not group_id:
+                    group_id = SystemSetting.get_value('telegram_group_id')
+                if not api_base:
+                    api_base = SystemSetting.get_value('telegram_api_base_url')
+            except Exception:
+                pass
+        
+        bot_token = bot_token or os.environ.get('TELEGRAM_BOT_TOKEN', '8214911655:AAG5RKU6m75AOc3Wws0FqVBqn1CicDLsVWI')
+        group_id = group_id or os.environ.get('TELEGRAM_GROUP_ID', '-5241471050')
+        api_base = (api_base or os.environ.get('TELEGRAM_API_BASE_URL', 'https://api.telegram.org')).rstrip('/')
+        
         url = f"{api_base}/bot{bot_token}/sendMessage"
         
         payload = {
@@ -128,6 +148,35 @@ def send_telegram_msg(message):
         thread.start()
     except Exception as e:
         print(f"Failed to spawn Telegram notification thread: {e}")
+
+def test_telegram_sync(bot_token, group_id, api_base=None, message="🔔 ทดสอบการแจ้งเตือนจากระบบ QT-Online (Test Notification)"):
+    """Synchronously test telegram message sending, returns (success: bool, detail: str)"""
+    try:
+        api_base = (api_base or 'https://api.telegram.org').rstrip('/')
+        url = f"{api_base}/bot{bot_token}/sendMessage"
+        payload = {
+            "chat_id": group_id,
+            "text": message,
+            "parse_mode": "HTML"
+        }
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers={'Content-Type': 'application/json'}
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+            if data.get('ok'):
+                return True, "ส่งข้อความทดสอบสำเร็จเรียบร้อย"
+            return False, f"Telegram API error: {data.get('description', 'Unknown error')}"
+    except urllib.error.HTTPError as e:
+        try:
+            err_body = json.loads(e.read().decode('utf-8'))
+            return False, f"HTTP {e.code}: {err_body.get('description', str(e))}"
+        except Exception:
+            return False, f"HTTP Error {e.code}: {e.reason}"
+    except Exception as e:
+        return False, str(e)
 
 # --- Encryption Helpers ---
 KEY_FILE = None # Will be set during app initialization if needed, or use env
@@ -160,6 +209,22 @@ def decrypt_data(data: bytes) -> bytes:
         return get_cipher().decrypt(data)
     except Exception:
         return data
+
+def encrypt_string(plain_text: str) -> str:
+    if not plain_text:
+        return ""
+    try:
+        return encrypt_data(plain_text.encode('utf-8')).decode('utf-8')
+    except Exception:
+        return plain_text
+
+def decrypt_string(cipher_text: str) -> str:
+    if not cipher_text:
+        return ""
+    try:
+        return decrypt_data(cipher_text.encode('utf-8')).decode('utf-8')
+    except Exception:
+        return cipher_text
 
 # --- Auth Decorator ---
 def roles_required(*roles):

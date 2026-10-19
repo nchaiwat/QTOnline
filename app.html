@@ -1743,6 +1743,21 @@
                             <i data-lucide="shield-check" class="w-4 h-4 mr-2"></i>
                             CIAM Parameters & SSO
                         </button>
+                        <button id="tab-btn-telegram-config" onclick="switchSettingsTab('telegram')"
+                            class="settings-tab-btn flex items-center py-3 px-5 border-b-2 font-medium text-sm transition-colors border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap">
+                            <i data-lucide="send" class="w-4 h-4 mr-2"></i>
+                            Telegram Notification
+                        </button>
+                        <button id="tab-btn-sap-config" onclick="switchSettingsTab('sap')"
+                            class="settings-tab-btn flex items-center py-3 px-5 border-b-2 font-medium text-sm transition-colors border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap">
+                            <i data-lucide="database" class="w-4 h-4 mr-2"></i>
+                            SAP B1 Integration
+                        </button>
+                        <button id="tab-btn-ai-config" onclick="switchSettingsTab('ai')"
+                            class="settings-tab-btn flex items-center py-3 px-5 border-b-2 font-medium text-sm transition-colors border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap">
+                            <i data-lucide="sparkles" class="w-4 h-4 mr-2"></i>
+                            AI Copilot (v2.8.0)
+                        </button>
                         <button id="tab-btn-ciam-logs" onclick="switchSettingsTab('ciam-logs')"
                             class="settings-tab-btn flex items-center py-3 px-5 border-b-2 font-medium text-sm transition-colors border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap">
                             <i data-lucide="activity" class="w-4 h-4 mr-2"></i>
@@ -2119,7 +2134,267 @@
                                         <tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Loading ISO 27001 transaction logs...</td></tr>
                                     </tbody>
                                 </table>
+                    <!-- TAB 2: Telegram Notification Settings -->
+                    <div id="settings-tab-content-telegram" class="settings-tab-pane hidden space-y-6">
+                        <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b pb-4 mb-6 gap-3">
+                                <div>
+                                    <h4 class="text-lg font-semibold text-gray-800">Telegram Notification Settings</h4>
+                                    <p class="text-sm text-gray-500">ตั้งค่า Bot Token และ Group ID สำหรับส่งข้อความแจ้งเตือนอัตโนมัติเมื่อมีการสร้างหรืออนุมัติเอกสาร</p>
+                                </div>
+                                <div class="flex items-center space-x-3">
+                                    <span id="telegram-status-badge" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                        Active
+                                    </span>
+                                    <label class="relative inline-flex items-center cursor-pointer" title="เปิด/ปิดการส่งแจ้งเตือน Telegram">
+                                        <input type="checkbox" id="telegram-is-enabled" class="sr-only peer" checked onchange="handleTelegramToggleChange()">
+                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                    </label>
+                                </div>
                             </div>
+
+                            <!-- Live Action Banner -->
+                            <div class="mb-6 p-4 rounded-lg bg-blue-50/60 border border-blue-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+                                <div class="flex items-center space-x-3">
+                                    <div id="telegram-conn-indicator" class="w-3 h-3 rounded-full bg-blue-500"></div>
+                                    <div>
+                                        <div class="text-sm font-semibold text-gray-800 flex items-center">
+                                            <span>สถานะการแจ้งเตือน Telegram:</span>
+                                            <span id="telegram-conn-status-text" class="ml-2 text-xs font-mono px-2 py-0.5 rounded bg-gray-200 text-gray-700">พร้อมใช้งาน</span>
+                                        </div>
+                                        <p id="telegram-conn-details" class="text-xs text-gray-500 mt-0.5">กดปุ่มทดสอบเพื่อลองส่งข้อความจำลองเข้ากลุ่ม Telegram จริง</p>
+                                    </div>
+                                </div>
+                                <button type="button" id="btn-test-telegram-conn" onclick="testTelegramNotification()"
+                                    class="px-3.5 py-2 bg-white hover:bg-blue-50 text-blue-700 border border-blue-300 rounded-lg text-xs font-semibold shadow-sm flex items-center justify-center transition-colors">
+                                    <i data-lucide="send" class="w-3.5 h-3.5 mr-1.5 text-blue-600"></i> ทดสอบส่งข้อความแจ้งเตือน
+                                </button>
+                            </div>
+
+                            <form id="telegram-settings-form" onsubmit="saveTelegramSettings(event)" class="space-y-6">
+                                <!-- Telegram Bot Token -->
+                                <div>
+                                    <label for="telegram-bot-token" class="block text-sm font-semibold text-gray-700 mb-1">
+                                        Telegram Bot API Token <span class="text-red-500">*</span>
+                                    </label>
+                                    <p class="text-xs text-gray-500 mb-2">Token ประจำตัวของ Telegram Bot ที่สร้างจาก @BotFather</p>
+                                    <div class="relative">
+                                        <input type="password" id="telegram-bot-token" autocomplete="off"
+                                            class="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-sm font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                                            placeholder="8214911655:AAG5RKU6m75AOc3Wws0FqVBqn1CicDLsVWI">
+                                        <button type="button" onclick="togglePasswordVisibility('telegram-bot-token')"
+                                            class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+                                            <i data-lucide="eye" class="w-4 h-4"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Telegram Chat/Group ID -->
+                                <div>
+                                    <label for="telegram-group-id" class="block text-sm font-semibold text-gray-700 mb-1">
+                                        Telegram Chat ID / Group ID <span class="text-red-500">*</span>
+                                    </label>
+                                    <p class="text-xs text-gray-500 mb-2">รหัสห้องแชทหรือกลุ่ม Telegram ที่ต้องการให้แจ้งเตือนส่งไปถึง (สำหรับกลุ่มมักขึ้นต้นด้วยเครื่องหมายลบ เช่น <code class="text-xs bg-gray-100 px-1 py-0.5 rounded font-mono">-5241471050</code>)</p>
+                                    <input type="text" id="telegram-group-id" autocomplete="off"
+                                        class="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-sm font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="-5241471050">
+                                </div>
+
+                                <!-- Telegram API Base URL -->
+                                <div>
+                                    <label for="telegram-api-base-url" class="block text-sm font-semibold text-gray-700 mb-1">
+                                        Telegram API Base URL
+                                    </label>
+                                    <p class="text-xs text-gray-500 mb-2">URL ของ Telegram Bot API (ค่ามาตรฐาน: <code class="text-xs bg-gray-100 px-1 py-0.5 rounded font-mono">https://api.telegram.org</code>)</p>
+                                    <input type="text" id="telegram-api-base-url" autocomplete="off"
+                                        class="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-sm font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="https://api.telegram.org">
+                                </div>
+
+                                <div class="flex justify-end pt-4 border-t">
+                                    <button type="submit" id="btn-save-telegram-settings"
+                                        class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow-sm flex items-center transition-colors">
+                                        <i data-lucide="save" class="w-4 h-4 mr-2"></i> บันทึกการตั้งค่า Telegram
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- TAB 3: SAP B1 Integration Settings -->
+                    <div id="settings-tab-content-sap" class="settings-tab-pane hidden space-y-6">
+                        <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b pb-4 mb-6 gap-3">
+                                <div>
+                                    <h4 class="text-lg font-semibold text-gray-800">SAP Business One (SAP B1) Service Layer Integration</h4>
+                                    <p class="text-sm text-gray-500">ตั้งค่าการเชื่อมต่อไปยัง SAP B1 Service Layer API เพื่อเตรียมการสร้างเอกสาร Sale Order (SO) อัตโนมัติ</p>
+                                </div>
+                                <div class="flex items-center space-x-3">
+                                    <span id="sap-status-badge" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                        Disabled
+                                    </span>
+                                    <label class="relative inline-flex items-center cursor-pointer" title="เปิด/ปิดการเชื่อมต่อ SAP B1">
+                                        <input type="checkbox" id="sap-is-enabled" class="sr-only peer" onchange="handleSapToggleChange()">
+                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Live Action Banner -->
+                            <div class="mb-6 p-4 rounded-lg bg-emerald-50/60 border border-emerald-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+                                <div class="flex items-center space-x-3">
+                                    <div id="sap-conn-indicator" class="w-3 h-3 rounded-full bg-gray-400"></div>
+                                    <div>
+                                        <div class="text-sm font-semibold text-gray-800 flex items-center">
+                                            <span>สถานะการเชื่อมต่อ SAP B1:</span>
+                                            <span id="sap-conn-status-text" class="ml-2 text-xs font-mono px-2 py-0.5 rounded bg-gray-200 text-gray-700">ยังไม่ได้ทดสอบ</span>
+                                        </div>
+                                        <p id="sap-conn-details" class="text-xs text-gray-500 mt-0.5">กดปุ่มทดสอบเพื่อตรวจสอบการเชื่อมต่อเครือข่ายไปยัง Service Layer Endpoint</p>
+                                    </div>
+                                </div>
+                                <button type="button" id="btn-test-sap-conn" onclick="testSapConnection()"
+                                    class="px-3.5 py-2 bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-300 rounded-lg text-xs font-semibold shadow-sm flex items-center justify-center transition-colors">
+                                    <i data-lucide="zap" class="w-3.5 h-3.5 mr-1.5 text-emerald-600"></i> ทดสอบการเชื่อมต่อ SAP Service Layer
+                                </button>
+                            </div>
+
+                            <form id="sap-settings-form" onsubmit="saveSapSettings(event)" class="space-y-6">
+                                <!-- SAP B1 Service Layer URL -->
+                                <div>
+                                    <label for="sap-service-url" class="block text-sm font-semibold text-gray-700 mb-1">
+                                        SAP B1 Service Layer API URL <span class="text-red-500">*</span>
+                                    </label>
+                                    <p class="text-xs text-gray-500 mb-2">URL ศูนย์กลางของ SAP Business One Service Layer (เช่น <code class="text-xs bg-gray-100 px-1 py-0.5 rounded font-mono">https://sap.windowasia.com:50000/b1s/v1</code>)</p>
+                                    <input type="text" id="sap-service-url" autocomplete="off"
+                                        class="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-sm font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="https://sap.windowasia.com:50000/b1s/v1">
+                                </div>
+
+                                <!-- SAP B1 Company Database Name -->
+                                <div>
+                                    <label for="sap-company-db" class="block text-sm font-semibold text-gray-700 mb-1">
+                                        SAP B1 Company Database Name <span class="text-red-500">*</span>
+                                    </label>
+                                    <p class="text-xs text-gray-500 mb-2">ชื่อฐานข้อมูลบริษัทบน SAP B1 (เช่น <code class="text-xs bg-gray-100 px-1 py-0.5 rounded font-mono">WINDOW_ASIA_LIVE</code>)</p>
+                                    <input type="text" id="sap-company-db" autocomplete="off"
+                                        class="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-sm font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="WINDOW_ASIA_LIVE">
+                                </div>
+
+                                <div class="flex justify-end pt-4 border-t">
+                                    <button type="submit" id="btn-save-sap-settings"
+                                        class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow-sm flex items-center transition-colors">
+                                        <i data-lucide="save" class="w-4 h-4 mr-2"></i> บันทึกการตั้งค่า SAP B1
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- TAB 4: AI Copilot (CIAM Spec v2.8.0) Settings -->
+                    <div id="settings-tab-content-ai" class="settings-tab-pane hidden space-y-6">
+                        <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b pb-4 mb-6 gap-3">
+                                <div>
+                                    <h4 class="text-lg font-semibold text-gray-800">In-App AI Copilot (CIAM Spec v2.8.0 หมวด E)</h4>
+                                    <p class="text-sm text-gray-500">ผู้ช่วยอัจฉริยะส่วนตัวประจำระบบ ทำงานภายใต้มาตรฐาน Read-Only & Zero-Training Data Sovereignty</p>
+                                </div>
+                                <div class="flex items-center space-x-3">
+                                    <span id="ai-status-badge" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                        Disabled
+                                    </span>
+                                    <label class="relative inline-flex items-center cursor-pointer" title="เปิด/ปิด AI Copilot">
+                                        <input type="checkbox" id="ai-is-enabled" class="sr-only peer" onchange="handleAiToggleChange()">
+                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Live Action Banner -->
+                            <div class="mb-6 p-4 rounded-lg bg-indigo-50/60 border border-indigo-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+                                <div class="flex items-center space-x-3">
+                                    <div id="ai-conn-indicator" class="w-3 h-3 rounded-full bg-gray-400"></div>
+                                    <div>
+                                        <div class="text-sm font-semibold text-gray-800 flex items-center">
+                                            <span>สถานะการเชื่อมต่อ AI Engine:</span>
+                                            <span id="ai-conn-status-text" class="ml-2 text-xs font-mono px-2 py-0.5 rounded bg-gray-200 text-gray-700">ยังไม่ได้ทดสอบ</span>
+                                        </div>
+                                        <p id="ai-conn-details" class="text-xs text-gray-500 mt-0.5">กดปุ่มทดสอบเพื่อตรวจสอบความถูกต้องของ API Key และ Latency</p>
+                                    </div>
+                                </div>
+                                <button type="button" id="btn-test-ai-conn" onclick="testAiConnection()"
+                                    class="px-3.5 py-2 bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-300 rounded-lg text-xs font-semibold shadow-sm flex items-center justify-center transition-colors">
+                                    <i data-lucide="zap" class="w-3.5 h-3.5 mr-1.5 text-indigo-600"></i> ทดสอบเชื่อมต่อ API Key
+                                </button>
+                            </div>
+
+                            <!-- Security & Privacy Notice -->
+                            <div class="mb-6 p-4 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 space-y-1">
+                                <div class="font-bold flex items-center text-amber-900">
+                                    <i data-lucide="shield-alert" class="w-4 h-4 mr-1.5 text-amber-600"></i>
+                                    มาตรการกำกับดูแลความปลอดภัยและธรรมาภิบาลข้อมูล (Spec v2.8.0 11.1)
+                                </div>
+                                <p>• <b>Strict Read-Only:</b> AI ได้รับการจำกัดสิทธิ์ให้อ่านและคำนวณสรุปเท่านั้น ห้ามทำการเพิ่ม แก้ไข หรือลบข้อมูลในระบบเด็ดขาด</p>
+                                <p>• <b>Strict Zero-Training:</b> ทุกคำขอส่งออกพร้อม Header <code class="font-mono bg-amber-100 px-1">X-No-Model-Training: true</code> และผ่าน DLP Scrubber ตัดข้อมูลความลับออก 100%</p>
+                                <p>• <b>Zero Visual Footprint:</b> หากปิดใช้งานหรือยังไม่ได้ตั้งค่า API Key หน้าต่างแชท AI จะถูกซ่อนอัตโนมัติ ไม่รบกวนหน้าจอเดิม</p>
+                            </div>
+
+                            <form id="ai-settings-form" onsubmit="saveAiSettings(event)" class="space-y-6">
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label for="ai-provider" class="block text-sm font-semibold text-gray-700 mb-1">
+                                            AI Provider
+                                        </label>
+                                        <select id="ai-provider" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                            <option value="google">Google Gemini (Official Enterprise)</option>
+                                            <option value="openai">OpenAI (Enterprise)</option>
+                                            <option value="anthropic">Anthropic Claude</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label for="ai-model" class="block text-sm font-semibold text-gray-700 mb-1">
+                                            AI Model
+                                        </label>
+                                        <input type="text" id="ai-model" autocomplete="off"
+                                            class="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-sm font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            placeholder="gemini-2.5-flash">
+                                    </div>
+                                </div>
+
+                                <!-- AI API Key -->
+                                <div>
+                                    <label for="ai-api-key" class="block text-sm font-semibold text-gray-700 mb-1">
+                                        AI Provider API Key <span class="text-red-500">*</span>
+                                    </label>
+                                    <p class="text-xs text-gray-500 mb-2">API Key สำหรับเรียกใช้งานโมเดล AI (จัดเก็บแบบเข้ารหัสความปลอดภัยในระบบ)</p>
+                                    <div class="relative">
+                                        <input type="password" id="ai-api-key" autocomplete="off"
+                                            class="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-sm font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                                            placeholder="AIzaSy... หรือ sk-...">
+                                        <button type="button" onclick="togglePasswordVisibility('ai-api-key')"
+                                            class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+                                            <i data-lucide="eye" class="w-4 h-4"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- System Prompt -->
+                                <div>
+                                    <label for="ai-system-prompt" class="block text-sm font-semibold text-gray-700 mb-1">
+                                        AI System Prompt (Security & Persona Instructions)
+                                    </label>
+                                    <p class="text-xs text-gray-500 mb-2">คำสั่งควบคุมบทบาท กฎเหล็ก และขอบเขตการตอบของผู้ช่วยอัจฉริยะ</p>
+                                    <textarea id="ai-system-prompt" rows="3"
+                                        class="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                                </div>
+
+                                <div class="flex justify-end pt-4 border-t">
+                                    <button type="submit" id="btn-save-ai-settings"
+                                        class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow-sm flex items-center transition-colors">
+                                        <i data-lucide="save" class="w-4 h-4 mr-2"></i> บันทึกการตั้งค่า AI Copilot
+                                    </button>
+                                </div>
+                            </form>
                         </div>
                     </div>
                 </div>
@@ -2148,6 +2423,67 @@
                 Close
             </button>
         </div>
+    </div>
+
+    <!-- AI Copilot Floating Widget (CIAM Spec v2.8.0 หมวด E) -->
+    <div id="ai-copilot-floating-container" class="fixed bottom-6 right-6 z-50 flex flex-col items-end pointer-events-none" style="display: none;">
+        <!-- Chat Popup Window -->
+        <div id="ai-copilot-chat-window" class="pointer-events-auto w-96 max-w-[calc(100vw-2rem)] h-[520px] max-h-[80vh] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden mb-3 transition-all duration-300 transform scale-95 opacity-0 pointer-events-none hidden">
+            <!-- Header -->
+            <div class="bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-600 text-white p-4 flex items-center justify-between shadow-md">
+                <div class="flex items-center space-x-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                        <i data-lucide="sparkles" class="w-4 h-4 text-amber-300"></i>
+                    </div>
+                    <div>
+                        <h5 class="text-sm font-bold flex items-center">
+                            QT-Online Copilot
+                            <span class="ml-2 text-[10px] font-semibold bg-blue-500/50 px-1.5 py-0.5 rounded border border-white/20">Read-Only</span>
+                        </h5>
+                        <p class="text-[11px] text-blue-100">Zero-Training AI Assistant</p>
+                    </div>
+                </div>
+                <button type="button" onclick="toggleAiChatWidget()" class="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Messages Container -->
+            <div id="ai-copilot-messages" class="flex-1 p-4 overflow-y-auto space-y-3 bg-gray-50 text-sm">
+                <!-- Welcome Message -->
+                <div class="flex items-start space-x-2">
+                    <div class="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 text-blue-700 font-bold text-xs">
+                        AI
+                    </div>
+                    <div class="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm border border-gray-200 text-gray-800 text-xs leading-relaxed max-w-[85%]">
+                        สวัสดีครับ! ผมคือ <b>QT-Online AI Copilot</b> ผู้ช่วยสืบค้น สรุปสถิติยอดขาย และข้อมูลใบเสนอราคาตามสิทธิ์การใช้งานของคุณ (Strict Read-Only & Zero-Training) มีอะไรให้ผมช่วยเหลือสอบถามได้เลยครับ
+                    </div>
+                </div>
+            </div>
+
+            <!-- Input Box -->
+            <div class="p-3 bg-white border-t border-gray-200">
+                <form id="ai-copilot-form" onsubmit="sendAiChatMessage(event)" class="flex items-center space-x-2">
+                    <input type="text" id="ai-copilot-input" autocomplete="off"
+                        placeholder="พิมพ์คำถาม เช่น สรุปยอดขายเดือนนี้..."
+                        class="flex-1 px-3 py-2 bg-gray-100 border border-gray-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <button type="submit" id="ai-copilot-send-btn"
+                        class="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-sm transition-colors flex items-center justify-center">
+                        <i data-lucide="send" class="w-4 h-4"></i>
+                    </button>
+                </form>
+                <p class="text-[10px] text-gray-400 text-center mt-1.5 flex items-center justify-center">
+                    <i data-lucide="shield-check" class="w-3 h-3 mr-1 text-emerald-500"></i> Strict Read-Only • Zero Data Retention
+                </p>
+            </div>
+        </div>
+
+        <!-- Floating Trigger Button -->
+        <button id="ai-copilot-fab-btn" onclick="toggleAiChatWidget()" type="button"
+            class="pointer-events-auto w-12 h-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-full shadow-xl flex items-center justify-center transition-all duration-300 hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-blue-300"
+            title="เปิดผู้ช่วย AI Copilot">
+            <i data-lucide="sparkles" class="w-6 h-6 text-amber-300"></i>
+        </button>
     </div>
 
     <!-- D. IMAGE MODAL (Hidden by default) -->
@@ -2298,6 +2634,42 @@
                         <p class="text-xs text-blue-700 mt-1 ml-6">
                             เปิดใช้งานเพื่อให้พนักงานสามารถล็อกอินด้วยรหัสผ่าน AD ได้ทั้งผ่าน SSO และฟอร์มล็อกอินตรง หากไม่เลือก จะเป็น Local Account
                         </p>
+                    </div>
+
+                    <!-- NEW: SAP Business One (SAP B1) Integration Card -->
+                    <div class="pt-2 bg-emerald-50/70 p-4 rounded-lg border border-emerald-200 space-y-3">
+                        <div class="flex items-center justify-between border-b border-emerald-200 pb-2">
+                            <span class="text-sm font-bold text-emerald-900 flex items-center">
+                                <i data-lucide="database" class="w-4 h-4 mr-1.5 text-emerald-700"></i>
+                                การเชื่อมต่อระบบ SAP Business One (SAP B1)
+                            </span>
+                            <span id="user-sap-status-badge" class="px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-600">
+                                ไม่มีสิทธิ์เข้าถึง SAP B1
+                            </span>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label for="user-sap-account" class="block text-xs font-medium text-emerald-900 mb-1">SAP B1 Account / Username</label>
+                                <input type="text" id="user-sap-account" autocomplete="off"
+                                    class="w-full px-3 py-1.5 bg-white border border-emerald-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                    placeholder="e.g. manager หรือ รหัสผู้ใช้ SAP">
+                            </div>
+                            <div>
+                                <label for="user-sap-password" class="block text-xs font-medium text-emerald-900 mb-1">SAP B1 Password</label>
+                                <input type="password" id="user-sap-password" autocomplete="new-password"
+                                    class="w-full px-3 py-1.5 bg-white border border-emerald-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                    placeholder="เว้นว่างไว้หากไม่ต้องการแก้ไข">
+                            </div>
+                        </div>
+                        <div class="pt-1">
+                            <label class="flex items-center space-x-2 cursor-pointer">
+                                <input type="checkbox" id="user-can-use-sap-api" class="w-4 h-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500">
+                                <span class="text-xs font-semibold text-emerald-900">อนุญาตให้ใช้งาน SAP B1 Service Layer API (สร้าง Sale Order อัตโนมัติ)</span>
+                            </label>
+                            <p class="text-[11px] text-emerald-700 mt-0.5 ml-6">
+                                ผู้ดูแลระบบสามารถกำหนดให้ User คนนี้มีสิทธิ์เรียกใช้ API สำหรับสร้างเอกสาร SO บนระบบ SAP B1
+                            </p>
+                        </div>
                     </div>
 
                     <!-- NEW: Signature Pad -->
@@ -3165,6 +3537,11 @@
 
                 // Start Notification Polling
                 startNotificationPolling();
+
+                // Initialize AI Copilot Floating Widget if enabled
+                if (typeof initAiCopilotWidget === 'function') {
+                    initAiCopilotWidget();
+                }
 
                 // *** FIX: Removed redundant calls. showPage() handles this. ***
                 // loadDashboardStats(); 
@@ -7161,6 +7538,9 @@
                 const adBadge = user.useAdAuth !== false
                     ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800">AD Auth</span>`
                     : `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-600">Local Only</span>`;
+                const sapBadge = (user.hasSapAccess || (user.sapAccount && user.canUseSapApi))
+                    ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800" title="SAP: ${escapeHtml(user.sapAccount || '')} (API Active)"><i data-lucide="check" class="w-3 h-3 mr-0.5"></i>SAP B1</span>`
+                    : (user.sapAccount ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800" title="SAP: ${escapeHtml(user.sapAccount || '')} (API Disabled)">SAP: No API</span>` : '');
 
                 return `
                     <tr data-id="${user.id}">
@@ -7171,7 +7551,7 @@
                         </td>
                         <td class="px-6 py-4">
                             <div>${escapeHtml(user.role || '')}</div>
-                            <div class="mt-0.5">${adBadge}</div>
+                            <div class="mt-0.5 flex flex-wrap gap-1 items-center">${adBadge}${sapBadge}</div>
                         </td>
                         <td class="px-6 py-4 text-gray-600">
                             <div>${escapeHtml(user.phoneNumber || '-')}</div>
@@ -7232,6 +7612,21 @@
             }
         }
 
+        function updateUserSapStatusBadge(hasAcc, canApi) {
+            const badge = document.getElementById('user-sap-status-badge');
+            if (!badge) return;
+            if (hasAcc && canApi) {
+                badge.className = 'px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800';
+                badge.innerHTML = '<span class="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1"></span>เข้าถึง SAP B1 ได้ (Active)';
+            } else if (hasAcc) {
+                badge.className = 'px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800';
+                badge.innerHTML = '<span class="inline-block w-2 h-2 rounded-full bg-amber-500 mr-1"></span>มี Account (ยังไม่เปิดสิทธิ์ API)';
+            } else {
+                badge.className = 'px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-600';
+                badge.innerHTML = 'ไม่มีสิทธิ์เข้าถึง SAP B1';
+            }
+        }
+
         async function openUserCreateModal(userId = null) {
             const modal = document.getElementById('user-form-modal');
             const title = document.getElementById('user-modal-title');
@@ -7248,6 +7643,10 @@
             document.getElementById('user-email').value = ''; // Reset email
             document.getElementById('user-telegram').value = ''; // Reset telegram
             document.getElementById('user-use-ad-auth').checked = true; // Default AD Auth = true
+            document.getElementById('user-sap-account').value = '';
+            document.getElementById('user-sap-password').value = '';
+            document.getElementById('user-can-use-sap-api').checked = false;
+            updateUserSapStatusBadge(false, false);
             if (signaturePreview) signaturePreview.src = '';
 
             // Show modal first to ensure canvas has dimensions
@@ -7272,6 +7671,11 @@
                     document.getElementById('user-email').value = user.email || '';
                     document.getElementById('user-telegram').value = user.telegramChatId || user.telegram_chat_id || '';
                     document.getElementById('user-use-ad-auth').checked = user.useAdAuth !== false;
+                    document.getElementById('user-sap-account').value = user.sapAccount || user.sap_account || '';
+                    document.getElementById('user-sap-password').value = user.hasSapPassword ? '********' : '';
+                    document.getElementById('user-can-use-sap-api').checked = Boolean(user.canUseSapApi ?? user.can_use_sap_api);
+                    updateUserSapStatusBadge(Boolean(user.sapAccount || user.sap_account), Boolean(user.canUseSapApi ?? user.can_use_sap_api));
+
                     passwordInput.required = false;
                     passwordHelp.style.display = 'block';
 
@@ -7327,8 +7731,15 @@
                 use_ad_auth: document.getElementById('user-use-ad-auth').checked,
                 role: document.getElementById('user-form-role').value,
                 phoneNumber: document.getElementById('user-phone').value,
-                targetAmount: parseFloat(document.getElementById('user-target-amount').value) || 0
+                targetAmount: parseFloat(document.getElementById('user-target-amount').value) || 0,
+                sap_account: document.getElementById('user-sap-account').value.trim(),
+                can_use_sap_api: document.getElementById('user-can-use-sap-api').checked
             };
+
+            const sapPwd = document.getElementById('user-sap-password').value;
+            if (sapPwd && !sapPwd.startsWith('****')) {
+                payload.sap_password = sapPwd;
+            }
 
             let url = '/api/users';
             let method = 'POST';
@@ -7387,7 +7798,7 @@
         let loginLogsData = [];
 
         function switchSettingsTab(tabName) {
-            const tabs = ['config', 'ciam-logs', 'login-logs', 'trans-logs'];
+            const tabs = ['config', 'telegram', 'sap', 'ai', 'ciam-logs', 'login-logs', 'trans-logs'];
             tabs.forEach(t => {
                 const btn = document.getElementById(`tab-btn-${t}`);
                 const pane = document.getElementById(`settings-tab-content-${t}`);
@@ -7406,6 +7817,12 @@
 
             if (tabName === 'config') {
                 loadCiamSettings();
+            } else if (tabName === 'telegram') {
+                loadTelegramSettings();
+            } else if (tabName === 'sap') {
+                loadSapSettings();
+            } else if (tabName === 'ai') {
+                loadAiSettings();
             } else if (tabName === 'ciam-logs') {
                 loadCiamLogs();
             } else if (tabName === 'login-logs') {
@@ -7961,6 +8378,506 @@
                     </tr>
                 `;
             }).join('');
+        }
+
+        // ========================================================
+        // TELEGRAM BOT, SAP B1 & AI COPILOT SETTINGS LOGIC
+        // ========================================================
+
+        function togglePasswordVisibility(elementId) {
+            const input = document.getElementById(elementId);
+            if (!input) return;
+            input.type = input.type === 'password' ? 'text' : 'password';
+        }
+
+        // --- Telegram Settings ---
+        let currentTelegramSettings = null;
+
+        async function loadTelegramSettings() {
+            try {
+                const res = await fetchApi('/api/settings/telegram');
+                if (res && res.settings) {
+                    currentTelegramSettings = res.settings;
+                    const isEnabledInput = document.getElementById('telegram-is-enabled');
+                    const badge = document.getElementById('telegram-status-badge');
+                    const isEnabled = Boolean(res.settings.telegram_enabled);
+                    if (isEnabledInput) isEnabledInput.checked = isEnabled;
+                    if (badge) {
+                        badge.className = `inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isEnabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`;
+                        badge.textContent = isEnabled ? 'Active' : 'Disabled';
+                    }
+
+                    const tokenInput = document.getElementById('telegram-bot-token');
+                    if (tokenInput) {
+                        tokenInput.value = res.settings.telegram_bot_token_masked || '';
+                    }
+                    const groupInput = document.getElementById('telegram-group-id');
+                    if (groupInput) {
+                        groupInput.value = res.settings.telegram_group_id || '';
+                    }
+                    const urlInput = document.getElementById('telegram-api-base-url');
+                    if (urlInput) {
+                        urlInput.value = res.settings.telegram_api_base_url || 'https://api.telegram.org';
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to load Telegram settings:", err);
+            }
+        }
+
+        function handleTelegramToggleChange() {
+            const isEnabled = document.getElementById('telegram-is-enabled')?.checked;
+            const badge = document.getElementById('telegram-status-badge');
+            if (badge) {
+                badge.className = `inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isEnabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`;
+                badge.textContent = isEnabled ? 'Active' : 'Disabled';
+            }
+        }
+
+        async function saveTelegramSettings(event) {
+            if (event) event.preventDefault();
+            const btn = document.getElementById('btn-save-telegram-settings');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i data-lucide="loader" class="w-4 h-4 mr-2 animate-spin"></i> กำลังบันทึก...';
+            }
+
+            const isEnabled = document.getElementById('telegram-is-enabled')?.checked;
+            const botToken = document.getElementById('telegram-bot-token')?.value?.trim();
+            const groupId = document.getElementById('telegram-group-id')?.value?.trim();
+            const apiBase = document.getElementById('telegram-api-base-url')?.value?.trim();
+
+            const payload = {
+                telegram_enabled: isEnabled,
+                telegram_group_id: groupId,
+                telegram_api_base_url: apiBase
+            };
+            if (botToken && !botToken.includes('...')) {
+                payload.telegram_bot_token = botToken;
+            }
+
+            try {
+                const res = await fetchApi('/api/settings/telegram', 'PUT', payload);
+                if (res && res.success) {
+                    alert("บันทึกการตั้งค่า Telegram Bot เรียบร้อยแล้ว");
+                    loadTelegramSettings();
+                } else {
+                    alert(res?.error || "เกิดข้อผิดพลาดในการบันทึก");
+                }
+            } catch (err) {
+                alert("เกิดข้อผิดพลาด: " + err.message);
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i data-lucide="save" class="w-4 h-4 mr-2"></i> บันทึกการตั้งค่า Telegram';
+                    if (window.lucide) lucide.createIcons();
+                }
+            }
+        }
+
+        async function testTelegramNotification() {
+            const btn = document.getElementById('btn-test-telegram-conn');
+            const statusText = document.getElementById('telegram-conn-status-text');
+            const indicator = document.getElementById('telegram-conn-indicator');
+            const details = document.getElementById('telegram-conn-details');
+
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i data-lucide="loader" class="w-3.5 h-3.5 mr-1.5 animate-spin"></i> กำลังทดสอบ...';
+            }
+            if (indicator) indicator.className = 'w-3 h-3 rounded-full bg-yellow-400 animate-pulse';
+            if (statusText) statusText.textContent = 'กำลังส่ง...';
+
+            const botToken = document.getElementById('telegram-bot-token')?.value?.trim();
+            const groupId = document.getElementById('telegram-group-id')?.value?.trim();
+            const apiBase = document.getElementById('telegram-api-base-url')?.value?.trim();
+
+            try {
+                const res = await fetchApi('/api/settings/telegram/test', 'POST', {
+                    telegram_bot_token: botToken,
+                    telegram_group_id: groupId,
+                    telegram_api_base_url: apiBase
+                });
+
+                if (res && res.success) {
+                    if (indicator) indicator.className = 'w-3 h-3 rounded-full bg-green-500';
+                    if (statusText) {
+                        statusText.className = 'ml-2 text-xs font-mono px-2 py-0.5 rounded bg-green-100 text-green-800 font-bold';
+                        statusText.textContent = 'ส่งสำเร็จ';
+                    }
+                    if (details) details.textContent = 'ข้อความทดสอบถูกส่งเข้า Telegram Group สำเร็จแล้ว ตรวจสอบในห้องแชทได้ทันที';
+                } else {
+                    if (indicator) indicator.className = 'w-3 h-3 rounded-full bg-red-500';
+                    if (statusText) {
+                        statusText.className = 'ml-2 text-xs font-mono px-2 py-0.5 rounded bg-red-100 text-red-800 font-bold';
+                        statusText.textContent = 'ส่งไม่สำเร็จ';
+                    }
+                    if (details) details.textContent = res?.message || 'ไม่สามารถส่งข้อความได้ กรุณาตรวจสอบ Bot Token และ Group ID';
+                }
+            } catch (err) {
+                if (indicator) indicator.className = 'w-3 h-3 rounded-full bg-red-500';
+                if (statusText) {
+                    statusText.className = 'ml-2 text-xs font-mono px-2 py-0.5 rounded bg-red-100 text-red-800 font-bold';
+                    statusText.textContent = 'Error';
+                }
+                if (details) details.textContent = err.message;
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i data-lucide="send" class="w-3.5 h-3.5 mr-1.5 text-blue-600"></i> ทดสอบส่งข้อความแจ้งเตือน';
+                    if (window.lucide) lucide.createIcons();
+                }
+            }
+        }
+
+        // --- SAP B1 Settings ---
+        async function loadSapSettings() {
+            try {
+                const res = await fetchApi('/api/settings/sap');
+                if (res && res.settings) {
+                    const isEnabledInput = document.getElementById('sap-is-enabled');
+                    const badge = document.getElementById('sap-status-badge');
+                    const isEnabled = Boolean(res.settings.sap_b1_enabled);
+                    if (isEnabledInput) isEnabledInput.checked = isEnabled;
+                    if (badge) {
+                        badge.className = `inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isEnabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`;
+                        badge.textContent = isEnabled ? 'Active' : 'Disabled';
+                    }
+
+                    const urlInput = document.getElementById('sap-service-url');
+                    if (urlInput) urlInput.value = res.settings.sap_b1_service_url || '';
+                    const dbInput = document.getElementById('sap-company-db');
+                    if (dbInput) dbInput.value = res.settings.sap_b1_company_db || '';
+                }
+            } catch (err) {
+                console.error("Failed to load SAP settings:", err);
+            }
+        }
+
+        function handleSapToggleChange() {
+            const isEnabled = document.getElementById('sap-is-enabled')?.checked;
+            const badge = document.getElementById('sap-status-badge');
+            if (badge) {
+                badge.className = `inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isEnabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`;
+                badge.textContent = isEnabled ? 'Active' : 'Disabled';
+            }
+        }
+
+        async function saveSapSettings(event) {
+            if (event) event.preventDefault();
+            const btn = document.getElementById('btn-save-sap-settings');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i data-lucide="loader" class="w-4 h-4 mr-2 animate-spin"></i> กำลังบันทึก...';
+            }
+
+            const payload = {
+                sap_b1_enabled: document.getElementById('sap-is-enabled')?.checked,
+                sap_b1_service_url: document.getElementById('sap-service-url')?.value?.trim(),
+                sap_b1_company_db: document.getElementById('sap-company-db')?.value?.trim()
+            };
+
+            try {
+                const res = await fetchApi('/api/settings/sap', 'PUT', payload);
+                if (res && res.success) {
+                    alert("บันทึกการตั้งค่า SAP Business One เรียบร้อยแล้ว");
+                    loadSapSettings();
+                } else {
+                    alert(res?.error || "เกิดข้อผิดพลาดในการบันทึก");
+                }
+            } catch (err) {
+                alert("เกิดข้อผิดพลาด: " + err.message);
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i data-lucide="save" class="w-4 h-4 mr-2"></i> บันทึกการตั้งค่า SAP B1';
+                    if (window.lucide) lucide.createIcons();
+                }
+            }
+        }
+
+        async function testSapConnection() {
+            const btn = document.getElementById('btn-test-sap-conn');
+            const statusText = document.getElementById('sap-conn-status-text');
+            const indicator = document.getElementById('sap-conn-indicator');
+            const details = document.getElementById('sap-conn-details');
+
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i data-lucide="loader" class="w-3.5 h-3.5 mr-1.5 animate-spin"></i> กำลังทดสอบ...';
+            }
+            if (indicator) indicator.className = 'w-3 h-3 rounded-full bg-yellow-400 animate-pulse';
+            if (statusText) statusText.textContent = 'กำลังเชื่อมต่อ...';
+
+            const serviceUrl = document.getElementById('sap-service-url')?.value?.trim();
+
+            try {
+                const res = await fetchApi('/api/settings/sap/test-connection', 'POST', {
+                    sap_b1_service_url: serviceUrl
+                });
+
+                if (res && res.success) {
+                    if (indicator) indicator.className = 'w-3 h-3 rounded-full bg-green-500';
+                    if (statusText) {
+                        statusText.className = 'ml-2 text-xs font-mono px-2 py-0.5 rounded bg-green-100 text-green-800 font-bold';
+                        statusText.textContent = `Online (${res.latency_ms || 0} ms)`;
+                    }
+                    if (details) details.textContent = res.message || 'เชื่อมต่อ SAP B1 Service Layer สำเร็จ';
+                } else {
+                    if (indicator) indicator.className = 'w-3 h-3 rounded-full bg-red-500';
+                    if (statusText) {
+                        statusText.className = 'ml-2 text-xs font-mono px-2 py-0.5 rounded bg-red-100 text-red-800 font-bold';
+                        statusText.textContent = 'Offline';
+                    }
+                    if (details) details.textContent = res?.message || 'ไม่สามารถติดต่อ Service Layer ได้';
+                }
+            } catch (err) {
+                if (indicator) indicator.className = 'w-3 h-3 rounded-full bg-red-500';
+                if (statusText) {
+                    statusText.className = 'ml-2 text-xs font-mono px-2 py-0.5 rounded bg-red-100 text-red-800 font-bold';
+                    statusText.textContent = 'Error';
+                }
+                if (details) details.textContent = err.message;
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i data-lucide="zap" class="w-3.5 h-3.5 mr-1.5 text-emerald-600"></i> ทดสอบการเชื่อมต่อ SAP Service Layer';
+                    if (window.lucide) lucide.createIcons();
+                }
+            }
+        }
+
+        // --- AI Copilot Settings (Spec v2.8.0) ---
+        async function loadAiSettings() {
+            try {
+                const res = await fetchApi('/api/settings/ai');
+                if (res && res.settings) {
+                    const isEnabledInput = document.getElementById('ai-is-enabled');
+                    const badge = document.getElementById('ai-status-badge');
+                    const isEnabled = Boolean(res.settings.enabled);
+                    if (isEnabledInput) isEnabledInput.checked = isEnabled;
+                    if (badge) {
+                        badge.className = `inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isEnabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`;
+                        badge.textContent = isEnabled ? 'Active' : 'Disabled';
+                    }
+
+                    const provSelect = document.getElementById('ai-provider');
+                    if (provSelect) provSelect.value = res.settings.provider || 'google';
+                    const modelInput = document.getElementById('ai-model');
+                    if (modelInput) modelInput.value = res.settings.model || 'gemini-2.5-flash';
+                    const keyInput = document.getElementById('ai-api-key');
+                    if (keyInput) keyInput.value = res.settings.api_key_masked || '';
+                    const promptArea = document.getElementById('ai-system-prompt');
+                    if (promptArea) promptArea.value = res.settings.system_prompt || '';
+
+                    initAiCopilotWidget(res.settings);
+                }
+            } catch (err) {
+                console.error("Failed to load AI settings:", err);
+            }
+        }
+
+        function handleAiToggleChange() {
+            const isEnabled = document.getElementById('ai-is-enabled')?.checked;
+            const badge = document.getElementById('ai-status-badge');
+            if (badge) {
+                badge.className = `inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isEnabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`;
+                badge.textContent = isEnabled ? 'Active' : 'Disabled';
+            }
+        }
+
+        async function saveAiSettings(event) {
+            if (event) event.preventDefault();
+            const btn = document.getElementById('btn-save-ai-settings');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i data-lucide="loader" class="w-4 h-4 mr-2 animate-spin"></i> กำลังบันทึก...';
+            }
+
+            const apiKey = document.getElementById('ai-api-key')?.value?.trim();
+            const payload = {
+                enabled: document.getElementById('ai-is-enabled')?.checked,
+                provider: document.getElementById('ai-provider')?.value,
+                model: document.getElementById('ai-model')?.value?.trim(),
+                system_prompt: document.getElementById('ai-system-prompt')?.value?.trim()
+            };
+            if (apiKey && !apiKey.includes('...')) {
+                payload.api_key = apiKey;
+            }
+
+            try {
+                const res = await fetchApi('/api/settings/ai', 'PUT', payload);
+                if (res && res.success) {
+                    alert("บันทึกการตั้งค่า AI Copilot เรียบร้อยแล้ว");
+                    loadAiSettings();
+                } else {
+                    alert(res?.error || "เกิดข้อผิดพลาดในการบันทึก");
+                }
+            } catch (err) {
+                alert("เกิดข้อผิดพลาด: " + err.message);
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i data-lucide="save" class="w-4 h-4 mr-2"></i> บันทึกการตั้งค่า AI Copilot';
+                    if (window.lucide) lucide.createIcons();
+                }
+            }
+        }
+
+        async function testAiConnection() {
+            const btn = document.getElementById('btn-test-ai-conn');
+            const statusText = document.getElementById('ai-conn-status-text');
+            const indicator = document.getElementById('ai-conn-indicator');
+            const details = document.getElementById('ai-conn-details');
+
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i data-lucide="loader" class="w-3.5 h-3.5 mr-1.5 animate-spin"></i> กำลังทดสอบ...';
+            }
+            if (indicator) indicator.className = 'w-3 h-3 rounded-full bg-yellow-400 animate-pulse';
+            if (statusText) statusText.textContent = 'กำลังทดสอบ...';
+
+            const apiKey = document.getElementById('ai-api-key')?.value?.trim();
+
+            try {
+                const res = await fetchApi('/api/settings/ai/test', 'POST', { api_key: apiKey });
+                if (res && res.success) {
+                    if (indicator) indicator.className = 'w-3 h-3 rounded-full bg-green-500';
+                    if (statusText) {
+                        statusText.className = 'ml-2 text-xs font-mono px-2 py-0.5 rounded bg-green-100 text-green-800 font-bold';
+                        statusText.textContent = `Valid (${res.latency_ms || 0} ms)`;
+                    }
+                    if (details) details.textContent = res.message || 'การเชื่อมต่อ AI Engine ถูกต้องสมบูรณ์';
+                } else {
+                    if (indicator) indicator.className = 'w-3 h-3 rounded-full bg-red-500';
+                    if (statusText) {
+                        statusText.className = 'ml-2 text-xs font-mono px-2 py-0.5 rounded bg-red-100 text-red-800 font-bold';
+                        statusText.textContent = 'Invalid Key';
+                    }
+                    if (details) details.textContent = res?.message || 'API Key ไม่ถูกต้อง';
+                }
+            } catch (err) {
+                if (indicator) indicator.className = 'w-3 h-3 rounded-full bg-red-500';
+                if (statusText) {
+                    statusText.className = 'ml-2 text-xs font-mono px-2 py-0.5 rounded bg-red-100 text-red-800 font-bold';
+                    statusText.textContent = 'Error';
+                }
+                if (details) details.textContent = err.message;
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i data-lucide="zap" class="w-3.5 h-3.5 mr-1.5 text-indigo-600"></i> ทดสอบเชื่อมต่อ API Key';
+                    if (window.lucide) lucide.createIcons();
+                }
+            }
+        }
+
+        // --- AI Floating Chat Widget Logic ---
+        let aiChatHistory = [];
+
+        async function initAiCopilotWidget(settings = null) {
+            const container = document.getElementById('ai-copilot-floating-container');
+            if (!container) return;
+            try {
+                if (!settings) {
+                    const res = await fetchApi('/api/settings/ai');
+                    settings = res?.settings;
+                }
+                if (settings && settings.enabled) {
+                    container.style.display = 'flex';
+                } else {
+                    container.style.display = 'none';
+                    const win = document.getElementById('ai-copilot-chat-window');
+                    if (win) {
+                        win.classList.add('hidden');
+                        win.classList.add('scale-95');
+                        win.classList.add('opacity-0');
+                    }
+                }
+            } catch (e) {
+                container.style.display = 'none';
+            }
+        }
+
+        function toggleAiChatWidget() {
+            const win = document.getElementById('ai-copilot-chat-window');
+            if (!win) return;
+            if (win.classList.contains('hidden')) {
+                win.classList.remove('hidden');
+                setTimeout(() => {
+                    win.classList.remove('scale-95', 'opacity-0', 'pointer-events-none');
+                    document.getElementById('ai-copilot-input')?.focus();
+                }, 20);
+            } else {
+                win.classList.add('scale-95', 'opacity-0', 'pointer-events-none');
+                setTimeout(() => {
+                    win.classList.add('hidden');
+                }, 250);
+            }
+        }
+
+        async function sendAiChatMessage(event) {
+            if (event) event.preventDefault();
+            const input = document.getElementById('ai-copilot-input');
+            const sendBtn = document.getElementById('ai-copilot-send-btn');
+            const messagesContainer = document.getElementById('ai-copilot-messages');
+            if (!input || !messagesContainer) return;
+
+            const query = input.value.trim();
+            if (!query) return;
+
+            input.value = '';
+            if (sendBtn) sendBtn.disabled = true;
+
+            const userBubble = document.createElement('div');
+            userBubble.className = 'flex items-start justify-end space-x-2';
+            userBubble.innerHTML = `
+                <div class="bg-blue-600 text-white p-3 rounded-2xl rounded-tr-none shadow-sm text-xs leading-relaxed max-w-[85%]">
+                    ${escapeHtml(query)}
+                </div>
+            `;
+            messagesContainer.appendChild(userBubble);
+
+            const loadingBubble = document.createElement('div');
+            loadingBubble.className = 'flex items-start space-x-2';
+            loadingBubble.innerHTML = `
+                <div class="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 text-blue-700 font-bold text-xs">AI</div>
+                <div class="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm border border-gray-200 text-gray-500 text-xs flex items-center space-x-1.5">
+                    <span class="inline-block w-2 h-2 rounded-full bg-blue-600 animate-ping"></span>
+                    <span>กำลังประมวลผลคำตอบ...</span>
+                </div>
+            `;
+            messagesContainer.appendChild(loadingBubble);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+            aiChatHistory.push({ role: "user", content: query });
+
+            try {
+                const res = await fetchApi('/api/ai/chat', 'POST', {
+                    messages: aiChatHistory
+                });
+
+                const reply = res?.message?.content || "ขออภัยครับ ไม่สามารถรับคำตอบจากระบบได้ในขณะนี้";
+                aiChatHistory.push({ role: "assistant", content: reply });
+
+                loadingBubble.innerHTML = `
+                    <div class="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 text-blue-700 font-bold text-xs">AI</div>
+                    <div class="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm border border-gray-200 text-gray-800 text-xs leading-relaxed max-w-[85%] prose prose-xs">
+                        ${reply}
+                    </div>
+                `;
+            } catch (err) {
+                loadingBubble.innerHTML = `
+                    <div class="w-7 h-7 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0 text-red-700 font-bold text-xs">!</div>
+                    <div class="bg-red-50 p-3 rounded-2xl rounded-tl-none border border-red-200 text-red-700 text-xs">
+                        เกิดข้อผิดพลาดในการเชื่อมต่อ: ${escapeHtml(err.message)}
+                    </div>
+                `;
+            } finally {
+                if (sendBtn) sendBtn.disabled = false;
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                if (window.lucide) lucide.createIcons();
+            }
         }
 
         function openChangePasswordModal() {
