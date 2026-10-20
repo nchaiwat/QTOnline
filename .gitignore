@@ -30,4 +30,6 @@ qr_line.txt
 scratch/
 scratch_git.py
 docker-compose.override.yml
+*.tar.gz
+*.zip
 

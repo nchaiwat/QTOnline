@@ -93,3 +93,8 @@
    - **Seamless Logout to Central IAM Portal:** ผู้ใช้ที่เข้าผ่าน SSO เมื่อกด Logout จะถูกนำทางกลับไปยัง `https://ciam.windowasia.com/portal`
    - **Fix Remember Token Re-Authentication Loop:** บังคับทำลายคุกกี้ `remember_token` และ `session` บน HTTP Response โดยตรงในฟังก์ชัน `/logout` เพื่อแก้ปัญหาการเด้งกลับเข้า Dashboard หลังกด Logout
    - **Fix Duplicate JavaScript Identifiers:** จัดการ Scope ตัวแปรใน `login.html` คืนค่าการทำงานของปุ่มลูกตาเปิดดูรหัสผ่าน และ Mobile QR Login
+
+5. **SAP Business One (SAP B1) Service Layer Integration & Profile Governance (Oct 2026):**
+    - **No Simulation Rule (กฎเหล็กห้ามใช้ตัวเลขหลอก):** ยกเลิก Simulation Mode ออกจากระบบทั้งหมด หากระบบ SAP B1 ปิดอยู่ หรือผู้ใช้ยังไม่ได้ระบุบัญชี SAP หรือ Logon ไม่สำเร็จ จะต้องปฏิเสธและไม่สร้างตัวเลขจำลองเด็ดขาด
+    - **Automated Logon Verification (`/api/me/sap-status`):** ระบบจะทดสอบ Login กับ SAP Service Layer อัตโนมัติเมื่อผู้ใช้เข้าสู่ระบบ หาก Login ผ่าน ปุ่ม "Create SO" ในตารางและหน้ารายละเอียดจึงจะกลายเป็นสีเขียว Active หากไม่ผ่านจะ Disabled สีเทา พร้อม Tooltip แจ้งเหตุผล
+    - **Top-right User Profile & SAP Modal:** มีปุ่มไอคอน SAP (`layers`) และรูปโปรไฟล์ที่มุมขวาบน พร้อมไฟแสดงสถานะ (เขียว/แดง/เทา) ให้ผู้ใช้สามารถกรอก/แก้ไข SAP Username และ Password (เข้ารหัสด้วย `encrypt_string`) และกดทดสอบ Login แบบเรียลไทม์ได้ทันที

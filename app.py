@@ -681,11 +681,31 @@ def get_dashboard_stats():
     Replaces client-side calculation of 500 POs with instant SQL queries.
     """
     now = now_bangkok()
+    month_param = request.args.get("month", "").strip()
+
+    # Parse month (YYYY-MM) with fallback to current month
+    selected_year = now.year
+    selected_month = now.month
+    if month_param:
+        try:
+            m_parts = month_param.split("-")
+            y_val = int(m_parts[0])
+            if y_val > 2500:
+                y_val -= 543
+            selected_year = y_val
+            selected_month = int(m_parts[1])
+        except Exception:
+            selected_year = now.year
+            selected_month = now.month
+
+    start_of_month = datetime(selected_year, selected_month, 1)
+    if selected_month == 12:
+        end_of_month = datetime(selected_year + 1, 1, 1)
+    else:
+        end_of_month = datetime(selected_year, selected_month + 1, 1)
+
     start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0).replace(tzinfo=None)
-    start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).replace(tzinfo=None)
-    
-    # Monday as start of week
-    days_since_monday = start_of_day.weekday() # 0 = Monday
+    days_since_monday = start_of_day.weekday()
     start_of_week = start_of_day - timedelta(days=days_since_monday)
 
     # Base Role Filter condition
@@ -695,30 +715,57 @@ def get_dashboard_stats():
     else:
         role_cond = (PurchaseOrder.sale_user_id == current_user.id)
 
-    # 1. Today Count
-    today_count = db.session.query(func.count(PurchaseOrder.id)).filter(
-        role_cond,
-        PurchaseOrder.created >= start_of_day,
-        PurchaseOrder.status != "Cancelled"
-    ).scalar() or 0
+    # All dashboard metrics and graphs are filtered by the selected month
+    month_cond = and_(
+        PurchaseOrder.created >= start_of_month,
+        PurchaseOrder.created < end_of_month
+    )
 
-    # 2. Week Count
-    week_count = db.session.query(func.count(PurchaseOrder.id)).filter(
-        role_cond,
-        PurchaseOrder.created >= start_of_week,
-        PurchaseOrder.status != "Cancelled"
-    ).scalar() or 0
+    # 1. Today & Week Count (active only when viewing current month)
+    is_current_month = (selected_year == now.year and selected_month == now.month)
+    if is_current_month:
+        today_count = db.session.query(func.count(PurchaseOrder.id)).filter(
+            role_cond,
+            PurchaseOrder.created >= start_of_day,
+            PurchaseOrder.status != "Cancelled"
+        ).scalar() or 0
 
-    # 3. Status Summary (Counts for Funnel and Pie Chart)
-    status_order = ["Draft", "Pending Review", "Changes Requested", "Approved", "Completed", "Cancellation Requested", "Cancelled"]
-    status_counts = {st: 0 for st in status_order}
+        week_count = db.session.query(func.count(PurchaseOrder.id)).filter(
+            role_cond,
+            PurchaseOrder.created >= start_of_week,
+            PurchaseOrder.status != "Cancelled"
+        ).scalar() or 0
+    else:
+        # If viewing another month, show 0 or total in that month
+        today_count = 0
+        week_count = 0
+
+    # 2. Status Summary (Counts for Funnel and Pie Chart) - Monthly
+    status_order = ["Draft", "Pending Review", "Changes Requested", "Approved", "Completed", "SAP SO", "Cancellation Requested", "Cancelled"]
     status_rows = db.session.query(
         PurchaseOrder.status, func.count(PurchaseOrder.id)
-    ).filter(role_cond).group_by(PurchaseOrder.status).all()
-    for s_name, s_cnt in status_rows:
-        status_counts[s_name] = s_cnt
+    ).filter(role_cond, month_cond).group_by(PurchaseOrder.status).all()
+    raw_status_map = {s_name: s_cnt for s_name, s_cnt in status_rows}
 
-    # 4. Monthly Approved Value and Count
+    # SAP SO Count for the month
+    sap_so_count = db.session.query(func.count(PurchaseOrder.id)).filter(
+        role_cond,
+        month_cond,
+        PurchaseOrder.sap_doc_num.isnot(None),
+        PurchaseOrder.sap_sync_status == "SYNCED"
+    ).scalar() or 0
+
+    status_counts = {}
+    for st in status_order:
+        if st == "SAP SO":
+            status_counts[st] = sap_so_count
+        else:
+            status_counts[st] = raw_status_map.get(st, 0)
+    for st, cnt in raw_status_map.items():
+        if st not in status_counts:
+            status_counts[st] = cnt
+
+    # 3. Monthly Approved Value and Count
     approved_statuses = ["Approved", "Completed", "Cancellation Requested"]
     month_approved_row = db.session.query(
         func.count(PurchaseOrder.id),
@@ -726,24 +773,25 @@ def get_dashboard_stats():
     ).filter(
         role_cond,
         PurchaseOrder.status.in_(approved_statuses),
-        PurchaseOrder.created >= start_of_month
+        month_cond
     ).first()
     monthly_approved_count = month_approved_row[0] if month_approved_row else 0
     monthly_approved_value = float(month_approved_row[1]) if month_approved_row else 0.0
 
-    # 5. Action Count
+    # 4. Action Count for the month
     if current_user.role == "Sale":
         action_count = status_counts.get("Draft", 0) + status_counts.get("Changes Requested", 0)
     else:
         action_count = status_counts.get("Pending Review", 0) + status_counts.get("Cancellation Requested", 0)
 
-    # 6. Cycle Durations (Avg delivery days)
+    # 5. Cycle Durations (Avg delivery days for the month)
     cycle_rows = db.session.query(
         PurchaseOrder.created, PurchaseOrder.deliveryDate
     ).filter(
         role_cond,
         PurchaseOrder.status.in_(approved_statuses),
-        PurchaseOrder.deliveryDate.isnot(None)
+        PurchaseOrder.deliveryDate.isnot(None),
+        month_cond
     ).order_by(PurchaseOrder.id.desc()).limit(100).all()
 
     cycle_durations = []
@@ -762,13 +810,14 @@ def get_dashboard_stats():
                 pass
     avg_cycle = round(sum(cycle_durations) / len(cycle_durations), 1) if cycle_durations else None
 
-    # 7. Top 5 Customers
+    # 6. Top 5 Customers for the month
     top_cust_rows = db.session.query(
         func.coalesce(PurchaseOrder.customerName, PurchaseOrder.customerId).label("cname"),
         func.sum(PurchaseOrder.amount).label("total")
     ).filter(
         role_cond,
-        PurchaseOrder.status != "Cancelled"
+        PurchaseOrder.status != "Cancelled",
+        month_cond
     ).group_by(func.coalesce(PurchaseOrder.customerName, PurchaseOrder.customerId)).order_by(text("total DESC")).limit(5).all()
 
     top_customers = [
@@ -776,14 +825,15 @@ def get_dashboard_stats():
         for r in top_cust_rows
     ]
 
-    # 8. Top 5 Products
+    # 7. Top 5 Products for the month
     top_prod_rows = db.session.query(
         POItem.productCode,
         POItem.name,
         func.sum(POItem.total).label("ptotal")
     ).join(PurchaseOrder, POItem.po_id == PurchaseOrder.id).filter(
         role_cond,
-        PurchaseOrder.status != "Cancelled"
+        PurchaseOrder.status != "Cancelled",
+        month_cond
     ).group_by(POItem.productCode, POItem.name).order_by(text("ptotal DESC")).limit(5).all()
 
     top_products = [
@@ -795,9 +845,9 @@ def get_dashboard_stats():
         for r in top_prod_rows
     ]
 
-    # 9. Recent Timeline Events (Up to 10 latest)
+    # 8. Recent Timeline Events for the month
     recent_pos = (
-        PurchaseOrder.query.filter(role_cond)
+        PurchaseOrder.query.filter(role_cond, month_cond)
         .options(
             joinedload(PurchaseOrder.canceller),
             joinedload(PurchaseOrder.requester)
@@ -848,9 +898,12 @@ def get_dashboard_stats():
 
     return jsonify(
         {
+            "month": f"{selected_year}-{selected_month:02d}",
+            "isCurrentMonth": is_current_month,
             "todayCount": today_count,
             "weekCount": week_count,
             "statusCounts": status_counts,
+            "statusOrder": status_order,
             "monthlyApprovedCount": monthly_approved_count,
             "monthlyApprovedValue": monthly_approved_value,
             "actionCount": action_count,
@@ -1108,7 +1161,10 @@ def export_pos_excel():
 
     # Apply Status Filter
     if status_filter:
-        query = query.filter(PurchaseOrder.status == status_filter)
+        if status_filter.lower() == "sap so":
+            query = query.filter(PurchaseOrder.sap_doc_num.isnot(None), PurchaseOrder.sap_sync_status == "SYNCED")
+        else:
+            query = query.filter(PurchaseOrder.status == status_filter)
 
     # Apply Keyword Filter (Replicating frontend searchable fields)
     if keyword:
@@ -2967,7 +3023,7 @@ def sign_customer_po(token):
         with open(filepath, "wb") as f:
             f.write(img_data)
 
-        print(f"✓ Saved signature image: {filename}")
+        print(f"[OK] Saved signature image: {filename}")
 
         po.signatureImage = filename
         po.signedAt = now_bangkok()
@@ -2983,12 +3039,12 @@ def sign_customer_po(token):
                 with open(pdf_path, "wb") as f:
                     f.write(pdf_bytes)
                 po.signedFile = pdf_filename
-                print(f"✓ PDF generated and saved: {pdf_filename}")
+                print(f"[OK] PDF generated and saved: {pdf_filename}")
             else:
-                print("✗ PDF generation returned None (WeasyPrint error?)")
+                print("[WARN] PDF generation returned None (WeasyPrint error?)")
                 po.signedFile = None
         except Exception as pdf_error:
-            print(f"✗ PDF generation error: {pdf_error}")
+            print(f"[ERROR] PDF generation error: {pdf_error}")
             import traceback
 
             traceback.print_exc()
@@ -3001,7 +3057,7 @@ def sign_customer_po(token):
 
         try:
             db.session.commit()
-            print("✓ Database updated successfully")
+            print("[OK] Database updated successfully")
 
             # Send Telegram notification ONLY after successful commit
             if po.sale_user_id:
@@ -3022,7 +3078,7 @@ def sign_customer_po(token):
 
         except Exception as db_err:
             db.session.rollback()
-            print(f"✗ DB error during commit: {db_err}")
+            print(f"[ERROR] DB error during commit: {db_err}")
             raise db_err
 
         return jsonify(
@@ -3036,7 +3092,7 @@ def sign_customer_po(token):
 
     except Exception as e:
         db.session.rollback()
-        print(f"✗ Sign error: {e}")
+        print(f"[ERROR] Sign error: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -3431,6 +3487,12 @@ with app.app_context():
                 "customerPoUploadedAt": "TIMESTAMP WITHOUT TIME ZONE",
                 "customerPoUploadedBy": "INTEGER",
                 "updatedAt": "TIMESTAMP WITHOUT TIME ZONE",
+                "sap_doc_num": "VARCHAR(50)",
+                "sap_doc_entry": "INTEGER",
+                "sap_created_at": "TIMESTAMP WITHOUT TIME ZONE",
+                "sap_created_by": "INTEGER",
+                "sap_sync_status": "VARCHAR(20)",
+                "sap_sync_error": "TEXT",
             }
             for col, dtype in po_new_columns.items():
                 if col.lower() not in existing_po_cols:
@@ -4775,6 +4837,545 @@ def test_sap_connection_api():
     except Exception as e:
         latency = int((time.time() - start) * 1000)
         return jsonify({"success": False, "message": f"ไม่สามารถเชื่อมต่อไปยัง Service Layer ได้: {str(e)}", "latency_ms": latency}), 502
+
+
+def _clean_sap_service_url(url: str) -> str:
+    cleaned = (url or "").strip().rstrip("/")
+    if cleaned.endswith("/Login"):
+        cleaned = cleaned[:-6].rstrip("/")
+    return cleaned
+
+
+def _test_sap_b1_login(sap_user: str, sap_password: str, service_url: str = None, company_db: str = None):
+    """
+    Test authenticating against SAP B1 Service Layer with provided credentials.
+    Returns (success: bool, message: str, latency_ms: int)
+    """
+    import ssl
+    import json
+    import time
+    import urllib.request
+    import urllib.error
+
+    if not sap_user or not sap_password:
+        return False, "กรุณาระบุบัญชี SAP (Username) และรหัสผ่าน", 0
+
+    base_url = _clean_sap_service_url(service_url or SystemSetting.get_value("sap_b1_service_url", "https://sap.windowasia.com:50000/b1s/v1"))
+    db_name = company_db or SystemSetting.get_value("sap_b1_company_db", "WINDOW_ASIA_LIVE")
+
+    start = time.time()
+    try:
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+
+        login_url = f"{base_url}/Login"
+        payload = json.dumps({
+            "CompanyDB": db_name,
+            "UserName": sap_user,
+            "Password": sap_password
+        }).encode("utf-8")
+
+        req = urllib.request.Request(
+            login_url,
+            data=payload,
+            headers={"Content-Type": "application/json", "User-Agent": "QTOnline-SAP-Connector/1.0"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+            latency = int((time.time() - start) * 1000)
+            return True, f"ยืนยันตัวตนสำเร็จ (Company: {db_name})", latency
+    except urllib.error.HTTPError as e:
+        latency = int((time.time() - start) * 1000)
+        err_msg = f"HTTP Error {e.code}"
+        try:
+            err_body = e.read().decode("utf-8")
+            err_json = json.loads(err_body)
+            if "error" in err_json and "message" in err_json["error"]:
+                val = err_json["error"]["message"]
+                err_msg = val.get("value", err_msg) if isinstance(val, dict) else str(val)
+        except Exception:
+            pass
+        return False, f"SAP ปฏิเสธการเข้าสู่ระบบ: {err_msg}", latency
+    except Exception as e:
+        latency = int((time.time() - start) * 1000)
+        return False, f"ไม่สามารถติดต่อ SAP Service Layer ได้: {str(e)}", latency
+
+
+@app.route("/api/me/sap-status", methods=["GET"])
+@login_required
+def get_my_sap_status():
+    """
+    Check if current user can create Sales Order on SAP B1.
+    Tests SAP logon if credentials exist and SAP is enabled.
+    """
+    import time
+    enabled_val = SystemSetting.get_value("sap_b1_enabled", False)
+    sap_enabled = str(enabled_val).lower() in ("true", "1", "yes")
+    sap_user = (current_user.sap_account or "").strip()
+    raw_pwd = getattr(current_user, "sap_password", "") or ""
+    sap_pwd = ""
+    if raw_pwd:
+        try:
+            sap_pwd = decrypt_string(raw_pwd)
+        except Exception:
+            sap_pwd = raw_pwd
+
+    has_credentials = bool(sap_user and sap_pwd)
+    force_refresh = request.args.get("refresh", "0") in ("1", "true")
+
+    if not sap_enabled:
+        return jsonify({
+            "sap_enabled": False,
+            "has_credentials": has_credentials,
+            "sap_account": sap_user,
+            "can_create_so": False,
+            "reason": "ระบบ SAP B1 ปิดการใช้งานอยู่ (Disabled ใน System Settings)",
+            "login_valid": False,
+            "latency_ms": 0,
+        }), 200
+
+    if not has_credentials:
+        return jsonify({
+            "sap_enabled": True,
+            "has_credentials": False,
+            "sap_account": sap_user,
+            "can_create_so": False,
+            "reason": "ผู้ใช้งานยังไม่ได้ระบุบัญชี SAP หรือรหัสผ่านใน Profile (มุมบนขวา)",
+            "login_valid": False,
+            "latency_ms": 0,
+        }), 200
+
+    # Cached check within session (valid 3 minutes unless refresh=1)
+    cached = session.get("sap_auth_cache")
+    now_ts = time.time()
+    if not force_refresh and cached and (now_ts - cached.get("time", 0) < 180) and cached.get("user_id") == current_user.id:
+        return jsonify({
+            "sap_enabled": True,
+            "has_credentials": True,
+            "sap_account": sap_user,
+            "can_create_so": cached.get("success", False),
+            "reason": cached.get("message", ""),
+            "login_valid": cached.get("success", False),
+            "latency_ms": cached.get("latency_ms", 0),
+        }), 200
+
+    # Live logon test
+    success, msg, latency = _test_sap_b1_login(sap_user, sap_pwd)
+    session["sap_auth_cache"] = {
+        "time": now_ts,
+        "user_id": current_user.id,
+        "success": success,
+        "message": msg,
+        "latency_ms": latency
+    }
+
+    return jsonify({
+        "sap_enabled": True,
+        "has_credentials": True,
+        "sap_account": sap_user,
+        "can_create_so": success,
+        "reason": msg,
+        "login_valid": success,
+        "latency_ms": latency,
+    }), 200
+
+
+@app.route("/api/me/test-sap-login", methods=["POST"])
+@login_required
+def test_my_sap_login():
+    """Test SAP B1 login for current user with provided or existing credentials"""
+    import time
+    data = request.json or {}
+    sap_user = (data.get("sap_account") or current_user.sap_account or "").strip()
+    sap_pwd = data.get("sap_password", "")
+    if not sap_pwd and getattr(current_user, "sap_password", ""):
+        try:
+            sap_pwd = decrypt_string(current_user.sap_password)
+        except Exception:
+            sap_pwd = current_user.sap_password
+
+    if not sap_user or not sap_pwd:
+        return jsonify({"success": False, "message": "กรุณาระบุบัญชี SAP และรหัสผ่าน"}), 400
+
+    success, msg, latency = _test_sap_b1_login(sap_user, sap_pwd)
+    session["sap_auth_cache"] = {
+        "time": time.time(),
+        "user_id": current_user.id,
+        "success": success,
+        "message": msg,
+        "latency_ms": latency
+    }
+    return jsonify({"success": success, "message": msg, "latency_ms": latency}), 200
+
+
+@app.route("/api/me/sap-profile", methods=["PUT", "POST"])
+@login_required
+def update_my_sap_profile():
+    """Update current user's SAP Account and SAP Password"""
+    data = request.json or {}
+    sap_user = (data.get("sap_account") or "").strip()
+    new_pwd = data.get("sap_password", "").strip()
+
+    current_user.sap_account = sap_user
+    if new_pwd:
+        current_user.sap_password = encrypt_string(new_pwd)
+
+    session.pop("sap_auth_cache", None)
+    db.session.commit()
+
+    TransactionLog.log(
+        category="user_profile",
+        action="update_sap_profile",
+        status="success",
+        message=f"ผู้ใช้ '{current_user.username}' อัปเดตข้อมูลบัญชี SAP B1 (Account: {sap_user or '-'})",
+        details={"user_id": current_user.id, "username": current_user.username, "sap_account": sap_user},
+        triggered_by=f"user:{current_user.username}",
+    )
+
+    return jsonify({
+        "success": True,
+        "message": "บันทึกข้อมูลบัญชี SAP เรียบร้อยแล้ว",
+        "sap_account": sap_user,
+        "hasSapPassword": bool(current_user.sap_password)
+    }), 200
+
+
+def _sync_to_sap_b1(po, user):
+    """
+    Helper to create Sales Order in SAP B1 Service Layer.
+    Returns (success: bool, doc_num: str, doc_entry: int, message: str, is_simulation: bool)
+    NOTE: Simulation mode has been completely removed per requirements.
+    """
+    import ssl
+    import json
+    import urllib.request
+    import urllib.error
+
+    service_url = _clean_sap_service_url(SystemSetting.get_value("sap_b1_service_url", "https://sap.windowasia.com:50000/b1s/v1"))
+    company_db = SystemSetting.get_value("sap_b1_company_db", "WINDOW_ASIA_LIVE")
+    enabled = str(SystemSetting.get_value("sap_b1_enabled", "false")).lower() in ("true", "1", "yes")
+
+    # If SAP integration is not enabled, reject creation (no simulation)
+    if not enabled:
+        return False, None, None, "ไม่สามารถสร้าง Sales Order ได้: ระบบ SAP B1 ถูกปิดใช้งานอยู่ใน System Settings", False
+
+    sap_user = (user.sap_account or SystemSetting.get_value("sap_b1_default_user", "")).strip()
+    sap_pwd = ""
+    raw_pwd = getattr(user, "sap_password", "")
+    if raw_pwd:
+        try:
+            sap_pwd = decrypt_string(raw_pwd)
+        except Exception:
+            sap_pwd = raw_pwd
+
+    if not sap_user or not sap_pwd:
+        return False, None, None, "ไม่สามารถสร้าง Sales Order ได้: ผู้ใช้งานยังไม่ได้ระบุบัญชี SAP หรือรหัสผ่านใน Profile", False
+
+    try:
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+
+        # 1. Login to SAP B1 Service Layer
+        login_url = f"{service_url}/Login"
+        login_payload = json.dumps({
+            "CompanyDB": company_db,
+            "UserName": sap_user,
+            "Password": sap_pwd
+        }).encode("utf-8")
+        login_req = urllib.request.Request(
+            login_url,
+            data=login_payload,
+            headers={"Content-Type": "application/json", "User-Agent": "QTOnline-SAP/1.0"},
+            method="POST"
+        )
+        with urllib.request.urlopen(login_req, timeout=12, context=ctx) as login_resp:
+            cookies = login_resp.headers.get("Set-Cookie", "")
+
+        # 2. Prepare Order Payload
+        due_date = po.deliveryDate.strftime("%Y-%m-%d") if po.deliveryDate else now_bangkok().strftime("%Y-%m-%d")
+        doc_lines = []
+        for item in po.items:
+            doc_lines.append({
+                "ItemCode": item.productCode or f"GEN-{item.id}",
+                "ItemDescription": item.name,
+                "Quantity": float(item.qty),
+                "UnitPrice": float(item.recommendedPrice or item.price or 0.0),
+            })
+
+        order_payload = json.dumps({
+            "CardCode": po.customerId,
+            "CardName": po.customerName or po.get_customer_name(),
+            "DocDueDate": due_date,
+            "DocDate": now_bangkok().strftime("%Y-%m-%d"),
+            "NumAtCard": po.poNumber,
+            "Comments": f"Created from QT-Online {po.poNumber} by {user.fullName}",
+            "DocumentLines": doc_lines
+        }).encode("utf-8")
+
+        order_url = f"{service_url}/Orders"
+        order_req = urllib.request.Request(
+            order_url,
+            data=order_payload,
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": cookies,
+                "User-Agent": "QTOnline-SAP/1.0"
+            },
+            method="POST"
+        )
+        with urllib.request.urlopen(order_req, timeout=15, context=ctx) as order_resp:
+            resp_body = json.loads(order_resp.read().decode("utf-8"))
+            doc_num = str(resp_body.get("DocNum") or resp_body.get("DocEntry"))
+            doc_entry = int(resp_body.get("DocEntry", 0))
+            return True, doc_num, doc_entry, "สร้าง Sales Order บน SAP B1 สำเร็จ", False
+
+    except urllib.error.HTTPError as e:
+        err_msg = f"HTTP Error {e.code}"
+        try:
+            err_body = e.read().decode("utf-8")
+            err_json = json.loads(err_body)
+            if "error" in err_json and "message" in err_json["error"]:
+                val = err_json["error"]["message"]
+                err_msg = val.get("value", err_msg) if isinstance(val, dict) else str(val)
+        except Exception:
+            pass
+        return False, None, None, f"SAP Service Layer Error: {err_msg}", False
+    except Exception as e:
+        return False, None, None, f"ไม่สามารถสร้าง Sales Order บน SAP ได้: {str(e)}", False
+
+
+@app.route("/api/purchase-orders/<int:po_id>/sap-preview", methods=["GET"])
+@login_required
+def get_sap_so_preview(po_id):
+    po = PurchaseOrder.query.get(po_id)
+    if not po:
+        return jsonify({"error": "Quotation not found"}), 404
+
+    is_admin = current_user.role in ["Administrator", "Sale Admin"]
+    is_owner = po.sale_user_id == current_user.id
+    if not (is_admin or is_owner or getattr(current_user, "can_use_sap_api", False)):
+        return jsonify({"error": "ไม่มีสิทธิ์เข้าถึงข้อมูลนี้"}), 403
+
+    allowed_statuses = ["Completed"]
+    can_create = True
+    validation_issues = []
+
+    # Validate global SAP status
+    enabled_val = SystemSetting.get_value("sap_b1_enabled", False)
+    sap_enabled = str(enabled_val).lower() in ("true", "1", "yes")
+    if not sap_enabled:
+        can_create = False
+        validation_issues.append("ระบบ SAP B1 ปิดการใช้งานอยู่ใน System Settings (Disabled)")
+
+    # Validate current user credentials
+    sap_user = (current_user.sap_account or "").strip()
+    raw_pwd = getattr(current_user, "sap_password", "") or ""
+    if not sap_user or not raw_pwd:
+        can_create = False
+        validation_issues.append("คุณยังไม่ได้ระบุบัญชี SAP หรือรหัสผ่านใน Profile (คลิกที่รูปโปรไฟล์มุมบนขวาเพื่อตั้งค่า)")
+
+    if po.status not in allowed_statuses:
+        can_create = False
+        validation_issues.append(f"สถานะเอกสารต้องเป็น Completed เท่านั้นจึงจะสามารถสร้าง Sales Order บน SAP ได้ (ปัจจุบัน: {po.status})")
+
+    if po.sap_doc_num:
+        can_create = False
+        validation_issues.append(f"เอกสารนี้เคยสร้าง Sales Order บน SAP แล้ว (#{po.sap_doc_num})")
+
+    if not po.customerId:
+        can_create = False
+        validation_issues.append("ไม่มี Customer Code สำหรับ SAP Business Partner (CardCode)")
+
+    missing_codes = [f"#{i+1} {item.name}" for i, item in enumerate(po.items) if not item.productCode]
+    if missing_codes:
+        validation_issues.append(f"สินค้าบางรายการไม่มี Product Code: {', '.join(missing_codes[:2])}")
+
+    delivery_date_str = po.deliveryDate.strftime("%d/%m/%Y") if po.deliveryDate else "-"
+    doc_date_str = now_bangkok().strftime("%d/%m/%Y")
+
+    subtotal = sum(item.total for item in po.items)
+    disc1 = subtotal * ((po.discount_percent_1 or 0.0) / 100.0)
+    after1 = subtotal - disc1
+    disc2 = after1 * ((po.discount_percent_2 or 0.0) / 100.0)
+    after2 = after1 - disc2
+    vat = after2 * 0.07
+    grand_total = after2 + vat
+
+    items_preview = []
+    for idx, item in enumerate(po.items):
+        price = item.recommendedPrice if (item.recommendedPrice and item.recommendedPrice > 0) else (item.price or 0.0)
+        items_preview.append({
+            "index": idx + 1,
+            "product_code": item.productCode or "N/A",
+            "name": item.name,
+            "qty": item.qty,
+            "unit_price": price,
+            "line_total": item.qty * price
+        })
+
+    return jsonify({
+        "success": True,
+        "can_create": can_create,
+        "validation_issues": validation_issues,
+        "po_id": po.id,
+        "po_number": po.poNumber,
+        "status": po.status,
+        "card_code": po.customerId,
+        "card_name": po.customerName or po.get_customer_name(),
+        "delivery_date": delivery_date_str,
+        "doc_date": doc_date_str,
+        "items": items_preview,
+        "subtotal": subtotal,
+        "discount_percent_1": po.discount_percent_1 or 0.0,
+        "discount_amount_1": disc1,
+        "discount_percent_2": po.discount_percent_2 or 0.0,
+        "discount_amount_2": disc2,
+        "vat_amount": vat,
+        "grand_total": grand_total,
+        "sap_doc_num": po.sap_doc_num,
+        "sap_doc_entry": po.sap_doc_entry,
+        "sap_sync_status": po.sap_sync_status,
+        "sap_created_at": (po.sap_created_at if po.sap_created_at.tzinfo is None else ensure_bangkok(po.sap_created_at)).strftime("%d-%m-%Y %H:%M") if po.sap_created_at else None,
+        "sap_created_by": po.sap_creator.fullName if po.sap_creator else None
+    })
+
+
+@app.route("/api/purchase-orders/<int:po_id>/create-sap-so", methods=["POST"])
+@login_required
+def create_sap_so_api(po_id):
+    po = PurchaseOrder.query.get(po_id)
+    if not po:
+        return jsonify({"error": "Quotation not found"}), 404
+
+    is_admin = current_user.role in ["Administrator", "Sale Admin"]
+    is_owner = po.sale_user_id == current_user.id
+    if not (is_admin or is_owner or getattr(current_user, "can_use_sap_api", False)):
+        return jsonify({"error": "คุณไม่มีสิทธิ์สร้าง Sales Order สำหรับเอกสารนี้"}), 403
+
+    allowed_statuses = ["Completed"]
+    if po.status not in allowed_statuses:
+        return jsonify({"error": f"สถานะของเอกสารต้องเป็น Completed เท่านั้นจึงจะสามารถสร้าง Sales Order บน SAP ได้ (ปัจจุบัน: {po.status})"}), 400
+
+    if po.sap_doc_num and po.sap_sync_status == "SYNCED":
+        return jsonify({
+            "error": f"เอกสารนี้เคยสร้าง Sales Order บน SAP แล้ว (#{po.sap_doc_num})",
+            "doc_num": po.sap_doc_num,
+            "doc_entry": po.sap_doc_entry
+        }), 400
+
+    now = now_bangkok()
+    time_str = now.strftime("%d/%m/%Y %H:%M:%S")
+    user_display = f"{current_user.fullName} ({current_user.username})"
+
+    success, doc_num, doc_entry, msg, is_sim = _sync_to_sap_b1(po, current_user)
+    if not success:
+        po.sap_sync_status = "FAILED"
+        po.sap_sync_error = msg
+        po.sap_created_at = now
+        po.sap_created_by = current_user.id
+
+        # 1. Log in QT Comments (Quotation History)
+        fail_comment_text = f"สร้าง Sales Order บน SAP ไม่สำเร็จ: {msg} โดย {user_display} เมื่อ {time_str}"
+        fail_comment = Comment(
+            text=fail_comment_text,
+            user_id=current_user.id,
+            po_id=po.id,
+            created=now
+        )
+        db.session.add(fail_comment)
+
+        # 2. System Transaction Log
+        try:
+            TransactionLog.log(
+                category="sap_integration",
+                action="create_sap_so",
+                message=f"สร้าง Sales Order บน SAP สำหรับ {po.poNumber} ไม่สำเร็จ: {msg}",
+                status="failed",
+                details={
+                    "po_id": po.id,
+                    "po_number": po.poNumber,
+                    "user_id": current_user.id,
+                    "username": current_user.username,
+                    "fullname": current_user.fullName,
+                    "error": msg,
+                    "timestamp": time_str
+                },
+                triggered_by=f"user:{current_user.username}"
+            )
+        except Exception as log_err:
+            app.logger.warning(f"Could not write TransactionLog: {log_err}")
+
+        app.logger.error(f"[SAP SO FAILED] QT {po.poNumber} by {user_display} at {time_str}: {msg}")
+        db.session.commit()
+        return jsonify({"success": False, "error": msg}), 500
+
+    # On Success:
+    po.sap_doc_num = doc_num
+    po.sap_doc_entry = doc_entry
+    po.sap_created_at = now
+    po.sap_created_by = current_user.id
+    po.sap_sync_status = "SYNCED"
+    po.sap_sync_error = None
+
+    sim_badge = " [Simulation Mode]" if is_sim else ""
+    success_comment_text = (
+        f"สร้าง Sales Order บน SAP สำเร็จ{sim_badge} "
+        f"หมายเลข SO: {doc_num} (DocEntry: {doc_entry}) "
+        f"โดย {user_display} เมื่อ {time_str}"
+    )
+    comment = Comment(
+        text=success_comment_text,
+        user_id=current_user.id,
+        po_id=po.id,
+        created=now
+    )
+    db.session.add(comment)
+
+    # System Transaction Log
+    try:
+        TransactionLog.log(
+            category="sap_integration",
+            action="create_sap_so",
+            message=f"สร้าง Sales Order บน SAP สำเร็จ ({doc_num}) สำหรับ {po.poNumber}",
+            status="success",
+            details={
+                "po_id": po.id,
+                "po_number": po.poNumber,
+                "sap_doc_num": doc_num,
+                "sap_doc_entry": doc_entry,
+                "is_simulation": is_sim,
+                "user_id": current_user.id,
+                "username": current_user.username,
+                "fullname": current_user.fullName,
+                "timestamp": time_str
+            },
+            triggered_by=f"user:{current_user.username}"
+        )
+    except Exception as log_err:
+        app.logger.warning(f"Could not write TransactionLog: {log_err}")
+
+    app.logger.info(f"[SAP SO SUCCESS] QT {po.poNumber} -> SO {doc_num} by {user_display} at {time_str}")
+
+    if po.sale_user_id and po.sale_user_id != current_user.id:
+        create_notification(
+            po.sale_user_id,
+            f"QT {po.poNumber} ถูกสร้างเป็น Sales Order {doc_num} บน SAP แล้ว",
+            po.id
+        )
+
+    db.session.commit()
+
+    return jsonify({
+        "success": True,
+        "message": msg,
+        "doc_num": doc_num,
+        "doc_entry": doc_entry,
+        "is_simulation": is_sim,
+        "created_at": time_str,
+        "created_by": current_user.fullName
+    })
 
 
 @app.route("/api/settings/ai", methods=["GET"])

@@ -483,3 +483,49 @@ emote_addr) มาบันทึกลงในฟิลด์ details JSON ข
       - ทดสอบคำสั่งเปลี่ยนแปลงข้อมูลจริง *"ช่วยอนุมัติใบเสนอราคา QT-001 ให้หน่อย"* ระบบยังคงบล็อกและแจ้งเตือนนโยบาย Strict Read-Only ตามข้อกำหนดความปลอดภัยได้อย่างถูกต้อง 100%
 
 
+
+26. **การปรับปรุงระบบ SAP B1 Integration: ปิด Simulation Mode, ตรวจสอบสิทธิ์และการ Logon ก่อนเปิดปุ่ม Create SO และจัดการ SAP Profile (19 Oct 2026):**
+    - **ความต้องการและการเปลี่ยนแปลง:**
+      1. **ยกเลิก Simulation Mode / ตัวเลขหลอกโดยสิ้นเชิง:**
+         - เดิมหากระบบปิด SAP (sap_b1_enabled = false) หรือไม่มีรหัสผ่าน ระบบจะสุ่มเลขจำลอง (2610xxxx)
+         - ปรับปรุงใหม่: หากปิดใช้งาน หรือไม่มีบัญชีผู้ใช้ หรือยิงเข้า SAP ไม่สำเร็จ **ต้องปฏิเสธและไม่สร้างตัวเลขหลอกเด็ดขาด** เพื่อป้องกันความเข้าใจผิด
+         - หากระบบ SAP ปิดอยู่ หรือผู้ใช้ยังไม่ได้ระบุบัญชี SAP หรือ Logon ไม่ผ่าน ปุ่ม **Create SO** ทั้งในตารางและหน้ารายละเอียดจะอยู่ในสถานะ **Disabled (สีเทา ไม่สามารถกดได้)** พร้อมแสดง Tooltip อธิบายเหตุผลชัดเจน
+      2. **ระบบตรวจสอบการ Logon อัตโนมัติ (Automated Logon Verification):**
+         - เพิ่ม Endpoint `GET /api/me/sap-status` ทำหน้าที่ตรวจสอบ:
+           1. Global Setting (`sap_b1_enabled`) ว่าเปิดใช้งานหรือไม่
+           2. Profile ผู้ใช้ว่ามี SAP Username และ Password หรือไม่
+           3. หากมีครบและเปิดใช้งาน จะทำการทดสอบยิง Login ไปยัง SAP B1 Service Layer Endpoint จริง พร้อมเก็บผลและ Latency
+         - หาก Login ผ่าน ปุ่ม **Create SO** จะกลายเป็นสีเขียว **Active (Enabled)** พร้อมใช้งานทันที
+         - แสดงไฟสถานะ (Indicator Dot) ที่มุมขวาบน: เขียว (พร้อมใช้งาน), แดง (รหัสผ่านไม่ถูกต้อง/เข้าไม่ได้), เทา (ยังไม่ได้ตั้งค่าหรือปิดใช้งาน)
+      3. **จัดการบัญชี SAP ในหน้า Profile ผู้ใช้ (User Profile & SAP Modal):**
+         - ผู้ใช้งานสามารถคลิกที่ชื่อ/รูปโปรไฟล์ หรือปุ่มไอคอน SAP (`layers`) ที่แถบเมนูด้านบนขวา เพื่อเปิดหน้าต่าง **User Profile & SAP Account**
+         - รองรับการกรอกและแก้ไข **SAP Username** และ **SAP Password** (มีปุ่มเปิด/ปิดรูปลูกตาเพื่อดูรหัสผ่าน และรหัสผ่านถูกเข้ารหัสด้วย `encrypt_string` ก่อนบันทึกลงฐานข้อมูล)
+         - มีปุ่ม **"ทดสอบการเข้าสู่ระบบ SAP"** (`POST /api/me/test-sap-login`) เพื่อทดสอบรหัสผ่านกับ SAP B1 Service Layer แบบเรียลไทม์ และปุ่ม **"บันทึกบัญชี SAP"** (`POST /api/me/sap-profile`)
+      4. **ปรับปรุงตาราง Unified Logs (Audit Trail):**
+         - ลดช่องว่างระหว่างคอลัมน์ด้านหน้าให้กระชับ
+         - ปลดล็อก `max-w-xs truncate` ในคอลัมน์ `AUDIT DETAILS / MESSAGE` ให้ดึงพื้นที่ว่างทั้งหมดของตาราง และตัดบรรทัดได้ (`whitespace-normal break-words leading-relaxed`) แสดงข้อมูลรายละเอียดได้ครบถ้วน 100% ไม่ถูกตัดทอนด้วย `...`
+    - **ผลการทดสอบ:**
+      - ทดสอบการดึงสถานะ `/api/me/sap-status` เมื่อปิด SAP -> คืนค่า `can_create_so: false`
+      - ทดสอบเมื่อเปิด SAP แต่ยังไม่ใส่บัญชี -> คืนค่า `can_create_so: false` พร้อมแจ้งให้ระบุบัญชีใน Profile
+      - ทดสอบการบันทึกบัญชี SAP ผ่าน `/api/me/sap-profile` -> บันทึกและเข้ารหัสสำเร็จ
+      - ทดสอบปุ่ม Create SO ในหน้าเว็บ -> ถูก Disable พร้อม Tooltip แจ้งเตือนอย่างถูกต้อง
+
+27. **การแก้ไขปัญหาปุ่ม Profile/SAP, เปลี่ยนรหัสผ่าน, และจัดการลายเซ็น กดแล้วหน้าต่างไม่เปิด (Fix Nested Modals inside Hidden Customer Modal) (20 Oct 2026):**
+    - **อาการที่พบ:** เมื่อคลิกที่ปุ่มโปรไฟล์/SAP (`#top-sap-profile-btn`), ปุ่มเปลี่ยนรหัสผ่าน (ไอคอนกุญแจ), หรือปุ่มจัดการลายเซ็น (ไอคอนปากกา) ที่มุมบนขวาของหน้าจอ ไม่มี Modal ปรากฏขึ้นมาเลย
+    - **สาเหตุเชิงลึก:**
+      - ใน [app.html](file:///d:/Python/PO-Online/app.html) แท็ก `<div id="customer-detail-modal">` ขาดแท็กปิด `</div>` ที่ด้านท้ายของ Modal (บรรทัดที่ 3224)
+      - ส่งผลให้ Modal ทั้งหมดที่ประกาศต่อจากนั้น:
+        1. `#user-profile-modal` (หน้าต่างจัดการโปรไฟล์ผู้ใช้และบัญชี SAP B1)
+        2. `#change-password-modal` (หน้าต่างเปลี่ยนรหัสผ่าน)
+        3. `#manage-signature-modal` (หน้าต่างจัดการลายเซ็น)
+        4. `#cancel-po-modal`, `#reject-cancel-modal`, และ `#sap-so-modal`
+        ถูก Browser เรนเดอร์เป็น Element ลูก (Child Nodes) ซ้อนอยู่ภายใน `#customer-detail-modal` ซึ่งมีสถานะซ่อนอยู่ (`class="hidden" / display: none;`)
+      - แม้ฟังก์ชัน JavaScript (`openUserProfileModal`, `openChangePasswordModal`, `openManageSignatureModal`) จะสั่งลบ Class `hidden` บน Modal ของตนเอง แต่เพราะ Element แม่ (`customer-detail-modal`) ยังถูกซ่อนอยู่ เบราว์เซอร์จึงไม่แสดงผลหน้าต่างใดๆ ออกมาเลย
+    - **การแก้ไข:**
+      - เติมแท็กปิด `</div>` ให้กับ `#customer-detail-modal` ทำให้ Modal ทั้งหมดแยกออกเป็นอิสระต่อกัน (Sibling Modals) ไม่ซ้อนทับกัน
+      - อัปเกรด `z-index` ของ `#user-profile-modal`, `#change-password-modal`, และ `#manage-signature-modal` เป็น `z-50` เพื่อให้อยู่เหนือ Header Navigation อย่างชัดเจน
+      - เสริมฟังก์ชันปรับขนาด Canvas แบบ Responsive ใน `openManageSignatureModal` พร้อม Delay 60ms เพื่อให้แน่ใจว่า Canvas มีขนาดถูกต้องทันทีที่ Modal แสดงผล
+    - **ผลการทดสอบ:**
+      - วิเคราะห์ความสมบูรณ์ของแท็ก `<div>` ใน `app.html` ด้วย Python สรุปได้ยอดสมดุล Open Divs: 0 ครบถ้วน 100%
+      - ทดสอบไวยากรณ์ JavaScript ทุกบล็อกใน `app.html` ผ่าน Node.js ผ่าน 100%
+      - ทั้ง 3 หน้าต่างสามารถคลิกเปิด-ปิดได้อย่างสมบูรณ์แบบ

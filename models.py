@@ -428,6 +428,14 @@ class PurchaseOrder(db.Model):
         db.Integer, db.ForeignKey("users.id"), nullable=True
     )
 
+    # NEW: SAP B1 Integration Fields
+    sap_doc_num = db.Column(db.String(50), nullable=True)
+    sap_doc_entry = db.Column(db.Integer, nullable=True)
+    sap_created_at = db.Column(db.DateTime, nullable=True)
+    sap_created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    sap_sync_status = db.Column(db.String(20), nullable=True)
+    sap_sync_error = db.Column(db.Text, nullable=True)
+
     items = db.relationship(
         "POItem", backref="po", lazy=True, cascade="all, delete-orphan"
     )
@@ -446,6 +454,9 @@ class PurchaseOrder(db.Model):
     )
     po_uploader = db.relationship(
         "User", foreign_keys=[customerPoUploadedBy], backref="po_uploads"
+    )
+    sap_creator = db.relationship(
+        "User", foreign_keys=[sap_created_by], backref="sap_created_pos"
     )
     customer_rel = db.relationship(
         "Customer",
@@ -641,6 +652,17 @@ class PurchaseOrder(db.Model):
             "customerPoUploadedBy": (
                 self.po_uploader.fullName if self.po_uploader else None
             ),
+            # NEW: SAP B1 Integration Info
+            "sapDocNum": self.sap_doc_num,
+            "sapDocEntry": self.sap_doc_entry,
+            "sapCreatedAt": (
+                (self.sap_created_at if self.sap_created_at.tzinfo is None else ensure_bangkok(self.sap_created_at)).strftime("%d-%m-%Y %H:%M")
+                if self.sap_created_at
+                else None
+            ),
+            "sapCreatedBy": self.sap_creator.fullName if self.sap_creator else None,
+            "sapSyncStatus": self.sap_sync_status,
+            "sapSyncError": self.sap_sync_error,
             # NEW: Calculated Breakdown
             "discountPercent1": self.discount_percent_1 or 0.0,
             "discountPercent2": self.discount_percent_2 or 0.0,
@@ -710,6 +732,9 @@ class PurchaseOrder(db.Model):
             "deliveryDate": delivery_date_display,
             "deliveryDateIso": delivery_date_iso,
             "accessToken": self.accessToken,
+            "sapDocNum": self.sap_doc_num,
+            "sapDocEntry": self.sap_doc_entry,
+            "sapSyncStatus": self.sap_sync_status,
         }
 
 
