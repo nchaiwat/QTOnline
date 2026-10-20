@@ -5009,6 +5009,19 @@ def test_my_sap_login():
     return jsonify({"success": success, "message": msg, "latency_ms": latency}), 200
 
 
+@app.route("/api/me/sap-password", methods=["GET"])
+@login_required
+def get_my_sap_password():
+    """Get current user's decrypted SAP password for viewing in profile modal"""
+    if not getattr(current_user, "sap_password", None):
+        return jsonify({"password": ""}), 200
+    try:
+        decrypted = decrypt_string(current_user.sap_password)
+        return jsonify({"password": decrypted}), 200
+    except Exception:
+        return jsonify({"password": current_user.sap_password}), 200
+
+
 @app.route("/api/me/sap-profile", methods=["PUT", "POST"])
 @login_required
 def update_my_sap_profile():
