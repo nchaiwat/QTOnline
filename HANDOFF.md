@@ -576,3 +576,11 @@ emote_addr) มาบันทึกลงในฟิลด์ details JSON ข
     - **ผลการทดสอบ:**
       - ทดสอบสร้าง Sales Order บน SAP Service Layer สำหรับเอกสารที่มี `CostingCode: "Dealer"` และ `CostingCode2: "DL"` -> **สร้างสำเร็จ 100% ได้รับ DocNum และ DocEntry จาก SAP B1**
       - ทดสอบการทำงานของฟังก์ชันและการตรวจสอบไวยากรณ์ใน Local ผ่านฉลุย 100%
+
+31. **การปรับเปลี่ยนค่า Dimension ให้เป็น Business Unit: WA และ แผนก: SA (20 Oct 2026):**
+    - **ความต้องการ:** ผู้ใช้แจ้งว่าข้อมูลศูนย์ต้นทุนที่บันทึกเข้าสู่ SAP Business One สำหรับเอกสารขาย ต้องกำหนดให้ Business Unit (`CostingCode`) เป็น **`WA`** และ แผนก (`CostingCode2`) เป็น **`SA`**
+    - **การแก้ไข:**
+      - อัปเดตค่าเริ่มต้นใน [app.py](file:///d:/Python/PO-Online/app.py) ให้ `sap_b1_default_bu` เป็น `"WA"` และ `sap_b1_default_dept` เป็น `"SA"`
+      - อัปเดตตาราง `system_settings` ในฐานข้อมูล Local ให้มีค่าเป็น `WA` และ `SA`
+      - อัปเดตหน้าต่างตั้งค่าใน [app.html](file:///d:/Python/PO-Online/app.html) ทั้ง Placeholder และ Fallback Value ให้ตรงตามค่า `"WA"` และ `"SA"`
+    - **ผลการทดสอบ:** ตรวจสอบไวยากรณ์และอัปเดตฐานข้อมูลสำเร็จเรียบร้อยแล้ว ทุกคำสั่งซื้อใหม่ที่ส่งไปยัง SAP B1 จะถูกลงบัญชีเป็น Business Unit = WA และ แผนก = SA ทันที
