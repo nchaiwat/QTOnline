@@ -542,3 +542,20 @@ emote_addr) มาบันทึกลงในฟิลด์ details JSON ข
     - **ผลการทดสอบ:**
       - ทดสอบการดึง Endpoint `/api/me/sap-password` บน Local ผ่าน 200 OK
       - ไวยากรณ์ JavaScript ทุกบล็อกใน `app.html` ผ่าน Node.js 100%
+
+29. **การแก้ไขปุ่มยืนยันสร้าง SAP SO นิ่ง และเพิ่ม Live Processing Status Banner (20 Oct 2026):**
+    - **ปัญหาที่พบ:** ในหน้าต่างพรีวิวสร้าง Sales Order บน SAP (`#sap-so-modal`) เมื่อผู้ใช้คลิกปุ่ม "ยืนยันสร้าง Sales Order" แล้วระบบนิ่งเฉย ไม่มีปฏิกิริยา ไม่มีการแจ้งเตือนว่ากำลังประมวลผล (Processing) และไม่ทราบผลว่าสร้างได้หรือไม่
+    - **สาเหตุเชิงลึก:**
+      - ใน [app.html](file:///d:/Python/PO-Online/app.html) มีการเรียกใช้ `Swal.fire(...)` แต่ใน `<head>` **ไม่ได้มีการนำเข้าไลบรารี SweetAlert2** (`sweetalert2@11`) ส่งผลให้เกิด JavaScript `Uncaught ReferenceError: Swal is not defined` ทันทีที่กดปุ่ม ส่งผลให้ฟังก์ชันหยุดทำงานกลางคันก่อนที่จะยิง Request
+      - ไม่มีสถานะตอบสนองบนปุ่ม (Button Loading State) และไม่มีแถบสถานะระบุว่าระบบกำลังเชื่อมต่อหรือประมวลผล
+    - **การแก้ไข:**
+      - นำเข้า SweetAlert2 CDN (`<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>`) ใน `<head>`
+      - เสริม Safe Fallback ครอบคลุมการทำงานทั้งกรณีมีและไม่มี SweetAlert2 (ใช้ `window.confirm` และ `alert` สำรอง) ป้องกันข้อผิดพลาด 100%
+      - เพิ่ม **Live Processing Status Banner** (`#sap-so-status-banner`) ใน Modal แสดงแถบสีฟ้าพร้อมแอนิเมชัน Spinner หมุนชัดเจน: *"⏳ กำลังส่งข้อมูลเอกสารเข้าสู่ SAP B1 Service Layer กรุณารอสักครู่ (Processing)..."* และ Badge `PROCESSING`
+      - ปรับปรุงปุ่มยืนยันให้เปลี่ยนเป็นสถานะ Disabled ทันทีพร้อมไอคอนหมุน ป้องกันการกดย้ำซ้ำซ้อน (Double Submit)
+      - เมื่อผลลัพธ์ตอบกลับมา:
+        - กรณีสำเร็จ: แถบสถานะเปลี่ยนเป็นสีเขียว `SUCCESS` แจ้งเลขที่ DocNum และ DocEntry ชัดเจน พร้อมแสดงผลใน SweetAlert
+        - กรณีไม่สำเร็จ: แถบสถานะเปลี่ยนเป็นสีแดง `FAILED` แจ้งสาเหตุข้อผิดพลาดจาก SAP B1 Service Layer พร้อมปลดล็อกปุ่มให้ผู้ใช้สามารถกดลองใหม่ได้
+    - **ผลการทดสอบ:**
+      - ทดสอบการทำงานของฟังก์ชันและการตรวจสอบไวยากรณ์ผ่าน Node.js สำเร็จ 100%
+      - ปัญหาการกดแล้วนิ่งได้รับการแก้ไขโดยสมบูรณ์ มีแถบสถานะและ Spinner แสดงผลชัดเจน

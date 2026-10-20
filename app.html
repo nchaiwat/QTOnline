@@ -30,6 +30,9 @@
     <!-- 4. Markdown Parser for AI Copilot -->
     <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 
+    <!-- 5. SweetAlert2 for notifications, confirmation and processing dialogs -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
     <!-- 5. Custom Styles -->
     <style>
         body {
@@ -3587,6 +3590,15 @@
                 </div>
             </div>
 
+            <!-- Live Status / Processing Banner -->
+            <div id="sap-so-status-banner" class="hidden mx-6 mb-3 p-3.5 rounded-xl border flex items-center justify-between text-xs transition-all">
+                <div class="flex items-center gap-2.5">
+                    <span id="sap-so-status-spinner" class="animate-spin text-blue-600"><i data-lucide="loader-2" class="w-4 h-4"></i></span>
+                    <span id="sap-so-status-text" class="font-medium text-gray-700"></span>
+                </div>
+                <span id="sap-so-status-badge" class="px-2.5 py-0.5 rounded-full font-bold text-[11px]"></span>
+            </div>
+
             <!-- Modal Footer -->
             <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-between items-center flex-shrink-0">
                 <span class="text-xs text-gray-500 flex items-center gap-1">
@@ -6055,13 +6067,20 @@
             loading.classList.remove('hidden');
             content.classList.add('hidden');
             validationBox.classList.add('hidden');
+            const statusBanner = document.getElementById('sap-so-status-banner');
+            if (statusBanner) statusBanner.classList.add('hidden');
             confirmBtn.disabled = true;
+            confirmBtn.innerHTML = '<i data-lucide="send" class="w-4 h-4"></i> <span>ยืนยันสร้าง Sales Order</span>';
 
             try {
                 const data = await fetchApi(`/api/purchase-orders/${poId}/sap-preview`);
                 loading.classList.add('hidden');
                 if (!data || !data.success) {
-                    Swal.fire('เกิดข้อผิดพลาด', data?.error || 'ไม่สามารถโหลดข้อมูลพรีวิว SAP ได้', 'error');
+                    if (window.Swal) {
+                        Swal.fire('เกิดข้อผิดพลาด', data?.error || 'ไม่สามารถโหลดข้อมูลพรีวิว SAP ได้', 'error');
+                    } else {
+                        alert(data?.error || 'ไม่สามารถโหลดข้อมูลพรีวิว SAP ได้');
+                    }
                     closeSapSoModal();
                     return;
                 }
@@ -6124,7 +6143,11 @@
                 lucide.createIcons();
             } catch (err) {
                 console.error('Error fetching SAP preview:', err);
-                Swal.fire('เกิดข้อผิดพลาด', err.message || 'ไม่สามารถโหลดข้อมูลได้', 'error');
+                if (window.Swal) {
+                    Swal.fire('เกิดข้อผิดพลาด', err.message || 'ไม่สามารถโหลดข้อมูลได้', 'error');
+                } else {
+                    alert('เกิดข้อผิดพลาด: ' + (err.message || 'ไม่สามารถโหลดข้อมูลได้'));
+                }
                 closeSapSoModal();
             }
         }
@@ -6137,6 +6160,8 @@
 
         function closeSapSoModal() {
             const modal = document.getElementById('sap-so-modal');
+            const statusBanner = document.getElementById('sap-so-status-banner');
+            if (statusBanner) statusBanner.classList.add('hidden');
             if (modal) modal.classList.add('hidden');
             currentSapPOId = null;
         }
@@ -6144,42 +6169,93 @@
         async function confirmCreateSapSo() {
             if (!currentSapPOId) return;
 
-            const result = await Swal.fire({
-                title: 'ยืนยันสร้าง Sales Order?',
-                text: 'ระบบจะส่งข้อมูลเอกสารนี้เข้าสู่ SAP Business One Service Layer ทันที',
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonText: 'ยืนยันส่งข้อมูล',
-                cancelButtonText: 'ยกเลิก',
-                confirmButtonColor: '#059669',
-                cancelButtonColor: '#6b7280'
-            });
+            const confirmBtn = document.getElementById('sap-so-confirm-btn');
+            const statusBanner = document.getElementById('sap-so-status-banner');
+            const statusSpinner = document.getElementById('sap-so-status-spinner');
+            const statusText = document.getElementById('sap-so-status-text');
+            const statusBadge = document.getElementById('sap-so-status-badge');
 
-            if (!result.isConfirmed) return;
+            // 1. Confirm dialog (safely works with or without SweetAlert2)
+            let isConfirmed = false;
+            if (window.Swal) {
+                const result = await Swal.fire({
+                    title: 'ยืนยันสร้าง Sales Order?',
+                    text: 'ระบบจะส่งข้อมูลเอกสารนี้เข้าสู่ SAP Business One Service Layer ทันที',
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonText: 'ยืนยันส่งข้อมูล',
+                    cancelButtonText: 'ยกเลิก',
+                    confirmButtonColor: '#059669',
+                    cancelButtonColor: '#6b7280'
+                });
+                isConfirmed = result.isConfirmed;
+            } else {
+                isConfirmed = window.confirm('ยืนยันส่งข้อมูลเอกสารนี้เข้าสู่ SAP Business One Service Layer ทันทีหรือไม่?');
+            }
 
-            Swal.fire({
-                title: 'กำลังเชื่อมต่อ SAP...',
-                text: 'กำลังประมวลผลและสร้าง Sales Order กรุณารอสักครู่',
-                allowOutsideClick: false,
-                didOpen: () => Swal.showLoading()
-            });
+            if (!isConfirmed) return;
 
+            // 2. Immediately switch button to PROCESSING spinner state
+            if (confirmBtn) {
+                confirmBtn.disabled = true;
+                confirmBtn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 mr-1.5 animate-spin"></i> <span>กำลังเชื่อมต่อ SAP... (Processing)</span>';
+            }
+
+            // 3. Immediately display in-modal Processing Banner
+            if (statusBanner) {
+                statusBanner.className = 'mx-6 mb-3 p-3.5 rounded-xl border bg-blue-50 border-blue-200 text-blue-900 flex items-center justify-between text-xs transition-all';
+                statusBanner.classList.remove('hidden');
+                if (statusSpinner) statusSpinner.className = 'animate-spin text-blue-600 block';
+                if (statusText) statusText.textContent = '⏳ กำลังส่งข้อมูลเอกสารเข้าสู่ SAP B1 Service Layer กรุณารอสักครู่ (Processing)...';
+                if (statusBadge) {
+                    statusBadge.className = 'px-2.5 py-0.5 rounded-full font-bold text-[11px] bg-blue-100 text-blue-800';
+                    statusBadge.textContent = 'PROCESSING';
+                }
+            }
+
+            if (window.Swal) {
+                Swal.fire({
+                    title: 'กำลังเชื่อมต่อ SAP B1...',
+                    text: 'กำลังประมวลผลคำสั่งซื้อและสร้าง Sales Order กรุณารอสักครู่ (Processing)',
+                    allowOutsideClick: false,
+                    didOpen: () => Swal.showLoading()
+                });
+            }
+            if (window.lucide) lucide.createIcons();
+
+            // 4. Send request to backend
             try {
                 const res = await fetchApi(`/api/purchase-orders/${currentSapPOId}/create-sap-so`, 'POST');
                 if (res && res.success) {
+                    // Update in-modal banner to SUCCESS
+                    if (statusBanner) {
+                        statusBanner.className = 'mx-6 mb-3 p-3.5 rounded-xl border bg-emerald-50 border-emerald-200 text-emerald-900 flex items-center justify-between text-xs transition-all';
+                        if (statusSpinner) statusSpinner.className = 'hidden';
+                        if (statusText) statusText.innerHTML = `✅ <b>สร้าง Sales Order บน SAP B1 สำเร็จ!</b> เลขที่ DocNum: <span class="font-bold text-emerald-700 text-sm">#${escapeHtml(res.doc_num)}</span> (DocEntry: ${escapeHtml(res.doc_entry)})`;
+                        if (statusBadge) {
+                            statusBadge.className = 'px-2.5 py-0.5 rounded-full font-bold text-[11px] bg-emerald-100 text-emerald-800';
+                            statusBadge.textContent = 'SUCCESS';
+                        }
+                    }
+
+                    if (window.Swal) {
+                        await Swal.fire({
+                            title: 'สร้าง Sales Order สำเร็จ!',
+                            html: `
+                                <div class="text-left text-sm space-y-2 mt-2">
+                                    <p><b>เลขที่ Sales Order (DocNum):</b> <span class="text-emerald-600 font-bold text-lg">#${escapeHtml(res.doc_num)}</span></p>
+                                    <p><b>DocEntry:</b> <span class="font-mono">${escapeHtml(res.doc_entry)}</span></p>
+                                    <p><b>ผู้ดำเนินการ:</b> ${escapeHtml(res.created_by)}</p>
+                                    <p class="text-xs text-gray-500 mt-2">${escapeHtml(res.message)}</p>
+                                </div>
+                            `,
+                            icon: 'success'
+                        });
+                    } else {
+                        alert(`สร้าง Sales Order สำเร็จ! DocNum: #${res.doc_num}`);
+                    }
+
                     closeSapSoModal();
-                    await Swal.fire({
-                        title: 'สร้าง Sales Order สำเร็จ!',
-                        html: `
-                            <div class="text-left text-sm space-y-2 mt-2">
-                                <p><b>เลขที่ Sales Order (DocNum):</b> <span class="text-emerald-600 font-bold text-lg">#${escapeHtml(res.doc_num)}</span></p>
-                                <p><b>DocEntry:</b> <span class="font-mono">${escapeHtml(res.doc_entry)}</span></p>
-                                <p><b>ผู้ดำเนินการ:</b> ${escapeHtml(res.created_by)}</p>
-                                <p class="text-xs text-gray-500 mt-2">${escapeHtml(res.message)}</p>
-                            </div>
-                        `,
-                        icon: 'success'
-                    });
 
                     // Refresh relevant view
                     if (currentPage === 'page-po-detail' && currentViewPOId === currentSapPOId) {
@@ -6188,11 +6264,53 @@
                         renderPOTableList();
                     }
                 } else {
-                    Swal.fire('สร้าง Sales Order ไม่สำเร็จ', res?.error || 'เกิดข้อผิดพลาดในการเชื่อมต่อ SAP', 'error');
+                    const errMsg = res?.error || res?.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อ SAP B1';
+                    // Update in-modal banner to FAILED
+                    if (statusBanner) {
+                        statusBanner.className = 'mx-6 mb-3 p-3.5 rounded-xl border bg-red-50 border-red-200 text-red-900 flex items-center justify-between text-xs transition-all';
+                        if (statusSpinner) statusSpinner.className = 'hidden';
+                        if (statusText) statusText.innerHTML = `❌ <b>สร้าง Sales Order ไม่สำเร็จ:</b> ${escapeHtml(errMsg)}`;
+                        if (statusBadge) {
+                            statusBadge.className = 'px-2.5 py-0.5 rounded-full font-bold text-[11px] bg-red-100 text-red-800';
+                            statusBadge.textContent = 'FAILED';
+                        }
+                    }
+
+                    if (window.Swal) {
+                        Swal.fire('สร้าง Sales Order ไม่สำเร็จ', errMsg, 'error');
+                    } else {
+                        alert(`สร้าง Sales Order ไม่สำเร็จ: ${errMsg}`);
+                    }
+
+                    // Restore button state
+                    if (confirmBtn) {
+                        confirmBtn.disabled = false;
+                        confirmBtn.innerHTML = '<i data-lucide="send" class="w-4 h-4"></i> <span>ยืนยันสร้าง Sales Order</span>';
+                        if (window.lucide) lucide.createIcons();
+                    }
                 }
             } catch (err) {
                 console.error('Error creating SAP SO:', err);
-                Swal.fire('เกิดข้อผิดพลาด', err.message || 'ไม่สามารถเชื่อมต่อไปยังเซิร์ฟเวอร์ได้', 'error');
+                const errMsg = err.message || 'ไม่สามารถเชื่อมต่อไปยังเซิร์ฟเวอร์ได้';
+                if (statusBanner) {
+                    statusBanner.className = 'mx-6 mb-3 p-3.5 rounded-xl border bg-red-50 border-red-200 text-red-900 flex items-center justify-between text-xs transition-all';
+                    if (statusSpinner) statusSpinner.className = 'hidden';
+                    if (statusText) statusText.innerHTML = `⚠️ <b>เกิดข้อผิดพลาด:</b> ${escapeHtml(errMsg)}`;
+                    if (statusBadge) {
+                        statusBadge.className = 'px-2.5 py-0.5 rounded-full font-bold text-[11px] bg-red-100 text-red-800';
+                        statusBadge.textContent = 'ERROR';
+                    }
+                }
+                if (window.Swal) {
+                    Swal.fire('เกิดข้อผิดพลาด', errMsg, 'error');
+                } else {
+                    alert(`เกิดข้อผิดพลาด: ${errMsg}`);
+                }
+                if (confirmBtn) {
+                    confirmBtn.disabled = false;
+                    confirmBtn.innerHTML = '<i data-lucide="send" class="w-4 h-4"></i> <span>ยืนยันสร้าง Sales Order</span>';
+                    if (window.lucide) lucide.createIcons();
+                }
             }
         }
 
