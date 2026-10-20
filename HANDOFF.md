@@ -559,3 +559,20 @@ emote_addr) มาบันทึกลงในฟิลด์ details JSON ข
     - **ผลการทดสอบ:**
       - ทดสอบการทำงานของฟังก์ชันและการตรวจสอบไวยากรณ์ผ่าน Node.js สำเร็จ 100%
       - ปัญหาการกดแล้วนิ่งได้รับการแก้ไขโดยสมบูรณ์ มีแถบสถานะและ Spinner แสดงผลชัดเจน
+
+30. **การแก้ไขข้อผิดพลาด "โปรดเลือก Business Unit / แผนก" ในการสร้าง Sales Order บน SAP B1 (CostingCode & CostingCode2 Fix) (20 Oct 2026):**
+    - **ปัญหาที่พบ:** เมื่อผู้ใช้กด "ยืนยันสร้าง Sales Order" ในหน้าต่าง `#sap-so-modal` สำหรับใบเสนอราคา QT26100001 ระบบแจ้งข้อผิดพลาด: `"สร้าง Sales Order ไม่สำเร็จ: เกิดข้อผิดพลาดในการเชื่อมต่อ SAP B1"`
+    - **สาเหตุเชิงลึก:**
+      1. **ข้อกำหนดของ SAP Business One:** ในฐานข้อมูลบริษัท SAP B1 มีการกำหนดให้รายการสินค้าในเอกสารการขาย (DocumentLines) ต้องระบุ Dimension ศูนย์ต้นทุนบัญชีอย่างน้อย 2 มิติ ได้แก่:
+         - **Dimension 1 (`CostingCode`):** 'Business Unit' (เช่น Dealer, ECOM, BTT, BTV)
+         - **Dimension 2 (`CostingCode2`):** 'แผนก' / Department (เช่น DL, CT, BT, BD, AC)
+         หากไม่ส่งค่า 2 ฟิลด์นี้ SAP Service Layer จะปฏิเสธคำสั่งซื้อทันทีด้วย Error: `(-1) โปรดเลือก Business Unit / แผนก`
+      2. **การซ่อนข้อความ Error จาก SAP:** ใน `create_sap_so_api` เดิมคืนค่า HTTP Status 500 เมื่อเกิดข้อผิดพลาด ซึ่งฟังก์ชัน `fetchApi` ใน Frontend ถูกเขียนให้คืนค่า `null` หากพบ HTTP Status ที่ไม่ใช่ 2xx ทำให้ตัวแปร `res` กลายเป็น `null` และฟังก์ชันหน้าบ้านจึงตกลงเงื่อนไข Fallback แสดงข้อความทั่วไปว่า `'เกิดข้อผิดพลาดในการเชื่อมต่อ SAP B1'` แทนที่จะแสดงข้อความจริงจาก SAP
+    - **การแก้ไข:**
+      1. เพิ่มการตั้งค่า **Default Business Unit** (`sap_b1_default_bu`, ค่าเริ่มต้น: `Dealer`) และ **Default Department** (`sap_b1_default_dept`, ค่าเริ่มต้น: `DL`) ใน `SystemSetting`
+      2. เพิ่มช่องตั้งค่า Business Unit และ แผนก ในหน้าต่าง **System Settings -> SAP Business One** ใน `app.html` พร้อมบันทึกผ่าน API `/api/settings/sap`
+      3. ปรับปรุงฟังก์ชัน `_sync_to_sap_b1()` ใน [app.py](file:///d:/Python/PO-Online/app.py) ให้ส่ง `CostingCode` และ `CostingCode2` ไปในแต่ละแถวของ `DocumentLines` เสมอ
+      4. ปรับปรุง Endpoint `create_sap_so_api()` ใน [app.py](file:///d:/Python/PO-Online/app.py) ให้ส่งรหัสสถานะ HTTP 200 พร้อม `{"success": False, "error": msg}` เพื่อให้ `fetchApi` สามารถส่ง JSON Body กลับมาให้หน้าบ้านแสดงข้อความ Error จาก SAP ได้อย่างโปร่งใสและชัดเจน 100%
+    - **ผลการทดสอบ:**
+      - ทดสอบสร้าง Sales Order บน SAP Service Layer สำหรับเอกสารที่มี `CostingCode: "Dealer"` และ `CostingCode2: "DL"` -> **สร้างสำเร็จ 100% ได้รับ DocNum และ DocEntry จาก SAP B1**
+      - ทดสอบการทำงานของฟังก์ชันและการตรวจสอบไวยากรณ์ใน Local ผ่านฉลุย 100%

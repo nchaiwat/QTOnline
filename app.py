@@ -4773,6 +4773,8 @@ def get_sap_settings_api():
             "sap_b1_service_url": SystemSetting.get_value("sap_b1_service_url", "https://sap.windowasia.com:50000/b1s/v1"),
             "sap_b1_company_db": SystemSetting.get_value("sap_b1_company_db", "WINDOW_ASIA_LIVE"),
             "sap_b1_enabled": bool(SystemSetting.get_value("sap_b1_enabled", False)),
+            "sap_b1_default_bu": SystemSetting.get_value("sap_b1_default_bu", "Dealer"),
+            "sap_b1_default_dept": SystemSetting.get_value("sap_b1_default_dept", "DL"),
         }
     }), 200
 
@@ -4797,6 +4799,14 @@ def update_sap_settings_api():
         val = bool(data["sap_b1_enabled"])
         SystemSetting.set_value("sap_b1_enabled", "true" if val else "false", description="เปิด/ปิดการเชื่อมต่อ SAP B1", category="sap_b1", data_type="boolean")
         changed.append("sap_b1_enabled")
+
+    if "sap_b1_default_bu" in data:
+        SystemSetting.set_value("sap_b1_default_bu", str(data["sap_b1_default_bu"]).strip(), description="SAP B1 Default Business Unit (CostingCode)", category="sap_b1", data_type="string")
+        changed.append("sap_b1_default_bu")
+
+    if "sap_b1_default_dept" in data:
+        SystemSetting.set_value("sap_b1_default_dept", str(data["sap_b1_default_dept"]).strip(), description="SAP B1 Default Department (CostingCode2)", category="sap_b1", data_type="string")
+        changed.append("sap_b1_default_dept")
 
     TransactionLog.log(
         category="system_setting",
@@ -5108,14 +5118,22 @@ def _sync_to_sap_b1(po, user):
 
         # 2. Prepare Order Payload
         due_date = po.deliveryDate.strftime("%Y-%m-%d") if po.deliveryDate else now_bangkok().strftime("%Y-%m-%d")
+        default_bu = SystemSetting.get_value("sap_b1_default_bu", "Dealer") or "Dealer"
+        default_dept = SystemSetting.get_value("sap_b1_default_dept", "DL") or "DL"
+
         doc_lines = []
         for item in po.items:
-            doc_lines.append({
+            line_data = {
                 "ItemCode": item.productCode or f"GEN-{item.id}",
                 "ItemDescription": item.name,
                 "Quantity": float(item.qty),
                 "UnitPrice": float(item.recommendedPrice or item.price or 0.0),
-            })
+            }
+            if default_bu:
+                line_data["CostingCode"] = default_bu
+            if default_dept:
+                line_data["CostingCode2"] = default_dept
+            doc_lines.append(line_data)
 
         order_payload = json.dumps({
             "CardCode": po.customerId,
@@ -5322,7 +5340,7 @@ def create_sap_so_api(po_id):
 
         app.logger.error(f"[SAP SO FAILED] QT {po.poNumber} by {user_display} at {time_str}: {msg}")
         db.session.commit()
-        return jsonify({"success": False, "error": msg}), 500
+        return jsonify({"success": False, "error": msg}), 200
 
     # On Success:
     po.sap_doc_num = doc_num
