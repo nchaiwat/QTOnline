@@ -38,6 +38,30 @@
   - เพิ่ม Error Handler 429 ใน `app.py` ให้ส่งกลับเป็น JSON อย่างเป็นระเบียบ
   - ปรับปรุงการแสดงผลใน `login.html`: แสดงข้อความแจ้งเตือนที่แท้จริงจากระบบแทนที่จะแจ้งเตือนเป็น Connection error ทั้งหมด
 
+### 6. พัฒนาระบบ SAP SO Line Discount, Customer Ref No, Editable Remarks และ Promotion System (ข้อ 2-5)
+- **ข้อ 2 (Product Line Discount สำหรับ SAP SO เท่านั้น):**
+  - กำหนดให้ค่าส่วนลด (%) ในระดับสินค้า (`Product.discountPercent`) ถูกส่งไปยัง SAP Business One Sales Order DocumentLines (`DiscountPercent`) ในจังหวะยิง API เท่านั้น
+  - ใน QTOnline ตัวเลขราคาและการคำนวณในใบเสนอราคายังคงใช้ราคาต้นทุนปกติ (`selectedProductData.cost` / `price`) โดยไม่มีการหักลดจาก Product Discount ในระดับ Item
+- **ข้อ 3 (Customer Ref. No. สำหรับ SAP NumAtCard):**
+  - ใน Modal ยิงสร้าง SO บน SAP (`#sap-so-modal`) เพิ่มช่อง Input สำหรับให้ผู้ใช้สามารถระบุเลขที่ QT / PO ของลูกค้า (`Customer Ref. No.`) ได้อย่างอิสระ
+  - บันทึกเก็บในฟิลด์ `customer_ref_no` ในตาราง `purchase_orders` และส่งต่อไปยังฟิลด์ `NumAtCard` ใน Payload ของ SAP Business One Service Layer
+- **ข้อ 4 (Editable Remark สำหรับ SAP Comments):**
+  - ใน Modal ยิงสร้าง SO บน SAP เพิ่มช่อง Textarea สำหรับให้ผู้ใช้ตรวจและแก้ไข Remark เอกสารก่อนส่งไปยัง SAP ได้ตามต้องการ
+  - บันทึกเก็บในฟิลด์ `sap_remarks` และส่งต่อไปยังฟิลด์ `Comments` ใน SAP B1
+- **ข้อ 5 (ระบบโปรโมชั่น Promotion Campaign พร้อมโหมด Auto และ Manual):**
+  - **Promotion Models & Database:** สร้างตาราง `promotions` รองรับโปรโมชั่น 3 รูปแบบหลัก ได้แก่:
+    1. `ORDER_DISCOUNT_FIXED`: ส่วนลดท้ายบิลเป็นจำนวนเงินบาท (เมื่อมียอดซื้อขั้นต่ำ)
+    2. `ORDER_DISCOUNT_PERCENT`: ส่วนลดท้ายบิลเป็นเปอร์เซ็นต์ (พร้อมระบุเพดานส่วนลดสูงสุดได้)
+    3. `BUY_X_GET_Y`: ซื้อสินค้าครบตามจำนวนแถมของแถมฟรี (Free Gift Item ราคา 0 บาท)
+  - **Quotation UI Toggle (Auto vs Manual):** ในหน้าสร้าง/แก้ไขใบเสนอราคา (`#page-po-create`) มีปุ่มสลับการทำงาน:
+    - **⚡ Auto:** ระบบจะประเมินและเลือกโปรโมชั่นที่ให้ประโยชน์สูงสุดแก่ลูกค้าโดยอัตโนมัติแบบเรียลไทม์
+    - **🖐️ Manual:** แสดง Dropdown รายการโปรโมชั่นที่เข้าเกณฑ์ทั้งหมด เพื่อให้ผู้สร้าง QT เลือกเอง หรือเลือก "ไม่ใช้โปรโมชั่น" ได้ตามความประสงค์
+  - **Summary Breakdown & Gift Items:**
+    - รายการของแถมจะแสดงเป็น Item พิเศษพร้อม Badge `[🎁 ของแถมฟรี]` ราคา 0.00 บาท
+    - ยอดส่วนลดโปรโมชั่นถูกนำมาหักลดก่อนการคำนวณส่วนลด Step 1 และ Step 2 ตามสูตร: `Subtotal -> Less: Promotion Discount -> Less: Discount Step 1 (%) -> Less: Discount Step 2 (%) -> Add: VAT 7% -> Grand Total`
+  - **Promotion Management Page (`#page-promotion-list`):** หน้าจอสำหรับ Administrator และ Sale Admin มีสถิติรวม ค้นหา กรองประเภท และฟอร์มสร้าง/แก้ไข/เปิด-ปิดโปรโมชั่น
+  - **Consistency Across All Surfaces:** อัปเดตการแสดงผลส่วนลดโปรโมชั่นและของแถมในหน้า QT Detail (`viewPO`), แม่แบบพิมพ์ PDF ([po_print.html](po_print.html)), และหน้าจอลูกค้า ([customer_portal.html](customer_portal.html))
+
 ---
 
 ## 1. Executive Summary: Major Performance Overhaul

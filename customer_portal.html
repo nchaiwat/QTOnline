@@ -166,6 +166,12 @@
                         <td colspan="4" class="text-end border-0 text-danger">หักส่วนลดสินค้า</td>
                         <td class="money-col text-danger">-{{ "{:,.2f}".format(totals.product_discount) }}</td>
                     </tr>
+                    {% if totals.promotion_discount and totals.promotion_discount > 0 %}
+                    <tr>
+                        <td colspan="4" class="text-end border-0 text-primary">หักส่วนลดโปรโมชั่น ({{ po.promotion_name or 'Promotion' }})</td>
+                        <td class="money-col text-primary">-{{ "{:,.2f}".format(totals.promotion_discount) }}</td>
+                    </tr>
+                    {% endif %}
                     <tr>
                         <td colspan="4" class="text-end border-0 text-danger">หักส่วนลดท้ายบิล รวม 2 Step</td>
                         <td class="money-col text-danger">-{{ "{:,.2f}".format(totals.bill_discount) }}</td>

@@ -525,6 +525,8 @@
                     <li id="nav-user-management" class="nav-role-admin"><a href="#" class="top-nav-link"
                             onclick="showPage('page-user-list')"><i data-lucide="users" class="mr-2 w-5 h-5"></i>User
                             Management</a></li>
+                    <li id="nav-promotion-list" class="nav-role-admin"><a href="#" class="top-nav-link"
+                            onclick="showPage('page-promotion-list')"><i data-lucide="tag" class="mr-2 w-5 h-5"></i>Promotions</a></li>
                     <li id="nav-settings" class="nav-role-admin"><a href="#" class="top-nav-link"
                             onclick="showPage('page-settings')"><i data-lucide="settings" class="mr-2 w-5 h-5"></i>Settings</a></li>
                 </ul>
@@ -548,6 +550,9 @@
                     <li id="mobile-nav-user-management" class="nav-role-admin"><a href="#" class="top-nav-link"
                             onclick="showPage('page-user-list'); toggleMobileMenu();"><i data-lucide="users"
                                 class="mr-2 w-5 h-5"></i>User Management</a></li>
+                    <li id="mobile-nav-promotion-list" class="nav-role-admin"><a href="#" class="top-nav-link"
+                            onclick="showPage('page-promotion-list'); toggleMobileMenu();"><i data-lucide="tag"
+                                class="mr-2 w-5 h-5"></i>Promotions</a></li>
                     <li id="mobile-nav-settings" class="nav-role-admin"><a href="#" class="top-nav-link"
                             onclick="showPage('page-settings'); toggleMobileMenu();"><i data-lucide="settings"
                                 class="mr-2 w-5 h-5"></i>Settings</a></li>
@@ -1165,6 +1170,49 @@
                             <!-- JS will render item cards here -->
                         </div>
 
+                        <!-- Promotion Section (Auto vs Manual Toggle) -->
+                        <div class="mb-6 p-4 rounded-xl border border-indigo-100 bg-gradient-to-r from-indigo-50/60 via-purple-50/40 to-blue-50/40 shadow-xs">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-indigo-100/80">
+                                <div class="flex items-center gap-2.5">
+                                    <div class="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                                        <i data-lucide="tag" class="w-4 h-4"></i>
+                                    </div>
+                                    <div>
+                                        <h5 class="font-bold text-gray-800 text-sm">การใช้โปรโมชั่น (Promotion Campaign)</h5>
+                                        <p class="text-xs text-gray-500">เลือกรูปแบบการใช้โปรโมชั่นสำหรับใบเสนอราคานี้</p>
+                                    </div>
+                                </div>
+                                <!-- Toggle Auto vs Manual -->
+                                <div class="inline-flex p-1 bg-white border border-gray-200 rounded-xl shadow-xs self-start sm:self-auto">
+                                    <button type="button" id="promo-mode-auto-btn" onclick="setPromotionMode('auto')" class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 bg-indigo-600 text-white shadow-xs">
+                                        <i data-lucide="zap" class="w-3.5 h-3.5"></i>
+                                        <span>Auto (ระบบเลือกให้อัตโนมัติ)</span>
+                                    </button>
+                                    <button type="button" id="promo-mode-manual-btn" onclick="setPromotionMode('manual')" class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 text-gray-600 hover:text-gray-900">
+                                        <i data-lucide="hand" class="w-3.5 h-3.5"></i>
+                                        <span>Manual (เลือกเอง)</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Manual Mode Selector (Visible when mode === 'manual') -->
+                            <div id="promo-manual-dropdown-box" class="hidden pt-3">
+                                <label class="block text-xs font-semibold text-gray-700 mb-1.5">เลือกโปรโมชั่นที่ต้องการใช้จากรายการที่เข้าเกณฑ์:</label>
+                                <select id="po-manual-promo-select" class="w-full md:w-auto min-w-[320px] text-xs px-3 py-2 bg-white border border-gray-300 rounded-lg font-medium text-gray-800 focus:ring-2 focus:ring-indigo-500" onchange="onManualPromotionSelectChange()">
+                                    <option value="">-- ไม่ใช้โปรโมชั่น (No Promotion) --</option>
+                                </select>
+                            </div>
+
+                            <!-- Status & Applied Benefit Banner -->
+                            <div id="promo-applied-info-box" class="mt-3 p-3 bg-white/90 rounded-lg border border-indigo-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                                <div class="flex items-center gap-2">
+                                    <span id="promo-status-badge" class="px-2 py-0.5 rounded font-bold text-[11px] bg-gray-100 text-gray-600">ไม่มีโปรโมชั่น</span>
+                                    <span id="promo-status-text" class="text-gray-600">ยังไม่มียอดสั่งซื้อหรือสินค้าที่เข้าเงื่อนไขโปรโมชั่น</span>
+                                </div>
+                                <div id="promo-benefit-amount" class="font-bold text-indigo-700 text-right"></div>
+                            </div>
+                        </div>
+
                         <!-- Summary (Multi-step Discount) -->
                         <div class="flex justify-end mb-6">
                             <div class="w-full md:max-w-md border rounded-xl p-5 bg-white shadow-sm">
@@ -1173,6 +1221,15 @@
                                     <div class="flex justify-between items-center text-gray-700">
                                         <span class="font-medium">รวมเป็นเงิน (Subtotal)</span>
                                         <span id="po-subtotal" class="font-bold text-gray-800">0.00</span>
+                                    </div>
+
+                                    <!-- 1.1 Promotion Discount Row -->
+                                    <div id="po-promo-discount-row" class="hidden flex justify-between items-center text-indigo-700 bg-indigo-50/80 px-2.5 py-1.5 rounded-lg border border-indigo-100">
+                                        <div class="flex items-center gap-1.5">
+                                            <i data-lucide="tag" class="w-3.5 h-3.5"></i>
+                                            <span class="text-xs font-bold" id="po-promo-summary-label">ส่วนลดโปรโมชั่น:</span>
+                                        </div>
+                                        <span id="po-promo-discount-amount" class="text-xs font-bold text-indigo-800">-0.00</span>
                                     </div>
 
                                     <hr class="border-gray-100">
@@ -1363,6 +1420,15 @@
                                         <div class="flex justify-between text-xs text-gray-600">
                                             <span class="font-bold text-gray-900">รวมเป็นเงิน (Subtotal)</span>
                                             <span id="po-detail-subtotal" class="font-bold text-gray-900">...</span>
+                                        </div>
+
+                                        <!-- Promotion Discount Row -->
+                                        <div id="po-detail-promo-row" class="hidden flex justify-between text-xs text-indigo-700 bg-indigo-50/80 px-2 py-1.5 rounded-lg border border-indigo-100 items-center">
+                                            <div class="flex items-center gap-1.5">
+                                                <i data-lucide="tag" class="w-3.5 h-3.5 text-indigo-600"></i>
+                                                <span class="font-bold" id="po-detail-promo-name">ส่วนลดโปรโมชั่น:</span>
+                                            </div>
+                                            <span id="po-detail-promo-amount" class="font-bold text-indigo-800">-0.00</span>
                                         </div>
 
                                         <div class="flex justify-between text-xs text-gray-600 items-center">
@@ -1893,6 +1959,249 @@
                             onclick="submitSignature()">
                             Confirm Signature
                         </button>
+                    </div>
+                </div>
+
+                <!-- ========================================== -->
+                <!-- PROMOTION MANAGEMENT PAGE (ADMIN / SALE ADMIN) -->
+                <!-- ========================================== -->
+                <div id="page-promotion-list" class="page-content hidden">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                        <div>
+                            <h3 class="text-2xl font-bold text-gray-800 flex items-center">
+                                <i data-lucide="tag" class="w-7 h-7 mr-2 text-indigo-600"></i>
+                                Promotion Management (จัดการโปรโมชั่น)
+                            </h3>
+                            <p class="text-sm text-gray-500 mt-1">กำหนดแคมเปญส่วนลดท้ายบิล และโปรโมชั่นซื้อครบแถมสินค้า (Buy X Get Y Free)</p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <button type="button" onclick="loadPromotions()" class="px-3.5 py-2 text-sm bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium shadow-xs flex items-center gap-1.5 transition">
+                                <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                                <span>รีเฟรช</span>
+                            </button>
+                            <button type="button" onclick="openPromotionModal()" class="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold shadow-sm flex items-center gap-1.5 transition">
+                                <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                                <span>+ เพิ่มโปรโมชั่นใหม่</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Stats Cards -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                        <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex items-center gap-3.5">
+                            <div class="w-11 h-11 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                                <i data-lucide="tag" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <span class="text-xs text-gray-500 font-medium">โปรโมชั่นทั้งหมด</span>
+                                <h4 id="promo-stat-total" class="text-xl font-bold text-gray-800">0</h4>
+                            </div>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex items-center gap-3.5">
+                            <div class="w-11 h-11 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                                <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <span class="text-xs text-gray-500 font-medium">กำลังเปิดใช้งาน (Active)</span>
+                                <h4 id="promo-stat-active" class="text-xl font-bold text-emerald-700">0</h4>
+                            </div>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex items-center gap-3.5">
+                            <div class="w-11 h-11 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                                <i data-lucide="percent" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <span class="text-xs text-gray-500 font-medium">ส่วนลดท้ายบิล (Discounts)</span>
+                                <h4 id="promo-stat-discounts" class="text-xl font-bold text-blue-700">0</h4>
+                            </div>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex items-center gap-3.5">
+                            <div class="w-11 h-11 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+                                <i data-lucide="gift" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <span class="text-xs text-gray-500 font-medium">ซื้อครบแถมสินค้า (Free Gift)</span>
+                                <h4 id="promo-stat-gifts" class="text-xl font-bold text-purple-700">0</h4>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filter Bar -->
+                    <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-xs mb-6 flex flex-col md:flex-row gap-3 items-center justify-between">
+                        <div class="relative w-full md:w-80">
+                            <input type="text" id="promo-search-input" placeholder="ค้นหาตามรหัส หรือชื่อโปรโมชั่น..." class="w-full pl-9 pr-4 py-2 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" oninput="filterPromotionsTable()">
+                            <i data-lucide="search" class="w-4 h-4 text-gray-400 absolute left-3 top-2.5"></i>
+                        </div>
+                        <div class="flex items-center gap-2.5 w-full md:w-auto">
+                            <select id="promo-type-filter" class="text-xs px-3 py-2 border border-gray-300 rounded-lg bg-white" onchange="filterPromotionsTable()">
+                                <option value="ALL">ทุกประเภทโปรโมชั่น</option>
+                                <option value="ORDER_DISCOUNT_FIXED">ส่วนลดท้ายบิล (บาท)</option>
+                                <option value="ORDER_DISCOUNT_PERCENT">ส่วนลดท้ายบิล (%)</option>
+                                <option value="BUY_X_GET_Y">ซื้อครบแถมสินค้า (Buy X Get Y)</option>
+                            </select>
+                            <select id="promo-status-filter" class="text-xs px-3 py-2 border border-gray-300 rounded-lg bg-white" onchange="filterPromotionsTable()">
+                                <option value="ALL">ทุกสถานะ</option>
+                                <option value="ACTIVE">เฉพาะที่เปิดใช้งาน (Active)</option>
+                                <option value="INACTIVE">ปิดการใช้งาน (Inactive)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Promotions Table -->
+                    <div class="bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-gray-50 border-b border-gray-200 text-gray-600 font-semibold uppercase tracking-wider">
+                                    <tr>
+                                        <th class="px-4 py-3 w-12 text-center">#</th>
+                                        <th class="px-4 py-3 w-36">รหัสแคมเปญ</th>
+                                        <th class="px-4 py-3 min-w-[200px]">ชื่อโปรโมชั่น / รายละเอียด</th>
+                                        <th class="px-4 py-3 w-36">ประเภท</th>
+                                        <th class="px-4 py-3 w-40">เงื่อนไข (Condition)</th>
+                                        <th class="px-4 py-3 w-44">สิทธิประโยชน์ (Benefit)</th>
+                                        <th class="px-4 py-3 w-32">ช่วงเวลา</th>
+                                        <th class="px-4 py-3 w-28 text-center">สถานะ</th>
+                                        <th class="px-4 py-3 w-24 text-center">จัดการ</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="promotion-table-body" class="divide-y divide-gray-100">
+                                    <!-- Rendered dynamically -->
+                                    <tr>
+                                        <td colspan="9" class="px-4 py-8 text-center text-gray-400">กำลังโหลดข้อมูลโปรโมชั่น...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PROMOTION CREATE / EDIT MODAL -->
+                <div id="promotion-modal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center hidden p-4">
+                    <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[92vh]">
+                        <!-- Modal Header -->
+                        <div class="px-6 py-4 bg-gradient-to-r from-indigo-700 to-purple-800 text-white flex justify-between items-center flex-shrink-0">
+                            <div class="flex items-center gap-2.5">
+                                <div class="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
+                                    <i data-lucide="tag" class="w-5 h-5 text-white"></i>
+                                </div>
+                                <div>
+                                    <h3 id="promotion-modal-title" class="text-lg font-bold">สร้างโปรโมชั่นใหม่</h3>
+                                    <p class="text-xs text-indigo-100">กำหนดเงื่อนไขส่วนลดหรือของแถมสำหรับฝ่ายขาย</p>
+                                </div>
+                            </div>
+                            <button type="button" class="text-white/80 hover:text-white" onclick="closePromotionModal()">
+                                <i data-lucide="x" class="w-6 h-6"></i>
+                            </button>
+                        </div>
+
+                        <!-- Modal Form Body -->
+                        <form id="promotion-form" onsubmit="event.preventDefault(); savePromotion();" class="p-6 overflow-y-auto space-y-4 flex-grow text-xs">
+                            <input type="hidden" id="promo-edit-id">
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block font-semibold text-gray-700 mb-1">รหัสโปรโมชั่น (Code) <span class="text-red-500">*</span></label>
+                                    <input type="text" id="promo-input-code" required class="w-full px-3 py-2 border border-gray-300 rounded-lg uppercase font-mono font-bold text-indigo-700 focus:ring-2 focus:ring-indigo-500" placeholder="เช่น PROMO-20K-500">
+                                </div>
+                                <div>
+                                    <label class="block font-semibold text-gray-700 mb-1">ประเภทโปรโมชั่น (Type) <span class="text-red-500">*</span></label>
+                                    <select id="promo-input-type" class="w-full px-3 py-2 border border-gray-300 rounded-lg font-medium focus:ring-2 focus:ring-indigo-500" onchange="onPromoTypeChange()">
+                                        <option value="ORDER_DISCOUNT_FIXED">ส่วนลดท้ายบิลเป็นจำนวนเงิน (บาท)</option>
+                                        <option value="ORDER_DISCOUNT_PERCENT">ส่วนลดท้ายบิลเป็นเปอร์เซ็นต์ (%)</option>
+                                        <option value="BUY_X_GET_Y">ซื้อสินค้าครบแถมของแถม (Buy X Get Y)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block font-semibold text-gray-700 mb-1">ชื่อโปรโมชั่น (Name) <span class="text-red-500">*</span></label>
+                                <input type="text" id="promo-input-name" required class="w-full px-3 py-2 border border-gray-300 rounded-lg font-medium focus:ring-2 focus:ring-indigo-500" placeholder="เช่น ซื้อสินค้าครบ 20,000 บาท ลดทันที 500 บาท">
+                            </div>
+
+                            <div>
+                                <label class="block font-semibold text-gray-700 mb-1">รายละเอียด / เงื่อนไข (Description)</label>
+                                <textarea id="promo-input-desc" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="อธิบายเงื่อนไขสำหรับให้พนักงานขายเข้าใจ"></textarea>
+                            </div>
+
+                            <!-- Dynamic Section 1: Order Discount Fields (Fixed or Percent) -->
+                            <div id="promo-discount-fields" class="p-4 bg-indigo-50/60 rounded-xl border border-indigo-100 space-y-3">
+                                <h5 class="font-bold text-indigo-900 text-xs flex items-center gap-1.5">
+                                    <i data-lucide="sliders" class="w-3.5 h-3.5"></i>
+                                    <span>เงื่อนไขยอดซื้อและส่วนลด</span>
+                                </h5>
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <div>
+                                        <label class="block font-medium text-gray-700 mb-1">ยอดสั่งซื้อขั้นต่ำ (บาท)</label>
+                                        <input type="number" step="0.01" min="0" id="promo-input-min-order" class="w-full px-3 py-2 border border-gray-300 rounded-lg font-medium" placeholder="0.00" value="0">
+                                    </div>
+                                    <div>
+                                        <label class="block font-medium text-gray-700 mb-1" id="promo-label-discount-value">มูลค่าส่วนลด (บาท)</label>
+                                        <input type="number" step="0.01" min="0" id="promo-input-discount-val" class="w-full px-3 py-2 border border-gray-300 rounded-lg font-bold text-indigo-700" placeholder="0.00" value="0">
+                                    </div>
+                                    <div id="promo-box-max-discount" class="hidden">
+                                        <label class="block font-medium text-gray-700 mb-1">ส่วนลดสูงสุด (บาท, ถ้ามี)</label>
+                                        <input type="number" step="0.01" min="0" id="promo-input-max-disc" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="ไม่จำกัด">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Dynamic Section 2: Buy X Get Y Fields -->
+                            <div id="promo-gift-fields" class="hidden p-4 bg-purple-50/60 rounded-xl border border-purple-100 space-y-3">
+                                <h5 class="font-bold text-purple-900 text-xs flex items-center gap-1.5">
+                                    <i data-lucide="gift" class="w-3.5 h-3.5"></i>
+                                    <span>เงื่อนไขซื้อครบแถมสินค้า (Buy X Get Y)</span>
+                                </h5>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block font-medium text-gray-700 mb-1">รหัสสินค้าเงื่อนไข (เว้นว่าง = สินค้าใดก็ได้)</label>
+                                        <input type="text" id="promo-input-cond-product" class="w-full px-3 py-2 border border-gray-300 rounded-lg uppercase font-mono" placeholder="เช่น AL-DOOR-01 หรือเว้นว่าง">
+                                    </div>
+                                    <div>
+                                        <label class="block font-medium text-gray-700 mb-1">จำนวนที่ต้องซื้อขั้นต่ำ (ชิ้น)</label>
+                                        <input type="number" min="1" id="promo-input-cond-qty" class="w-full px-3 py-2 border border-gray-300 rounded-lg font-bold" value="1">
+                                    </div>
+                                    <div>
+                                        <label class="block font-medium text-gray-700 mb-1">รหัสสินค้าของแถม (Reward Product Code)</label>
+                                        <input type="text" id="promo-input-reward-code" class="w-full px-3 py-2 border border-gray-300 rounded-lg uppercase font-mono" placeholder="เช่น GIFT-SCREEN">
+                                    </div>
+                                    <div>
+                                        <label class="block font-medium text-gray-700 mb-1">ชื่อสินค้าของแถม (Reward Name)</label>
+                                        <input type="text" id="promo-input-reward-name" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="เช่น มุ้งลวดกันแมลงเกรดพรีเมียม (Free Gift)">
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <label class="block font-medium text-gray-700 mb-1">จำนวนของแถมที่ได้รับต่อเงื่อนไข (ชิ้น)</label>
+                                        <input type="number" min="1" id="promo-input-reward-qty" class="w-32 px-3 py-2 border border-gray-300 rounded-lg font-bold text-purple-700" value="1">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Dates & Status -->
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+                                <div>
+                                    <label class="block font-medium text-gray-700 mb-1">วันเริ่มต้น (Start Date)</label>
+                                    <input type="date" id="promo-input-start-date" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                </div>
+                                <div>
+                                    <label class="block font-medium text-gray-700 mb-1">วันสิ้นสุด (End Date)</label>
+                                    <input type="date" id="promo-input-end-date" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                </div>
+                                <div class="flex items-center pt-5">
+                                    <label class="flex items-center gap-2 cursor-pointer">
+                                        <input type="checkbox" id="promo-input-active" checked class="w-4 h-4 text-indigo-600 rounded">
+                                        <span class="font-semibold text-gray-800">เปิดใช้งาน (Active)</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Modal Actions -->
+                            <div class="pt-4 border-t border-gray-100 flex justify-end gap-2.5">
+                                <button type="button" onclick="closePromotionModal()" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium">ยกเลิก</button>
+                                <button type="submit" id="promo-submit-btn" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold shadow-sm flex items-center gap-1.5">
+                                    <i data-lucide="save" class="w-4 h-4"></i>
+                                    <span>บันทึกโปรโมชั่น</span>
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
 
@@ -3591,6 +3900,7 @@
                                         <th class="px-3 py-2 text-left">Description</th>
                                         <th class="px-3 py-2 text-center w-14">Qty</th>
                                         <th class="px-3 py-2 text-right w-24">Price</th>
+                                        <th class="px-2 py-2 text-center w-20">Disc % (SAP)</th>
                                         <th class="px-3 py-2 text-right w-24">Total</th>
                                     </tr>
                                 </thead>
@@ -3598,6 +3908,24 @@
                                     <!-- Rendered dynamically -->
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+
+                    <!-- SAP SO Editable Input Fields (Customer Ref. No. & Remarks) -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5 bg-gray-50/80 p-3.5 rounded-xl border border-gray-200">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 mb-1 flex items-center justify-between">
+                                <span>Customer Ref. No. (เลขที่ QT / PO ลูกค้า):</span>
+                                <span class="text-[10px] text-emerald-700 font-mono font-medium">SAP NumAtCard</span>
+                            </label>
+                            <input type="text" id="sap-so-customer-ref" class="w-full text-xs px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-medium text-gray-800" placeholder="เลขที่อ้างอิงลูกค้า หรือเว้นว่างเพื่อใช้เลขที่ QT">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 mb-1 flex items-center justify-between">
+                                <span>หมายเหตุเอกสาร (Remarks):</span>
+                                <span class="text-[10px] text-emerald-700 font-mono font-medium">SAP Comments</span>
+                            </label>
+                            <input type="text" id="sap-so-remarks" class="w-full text-xs px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-medium text-gray-800" placeholder="ระบุหมายเหตุสำหรับส่งเข้า SAP B1 Comments">
                         </div>
                     </div>
 
@@ -3697,6 +4025,12 @@
         let currentCustomerDetail = null; // Current customer detail payload in modal
         let deliveryDatePicker = null;
         let customerCreationDatePicker = null;
+
+        // --- PROMOTION STATE ---
+        let currentPromoMode = 'auto'; // 'auto' or 'manual'
+        let currentAppliedPromotion = null; // Currently applied promotion object
+        let allPromotionsList = []; // All promotions loaded in management page
+        let eligiblePromotionsList = []; // Eligible promotions for current quotation
 
         function getCurrentMonthYear() {
             const now = new Date();
@@ -3994,12 +4328,16 @@
                 if (pageId === 'page-po-list') title = 'QT Management';
                 if (pageId === 'page-po-create') title = 'Create/Edit QT'; // Title set in showCreatePOPage
                 if (pageId === 'page-po-detail') title = 'QT Detail'; // Title set in viewPO
+                if (pageId === 'page-promotion-list') title = 'Promotion Management';
 
                 document.getElementById('page-title').textContent = title;
 
                 // Load data for the page
                 if (pageId === 'page-user-list') {
                     renderUserTable();
+                }
+                if (pageId === 'page-promotion-list') {
+                    loadPromotions();
                 }
                 if (pageId === 'page-po-list') {
                     renderPOTableList();
@@ -4711,8 +5049,22 @@
                         recommendedPrice: Number(item.recommendedPrice) || 0, // NEW: Map recommendedPrice
                         discount: Number(item.discount) || 0,
                         total: Number(item.total) || 0,
+                        isGift: !!item.isGift,
                         imageUrl: item.imageUrl
                     })) : [];
+
+                    // Promotion initialization for edit mode
+                    if (po.promotionId) {
+                        currentPromoMode = 'auto';
+                        currentAppliedPromotion = {
+                            id: po.promotionId,
+                            name: po.promotionName,
+                            calculated_discount: po.promotionDiscount || 0
+                        };
+                    } else {
+                        currentPromoMode = 'auto';
+                        currentAppliedPromotion = null;
+                    }
 
                     if (currentEditPOStatus === 'Draft') {
                         draftButton.style.display = 'block';
@@ -4730,10 +5082,14 @@
                 title.textContent = 'Create New Quotation';
                 setSelectedCustomer(null);
                 poItems = [];
+                currentPromoMode = 'auto';
+                currentAppliedPromotion = null;
             }
 
+            setPromotionMode(currentPromoMode, false);
             resetItemForm();
             renderPOTable(); // Render items (or empty)
+            evaluateQuotationPromotions(true);
             showPage('page-po-create');
         }
 
@@ -4780,6 +5136,7 @@
                     recommendedPrice: selectedProductData.price, // Store selling price separately
                     discount: discount,
                     total: lineTotal,
+                    isGift: false,
                     imageUrl: selectedProductData.imageUrl
                 };
                 poItems.push(item);
@@ -4787,6 +5144,7 @@
 
             renderPOTable();
             resetItemForm();
+            evaluateQuotationPromotions();
         }
 
         // FIX 2.2: New function to reset the item form
@@ -4809,17 +5167,15 @@
         }
 
         // 8. Render QT Table (in Create Page)
+        // 8. Render QT Table (in Create Page)
         function renderPOTable() {
             const tableBody = document.getElementById('po-items-table');
-            const mobileCards = document.getElementById('po-items-mobile-cards'); // NEW: Mobile Cards Container
+            const mobileCards = document.getElementById('po-items-mobile-cards');
 
             if (!tableBody) return;
 
             tableBody.innerHTML = '';
-            if (mobileCards) mobileCards.innerHTML = ''; // Clear mobile cards
-
-            let subtotal = 0;
-            let totalDiscount = 0;
+            if (mobileCards) mobileCards.innerHTML = '';
 
             const placeholderImage = 'https://placehold.co/60x60/e2e8f0/94a3b8?text=No+Image';
 
@@ -4828,53 +5184,60 @@
 
             poItems.forEach(item => {
                 const imageSrc = item.imageUrl || placeholderImage;
-                subtotal += item.price * item.qty;
-                totalDiscount += (item.price * item.qty) * (item.discount / 100);
+                const cleanName = cleanProductName(item.name, item.productCode);
+                const giftBadge = item.isGift ? '<span class="bg-purple-100 text-purple-800 font-bold px-1.5 py-0.5 rounded text-[10px] mr-1.5">🎁 ของแถมฟรี</span>' : '';
+                const displayHtml = item.productCode ? `${giftBadge}<span class="font-bold">${escapeHtml(item.productCode)}</span> - ${escapeHtml(cleanName)}` : `${giftBadge}${escapeHtml(item.name)}`;
+
+                const actionButtons = item.isGift
+                    ? `<span class="text-[11px] text-purple-600 font-bold px-2 py-1 bg-purple-50 rounded">แถมจากโปร</span>`
+                    : `
+                        <button class="text-blue-600 hover:text-blue-800 mr-2" onclick="editItemInPO(${item.tempId})">
+                            <i data-lucide="edit-2" class="w-5 h-5"></i>
+                        </button>
+                        <button class="text-red-600 hover:text-red-800" onclick="removeItemFromPO(${item.tempId})">
+                            <i data-lucide="trash-2" class="w-5 h-5"></i>
+                        </button>
+                    `;
 
                 // Desktop Row
-                const cleanName = cleanProductName(item.name, item.productCode);
-                const displayHtml = item.productCode ? `<span class="font-bold">${escapeHtml(item.productCode)}</span> - ${escapeHtml(cleanName)}` : escapeHtml(item.name);
                 tableRowsHtml += `
-                    <tr data-tempid="${item.tempId}">
+                    <tr data-tempid="${item.tempId}" class="${item.isGift ? 'bg-purple-50/40' : ''}">
                         <td class="px-6 py-4">
                             <img src="${imageSrc}" alt="${escapeHtml(item.name)}" class="w-12 h-12 rounded-md object-cover border">
                         </td>
                         <td class="px-6 py-4">${displayHtml}</td>
                         <td class="px-6 py-4 text-right text-gray-500">${formatCurrency(item.recommendedPrice || 0)}</td>
-                        <td class="px-6 py-4 text-right">${item.qty}</td>
+                        <td class="px-6 py-4 text-right font-bold">${item.qty}</td>
                         <td class="px-6 py-4 text-right text-blue-700 font-medium">${formatCurrency(item.price)}</td>
                         <td class="px-6 py-4 text-right font-bold text-blue-700">${formatCurrency(item.total)}</td>
-                        <td class="px-6 py-4">
-                            <button class="text-blue-600 hover:text-blue-800 mr-2" onclick="editItemInPO(${item.tempId})">
-                                <i data-lucide="edit-2" class="w-5 h-5"></i>
-                            </button>
-                            <button class="text-red-600 hover:text-red-800" onclick="removeItemFromPO(${item.tempId})">
-                                <i data-lucide="trash-2" class="w-5 h-5"></i>
-                            </button>
-                        </td>
+                        <td class="px-6 py-4">${actionButtons}</td>
                     </tr>
                 `;
 
                 // Mobile Card
                 if (mobileCards) {
+                    const mobileActions = item.isGift
+                        ? `<span class="text-[10px] text-purple-600 font-bold px-1.5 py-0.5 bg-purple-50 rounded">แถมจากโปร</span>`
+                        : `
+                            <button class="p-1 text-blue-600 bg-blue-50 rounded hover:bg-blue-100" onclick="editItemInPO(${item.tempId})">
+                                <i data-lucide="edit-2" class="w-4 h-4"></i>
+                            </button>
+                            <button class="p-1 text-red-600 bg-red-50 rounded hover:bg-red-100" onclick="removeItemFromPO(${item.tempId})">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        `;
+
                     mobileCardsHtml += `
-                        <div class="bg-white p-4 rounded-lg shadow border border-gray-200 flex gap-4">
+                        <div class="bg-white p-4 rounded-lg shadow border border-gray-200 flex gap-4 ${item.isGift ? 'bg-purple-50/30 border-purple-200' : ''}">
                             <img src="${imageSrc}" alt="${escapeHtml(item.name)}" class="w-16 h-16 rounded-md object-cover border flex-shrink-0">
                             <div class="flex-grow min-w-0">
                                 <div class="flex justify-between items-start mb-1">
                                     <h5 class="font-semibold text-gray-800 truncate pr-2">${displayHtml}</h5>
-                                    <div class="flex space-x-1 flex-shrink-0">
-                                        <button class="p-1 text-blue-600 bg-blue-50 rounded hover:bg-blue-100" onclick="editItemInPO(${item.tempId})">
-                                            <i data-lucide="edit-2" class="w-4 h-4"></i>
-                                        </button>
-                                        <button class="p-1 text-red-600 bg-red-50 rounded hover:bg-red-100" onclick="removeItemFromPO(${item.tempId})">
-                                            <i data-lucide="trash-2" class="w-4 h-4"></i>
-                                        </button>
-                                    </div>
+                                    <div class="flex space-x-1 flex-shrink-0">${mobileActions}</div>
                                 </div>
                                 <div class="grid grid-cols-2 gap-x-2 text-xs text-gray-500 mb-1">
                                     <span>แนะนำ: ${formatCurrency(item.recommendedPrice || 0)}</span>
-                                    <span class="text-right">Qty: ${item.qty}</span>
+                                    <span class="text-right font-bold">Qty: ${item.qty}</span>
                                 </div>
                                 <div class="flex justify-between items-center text-sm">
                                     <span class="text-blue-700 font-medium">ทุน: ${formatCurrency(item.price)}</span>
@@ -4891,49 +5254,10 @@
                 mobileCards.innerHTML = mobileCardsHtml;
             }
 
-            // --- Multi-step Discount Calculation (VAT-Exclusive Items) ---
-            // 1. Base Subtotal (Sum of items)
-            subtotal = poItems.reduce((sum, item) => sum + item.total, 0);
-
-            // Get discount inputs
-            const disc1El = document.getElementById('po-discount-percent-1');
-            const disc2El = document.getElementById('po-discount-percent-2');
-
-            // 2. Discount Step 1
-            const disc1Percent = disc1El ? (parseFloat(disc1El.value) || 0) : 0;
-            const disc1Amount = subtotal * (disc1Percent / 100);
-            const totalAfter1 = subtotal - disc1Amount;
-
-            // 3. Discount Step 2
-            const disc2Percent = disc2El ? (parseFloat(disc2El.value) || 0) : 0;
-            const disc2Amount = totalAfter1 * (disc2Percent / 100);
-            const totalAfter2 = totalAfter1 - disc2Amount;
-
-            // 4. VAT 7%
-            const vatAmount = totalAfter2 * 0.07;
-            const grandTotal = totalAfter2 + vatAmount;
-
-            // Update UI
-            const elSubtotal = document.getElementById('po-subtotal');
-            if (elSubtotal) elSubtotal.textContent = formatCurrency(subtotal);
-
-            const elDiscAmount1 = document.getElementById('po-discount-amount-1');
-            if (elDiscAmount1) elDiscAmount1.textContent = (disc1Amount > 0 ? '-' : '') + formatCurrency(disc1Amount);
-
-            const elTotalAfter1 = document.getElementById('po-total-after-1');
-            if (elTotalAfter1) elTotalAfter1.textContent = formatCurrency(totalAfter1);
-
-            const elDiscAmount2 = document.getElementById('po-discount-amount-2');
-            if (elDiscAmount2) elDiscAmount2.textContent = (disc2Amount > 0 ? '-' : '') + formatCurrency(disc2Amount);
-
-            const elTotalAfter2 = document.getElementById('po-total-after-2');
-            if (elTotalAfter2) elTotalAfter2.textContent = formatCurrency(totalAfter2);
-
-            const elVat = document.getElementById('po-vat');
-            if (elVat) elVat.textContent = formatCurrency(vatAmount);
-
-            const elTotal = document.getElementById('po-total');
-            if (elTotal) elTotal.textContent = formatCurrency(grandTotal);
+            // Update Summary Totals (including Promotions and Step Discounts)
+            updateQuotationSummaryTotals();
+            initIcons();
+        }
 
             initIcons();
         }
@@ -4981,6 +5305,7 @@
         function removeItemFromPO(tempId) {
             poItems = poItems.filter(item => item.tempId !== tempId);
             renderPOTable();
+            evaluateQuotationPromotions();
         }
 
         // 10. Save QT (Create or Edit)
@@ -5031,6 +5356,12 @@
                 const nextStatus = isSubmitted
                     ? 'Pending Review'
                     : (currentEditPOId ? (currentEditPOStatus || 'Draft') : 'Draft');
+
+                let promoDiscountVal = 0;
+                if (currentAppliedPromotion && currentAppliedPromotion.calculated_discount) {
+                    promoDiscountVal = Number(currentAppliedPromotion.calculated_discount) || 0;
+                }
+
                 const payload = {
                     customerId: customerId, // Use validated value
                     customerName: selectedCustomerData ? selectedCustomerData.name : '', // Include customer name
@@ -5038,16 +5369,21 @@
                     deliveryDate: deliveryDate, // Use validated value
                     discountPercent1: parseFloat(document.getElementById('po-discount-percent-1').value) || 0,
                     discountPercent2: parseFloat(document.getElementById('po-discount-percent-2').value) || 0,
+                    promotionId: currentAppliedPromotion ? currentAppliedPromotion.id : null,
+                    promotionName: currentAppliedPromotion ? currentAppliedPromotion.name : null,
+                    promotionDiscount: promoDiscountVal,
                     total: parseFloat(totalText),
                     status: nextStatus,
                     items: poItems.map(item => ({ // Send clean item data
-                        productId: item.productId, // This is now correct!
+                        productId: item.productId,
+                        productCode: item.productCode,
                         name: item.name,
                         qty: item.qty,
                         price: item.price,
                         recommendedPrice: item.recommendedPrice,
                         discount: item.discount,
-                        total: item.total
+                        total: item.total,
+                        isGift: !!item.isGift
                     }))
                 };
 
@@ -5821,6 +6157,20 @@
             // Note: po object from API already contains calculated fields (subtotal, discountAmount1, etc.)
             document.getElementById('po-detail-subtotal').textContent = formatCurrency(po.subtotal);
 
+            // Promotion Discount in Detail View
+            const promoRow = document.getElementById('po-detail-promo-row');
+            if (promoRow) {
+                if (po.promotionDiscount && Number(po.promotionDiscount) > 0) {
+                    promoRow.classList.remove('hidden');
+                    const promoNameEl = document.getElementById('po-detail-promo-name');
+                    if (promoNameEl) promoNameEl.textContent = `ส่วนลดโปรโมชั่น (${po.promotionName || 'แคมเปญ'}):`;
+                    const promoAmtEl = document.getElementById('po-detail-promo-amount');
+                    if (promoAmtEl) promoAmtEl.textContent = '-' + formatCurrency(po.promotionDiscount);
+                } else {
+                    promoRow.classList.add('hidden');
+                }
+            }
+
             const disc1Pct = po.discountPercent1 || 0;
             const disc1Badge = document.getElementById('po-detail-discount-percent-1');
             disc1Badge.textContent = disc1Pct + '%';
@@ -5856,11 +6206,11 @@
                 po.items.forEach(item => {
                     const imageUrl = item.imageUrl || 'https://placehold.co/60x60/e2e8f0/64748b?text=No+Image';
                     const productCode = item.productCode || '';
-                    const displayName = productCode ? `${productCode} - ${item.name}` : item.name;
+                    const cleanName = cleanProductName(item.name, productCode);
+                    const giftBadge = item.isGift ? `<span class="bg-purple-100 text-purple-800 font-bold px-1.5 py-0.5 rounded text-[10px] mr-1.5">🎁 ของแถมฟรี</span>` : '';
+                    const displayHtml = productCode ? `${giftBadge}<span class="font-bold">${escapeHtml(productCode)}</span> - ${escapeHtml(cleanName)}` : `${giftBadge}${escapeHtml(item.name)}`;
 
                     // Desktop Row
-                    const cleanName = cleanProductName(item.name, productCode);
-                    const displayHtml = productCode ? `<span class="font-bold">${escapeHtml(productCode)}</span> - ${escapeHtml(cleanName)}` : escapeHtml(item.name);
                     itemsTable.innerHTML += `
                         <tr>
                             <td class="px-6 py-4">
@@ -6129,10 +6479,20 @@
                 document.getElementById('sap-so-doc-date').textContent = data.doc_date || '-';
                 document.getElementById('sap-so-delivery-date').textContent = data.delivery_date || '-';
 
+                // Populate Customer Ref. No. & Remarks inputs
+                const custRefInput = document.getElementById('sap-so-customer-ref');
+                if (custRefInput) custRefInput.value = data.customer_ref_no || data.po_number || '';
+                const remarksInput = document.getElementById('sap-so-remarks');
+                if (remarksInput) remarksInput.value = data.default_comments || '';
+
                 // Items
                 const itemsBody = document.getElementById('sap-so-items-body');
                 itemsBody.innerHTML = '';
                 (data.items || []).forEach(item => {
+                    const sapDiscBadge = (item.discount_percent && Number(item.discount_percent) > 0)
+                        ? `<span class="bg-purple-100 text-purple-800 font-bold px-1.5 py-0.5 rounded text-[11px]">${Number(item.discount_percent).toFixed(1)}%</span>`
+                        : `<span class="text-gray-400 font-medium">-</span>`;
+
                     itemsBody.innerHTML += `
                         <tr class="hover:bg-gray-50">
                             <td class="px-3 py-2 text-center text-gray-500">${item.index}</td>
@@ -6140,6 +6500,7 @@
                             <td class="px-3 py-2 text-gray-800">${escapeHtml(item.name)}</td>
                             <td class="px-3 py-2 text-center font-semibold">${item.qty}</td>
                             <td class="px-3 py-2 text-right">${formatCurrency(item.unit_price)}</td>
+                            <td class="px-2 py-2 text-center">${sapDiscBadge}</td>
                             <td class="px-3 py-2 text-right font-bold text-gray-900">${formatCurrency(item.line_total)}</td>
                         </tr>
                     `;
@@ -6259,9 +6620,14 @@
             }
             if (window.lucide) lucide.createIcons();
 
-            // 4. Send request to backend
+            // 4. Send request to backend with Customer Ref No & Remarks
             try {
-                const res = await fetchApi(`/api/purchase-orders/${currentSapPOId}/create-sap-so`, 'POST');
+                const customerRefNo = (document.getElementById('sap-so-customer-ref')?.value || '').trim();
+                const remarks = (document.getElementById('sap-so-remarks')?.value || '').trim();
+                const res = await fetchApi(`/api/purchase-orders/${currentSapPOId}/create-sap-so`, 'POST', {
+                    customer_ref_no: customerRefNo,
+                    comments: remarks
+                });
                 if (res && res.success) {
                     // Update in-modal banner to SUCCESS
                     if (statusBanner) {
@@ -8152,8 +8518,8 @@
                     : (Number.isFinite(product.discount) ? product.discount : (parseFloat(product.discountPercent || product.discount) || 0));
                 const discountBadge = discountVal > 0
                     ? `<div class="flex justify-between items-center text-purple-700">
-                            <span class="text-[10px] font-medium uppercase tracking-wider font-bold">Discount</span>
-                            <span class="font-bold text-xs bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded">${discountVal.toFixed(2)}%</span>
+                            <span class="text-[10px] font-medium uppercase tracking-wider font-bold">SAP Line Disc.</span>
+                            <span class="font-bold text-xs bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded" title="ส่วนลดสำหรับส่งเข้า SAP SO เท่านั้น">${discountVal.toFixed(2)}%</span>
                         </div>`
                     : '';
 
@@ -8224,7 +8590,8 @@
             document.getElementById('selected-product-price').textContent = formatCurrency(selectedProductData.cost);
             const discInput = document.getElementById('product-discount');
             if (discInput) {
-                discInput.value = discountVal || 0;
+                // ข้อ 2: Discount ใน ItemCode ใช้สำหรับยิง API สร้าง SO บน SAP เท่านั้น ไม่นำมาคำนวณใน QTOnline
+                discInput.value = 0;
             }
             const selectedProductImage = document.getElementById('selected-product-image');
             if (selectedProductImage) {
@@ -11108,6 +11475,706 @@
         async function refreshCurrentPO() {
             if (currentDocumentUploadPO && currentDocumentUploadPO.id) {
                 await viewPO(currentDocumentUploadPO.id);
+            }
+        }
+
+        // =========================================================================
+        // PROMOTION CAMPAIGN & BENEFIT SYSTEM (Auto & Manual Mode)
+        // =========================================================================
+
+        /**
+         * Switch between 'auto' and 'manual' promotion modes on Create/Edit QT page
+         */
+        function setPromotionMode(mode, triggerEvaluation = true) {
+            currentPromoMode = mode;
+            const autoBtn = document.getElementById('promo-mode-auto-btn');
+            const manualBtn = document.getElementById('promo-mode-manual-btn');
+            const manualBox = document.getElementById('promo-manual-dropdown-box');
+
+            if (mode === 'auto') {
+                if (autoBtn) {
+                    autoBtn.className = 'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 bg-indigo-600 text-white shadow-xs';
+                }
+                if (manualBtn) {
+                    manualBtn.className = 'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 text-gray-600 hover:text-gray-900';
+                }
+                if (manualBox) manualBox.classList.add('hidden');
+            } else {
+                if (manualBtn) {
+                    manualBtn.className = 'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 bg-indigo-600 text-white shadow-xs';
+                }
+                if (autoBtn) {
+                    autoBtn.className = 'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 text-gray-600 hover:text-gray-900';
+                }
+                if (manualBox) manualBox.classList.remove('hidden');
+            }
+
+            if (triggerEvaluation) {
+                evaluateQuotationPromotions();
+            }
+        }
+
+        let isEvaluatingPromo = false;
+        /**
+         * Evaluates promotions for the current quotation items and subtotal
+         */
+        async function evaluateQuotationPromotions(isInitial = false) {
+            if (isEvaluatingPromo) return;
+            isEvaluatingPromo = true;
+
+            try {
+                const nonGiftItems = poItems.filter(i => !i.isGift);
+                const subtotal = nonGiftItems.reduce((sum, item) => sum + (Number(item.price) * Number(item.qty) * (1 - (Number(item.discount) || 0) / 100)), 0);
+
+                if (nonGiftItems.length === 0 || subtotal <= 0) {
+                    eligiblePromotionsList = [];
+                    applyPromotionState(null, currentPromoMode);
+                    updateManualPromotionSelectOptions();
+                    return;
+                }
+
+                const res = await fetchApi('/api/promotions/evaluate', 'POST', {
+                    subtotal: subtotal,
+                    items: nonGiftItems.map(i => ({
+                        productCode: i.productCode,
+                        qty: i.qty,
+                        price: i.price,
+                        discount: i.discount,
+                        isGift: false
+                    }))
+                });
+
+                if (res && res.success) {
+                    eligiblePromotionsList = res.eligible_promotions || [];
+                    updateManualPromotionSelectOptions();
+
+                    if (currentPromoMode === 'auto') {
+                        applyPromotionState(res.best_promotion, 'auto');
+                    } else {
+                        // Manual Mode: check if currently selected promo is still eligible
+                        const selectEl = document.getElementById('po-manual-promo-select');
+                        const selectedVal = selectEl ? selectEl.value : '';
+                        if (selectedVal) {
+                            const stillEligible = eligiblePromotionsList.find(p => String(p.id) === String(selectedVal));
+                            if (stillEligible) {
+                                applyPromotionState(stillEligible, 'manual');
+                            } else {
+                                applyPromotionState(null, 'manual');
+                                if (selectEl) selectEl.value = '';
+                            }
+                        } else {
+                            applyPromotionState(null, 'manual');
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('Error evaluating promotions:', err);
+            } finally {
+                isEvaluatingPromo = false;
+                initIcons();
+            }
+        }
+
+        /**
+         * Update manual dropdown select options with eligible promotions
+         */
+        function updateManualPromotionSelectOptions() {
+            const selectEl = document.getElementById('po-manual-promo-select');
+            if (!selectEl) return;
+
+            const currentVal = selectEl.value;
+            let optionsHtml = '<option value="">-- ไม่ใช้โปรโมชั่น (No Promotion) --</option>';
+
+            if (eligiblePromotionsList && eligiblePromotionsList.length > 0) {
+                eligiblePromotionsList.forEach(p => {
+                    optionsHtml += `<option value="${p.id}">${escapeHtml(p.name)} [${escapeHtml(p.benefit_text)}]</option>`;
+                });
+            } else {
+                optionsHtml += '<option value="" disabled>(ไม่พบโปรโมชั่นที่เข้าเกณฑ์ในขณะนี้)</option>';
+            }
+
+            selectEl.innerHTML = optionsHtml;
+            if (currentAppliedPromotion && currentAppliedPromotion.id) {
+                selectEl.value = String(currentAppliedPromotion.id);
+            } else if (currentVal && eligiblePromotionsList.some(p => String(p.id) === String(currentVal))) {
+                selectEl.value = currentVal;
+            } else {
+                selectEl.value = '';
+            }
+        }
+
+        /**
+         * Handle user selection from manual promo dropdown
+         */
+        function onManualPromotionSelectChange() {
+            const selectEl = document.getElementById('po-manual-promo-select');
+            const selectedId = selectEl ? selectEl.value : '';
+
+            if (!selectedId) {
+                applyPromotionState(null, 'manual');
+            } else {
+                const promo = eligiblePromotionsList.find(p => String(p.id) === String(selectedId));
+                applyPromotionState(promo, 'manual');
+            }
+        }
+
+        /**
+         * Apply a promotion (or clear) to state, handle gifts, and update UI
+         */
+        function applyPromotionState(promo, mode = currentPromoMode) {
+            currentAppliedPromotion = promo;
+
+            // Handle Gift Item in poItems
+            const hadGifts = poItems.some(i => i.isGift);
+            poItems = poItems.filter(i => !i.isGift);
+
+            if (promo && promo.free_gift) {
+                poItems.push({
+                    tempId: Date.now() + Math.random(),
+                    productId: null,
+                    productCode: promo.free_gift.productCode || 'FREE-GIFT',
+                    name: promo.free_gift.name || 'ของแถมโปรโมชั่น',
+                    qty: Number(promo.free_gift.qty) || 1,
+                    price: 0,
+                    recommendedPrice: 0,
+                    discount: 0,
+                    total: 0,
+                    isGift: true,
+                    imageUrl: ''
+                });
+                renderPOTableItemsOnly();
+            } else if (hadGifts) {
+                renderPOTableItemsOnly();
+            }
+
+            // Update Banner UI
+            const badgeEl = document.getElementById('promo-status-badge');
+            const textEl = document.getElementById('promo-status-text');
+            const benefitEl = document.getElementById('promo-benefit-amount');
+
+            if (promo) {
+                if (badgeEl) {
+                    if (mode === 'auto') {
+                        badgeEl.className = 'px-2 py-0.5 rounded font-bold text-[11px] bg-emerald-100 text-emerald-800 flex items-center gap-1';
+                        badgeEl.innerHTML = '<i data-lucide="zap" class="w-3 h-3"></i><span>⚡ Auto Applied</span>';
+                    } else {
+                        badgeEl.className = 'px-2 py-0.5 rounded font-bold text-[11px] bg-indigo-100 text-indigo-800 flex items-center gap-1';
+                        badgeEl.innerHTML = '<i data-lucide="hand" class="w-3 h-3"></i><span>🖐️ Manual Applied</span>';
+                    }
+                }
+                if (textEl) {
+                    textEl.textContent = `${promo.name} (${promo.benefit_text || promo.description || ''})`;
+                }
+                if (benefitEl) {
+                    if (promo.calculated_discount && promo.calculated_discount > 0) {
+                        benefitEl.textContent = `-${formatCurrency(promo.calculated_discount)} บาท`;
+                    } else if (promo.free_gift) {
+                        benefitEl.textContent = `แถมฟรี ${promo.free_gift.name} (${promo.free_gift.qty} ชิ้น)`;
+                    } else {
+                        benefitEl.textContent = 'ได้รับสิทธิ์ตามเงื่อนไข';
+                    }
+                }
+            } else {
+                if (badgeEl) {
+                    badgeEl.className = 'px-2 py-0.5 rounded font-bold text-[11px] bg-gray-100 text-gray-600';
+                    badgeEl.textContent = 'ไม่มีโปรโมชั่น';
+                }
+                if (textEl) {
+                    textEl.textContent = (mode === 'manual')
+                        ? 'คุณเลือกไม่ใช้โปรโมชั่นสำหรับใบเสนอราคานี้'
+                        : 'ยังไม่มียอดสั่งซื้อหรือสินค้าที่เข้าเงื่อนไขโปรโมชั่น';
+                }
+                if (benefitEl) benefitEl.textContent = '';
+            }
+
+            updateQuotationSummaryTotals();
+            initIcons();
+        }
+
+        /**
+         * Re-renders table rows without re-evaluating promotions
+         */
+        function renderPOTableItemsOnly() {
+            const tableBody = document.getElementById('po-items-table');
+            const mobileCards = document.getElementById('po-items-mobile-cards');
+            if (!tableBody) return;
+
+            const placeholderImage = 'https://placehold.co/60x60/e2e8f0/94a3b8?text=No+Image';
+            let tableRowsHtml = '';
+            let mobileCardsHtml = '';
+
+            poItems.forEach(item => {
+                const imageSrc = item.imageUrl || placeholderImage;
+                const cleanName = cleanProductName(item.name, item.productCode);
+                const giftBadge = item.isGift ? '<span class="bg-purple-100 text-purple-800 font-bold px-1.5 py-0.5 rounded text-[10px] mr-1.5">🎁 ของแถมฟรี</span>' : '';
+                const displayHtml = item.productCode ? `${giftBadge}<span class="font-bold">${escapeHtml(item.productCode)}</span> - ${escapeHtml(cleanName)}` : `${giftBadge}${escapeHtml(item.name)}`;
+
+                const actionButtons = item.isGift
+                    ? `<span class="text-[11px] text-purple-600 font-bold px-2 py-1 bg-purple-50 rounded">แถมจากโปร</span>`
+                    : `
+                        <button class="text-blue-600 hover:text-blue-800 mr-2" onclick="editItemInPO(${item.tempId})">
+                            <i data-lucide="edit-2" class="w-5 h-5"></i>
+                        </button>
+                        <button class="text-red-600 hover:text-red-800" onclick="removeItemFromPO(${item.tempId})">
+                            <i data-lucide="trash-2" class="w-5 h-5"></i>
+                        </button>
+                    `;
+
+                tableRowsHtml += `
+                    <tr data-tempid="${item.tempId}" class="${item.isGift ? 'bg-purple-50/40' : ''}">
+                        <td class="px-6 py-4">
+                            <img src="${imageSrc}" alt="${escapeHtml(item.name)}" class="w-12 h-12 rounded-md object-cover border">
+                        </td>
+                        <td class="px-6 py-4">${displayHtml}</td>
+                        <td class="px-6 py-4 text-right text-gray-500">${formatCurrency(item.recommendedPrice || 0)}</td>
+                        <td class="px-6 py-4 text-right font-bold">${item.qty}</td>
+                        <td class="px-6 py-4 text-right text-blue-700 font-medium">${formatCurrency(item.price)}</td>
+                        <td class="px-6 py-4 text-right font-bold text-blue-700">${formatCurrency(item.total)}</td>
+                        <td class="px-6 py-4">${actionButtons}</td>
+                    </tr>
+                `;
+
+                if (mobileCards) {
+                    const mobileActions = item.isGift
+                        ? `<span class="text-[10px] text-purple-600 font-bold px-1.5 py-0.5 bg-purple-50 rounded">แถมจากโปร</span>`
+                        : `
+                            <button class="p-1 text-blue-600 bg-blue-50 rounded hover:bg-blue-100" onclick="editItemInPO(${item.tempId})">
+                                <i data-lucide="edit-2" class="w-4 h-4"></i>
+                            </button>
+                            <button class="p-1 text-red-600 bg-red-50 rounded hover:bg-red-100" onclick="removeItemFromPO(${item.tempId})">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        `;
+                    mobileCardsHtml += `
+                        <div class="bg-white p-4 rounded-lg shadow border border-gray-200 flex gap-4 ${item.isGift ? 'bg-purple-50/30 border-purple-200' : ''}">
+                            <img src="${imageSrc}" alt="${escapeHtml(item.name)}" class="w-16 h-16 rounded-md object-cover border flex-shrink-0">
+                            <div class="flex-grow min-w-0">
+                                <div class="flex justify-between items-start mb-1">
+                                    <h5 class="font-semibold text-gray-800 truncate pr-2">${displayHtml}</h5>
+                                    <div class="flex space-x-1 flex-shrink-0">${mobileActions}</div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-x-2 text-xs text-gray-500 mb-1">
+                                    <span>แนะนำ: ${formatCurrency(item.recommendedPrice || 0)}</span>
+                                    <span class="text-right font-bold">Qty: ${item.qty}</span>
+                                </div>
+                                <div class="flex justify-between items-center text-sm">
+                                    <span class="text-blue-700 font-medium">ทุน: ${formatCurrency(item.price)}</span>
+                                    <span class="font-bold text-blue-700">${formatCurrency(item.total)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+
+            tableBody.innerHTML = tableRowsHtml;
+            if (mobileCards) mobileCards.innerHTML = mobileCardsHtml;
+            initIcons();
+        }
+
+        /**
+         * Calculates full quotation totals including Promotion Discount, Step 1, Step 2, and VAT
+         */
+        function updateQuotationSummaryTotals() {
+            const nonGift = poItems.filter(i => !i.isGift);
+            const subtotal = nonGift.reduce((sum, item) => sum + item.total, 0);
+
+            let promoDiscount = 0;
+            if (currentAppliedPromotion && currentAppliedPromotion.calculated_discount) {
+                promoDiscount = Number(currentAppliedPromotion.calculated_discount) || 0;
+                if (promoDiscount > subtotal) promoDiscount = subtotal;
+            }
+
+            const subtotalAfterPromo = Math.max(0, subtotal - promoDiscount);
+
+            const disc1El = document.getElementById('po-discount-percent-1');
+            const disc2El = document.getElementById('po-discount-percent-2');
+
+            const disc1Percent = disc1El ? (parseFloat(disc1El.value) || 0) : 0;
+            const disc1Amount = subtotalAfterPromo * (disc1Percent / 100);
+            const totalAfter1 = subtotalAfterPromo - disc1Amount;
+
+            const disc2Percent = disc2El ? (parseFloat(disc2El.value) || 0) : 0;
+            const disc2Amount = totalAfter1 * (disc2Percent / 100);
+            const totalAfter2 = totalAfter1 - disc2Amount;
+
+            const vatAmount = totalAfter2 * 0.07;
+            const grandTotal = totalAfter2 + vatAmount;
+
+            // Update UI Elements
+            const elSubtotal = document.getElementById('po-subtotal');
+            if (elSubtotal) elSubtotal.textContent = formatCurrency(subtotal);
+
+            const promoRow = document.getElementById('po-promo-discount-row');
+            const promoLabel = document.getElementById('po-promo-summary-label');
+            const promoAmount = document.getElementById('po-promo-discount-amount');
+            if (promoRow) {
+                if (promoDiscount > 0) {
+                    promoRow.classList.remove('hidden');
+                    if (promoLabel) promoLabel.textContent = `ส่วนลดโปรโมชั่น (${currentAppliedPromotion ? currentAppliedPromotion.name : 'Campaign'}):`;
+                    if (promoAmount) promoAmount.textContent = '-' + formatCurrency(promoDiscount);
+                } else {
+                    promoRow.classList.add('hidden');
+                }
+            }
+
+            const elDiscAmount1 = document.getElementById('po-discount-amount-1');
+            if (elDiscAmount1) elDiscAmount1.textContent = (disc1Amount > 0 ? '-' : '') + formatCurrency(disc1Amount);
+
+            const elTotalAfter1 = document.getElementById('po-total-after-1');
+            if (elTotalAfter1) elTotalAfter1.textContent = formatCurrency(totalAfter1);
+
+            const elDiscAmount2 = document.getElementById('po-discount-amount-2');
+            if (elDiscAmount2) elDiscAmount2.textContent = (disc2Amount > 0 ? '-' : '') + formatCurrency(disc2Amount);
+
+            const elTotalAfter2 = document.getElementById('po-total-after-2');
+            if (elTotalAfter2) elTotalAfter2.textContent = formatCurrency(totalAfter2);
+
+            const elVat = document.getElementById('po-vat');
+            if (elVat) elVat.textContent = formatCurrency(vatAmount);
+
+            const elTotal = document.getElementById('po-total');
+            if (elTotal) elTotal.textContent = formatCurrency(grandTotal);
+        }
+
+        // =========================================================================
+        // PROMOTION MANAGEMENT CRUD (Admin / Sale Admin)
+        // =========================================================================
+
+        /**
+         * Load all promotions from API and render
+         */
+        async function loadPromotions() {
+            try {
+                const res = await fetchApi('/api/promotions');
+                if (Array.isArray(res)) {
+                    allPromotionsList = res;
+                    updatePromotionStats(allPromotionsList);
+                    renderPromotionTable(allPromotionsList);
+                }
+            } catch (err) {
+                console.error('Error loading promotions:', err);
+            }
+        }
+
+        /**
+         * Update promotion statistics cards
+         */
+        function updatePromotionStats(promos) {
+            const statTotal = document.getElementById('promo-stat-total');
+            const statActive = document.getElementById('promo-stat-active');
+            const statDiscounts = document.getElementById('promo-stat-discounts');
+            const statGifts = document.getElementById('promo-stat-gifts');
+
+            if (statTotal) statTotal.textContent = promos.length;
+            if (statActive) statActive.textContent = promos.filter(p => p.is_active).length;
+            if (statDiscounts) statDiscounts.textContent = promos.filter(p => p.promo_type === 'ORDER_DISCOUNT_FIXED' || p.promo_type === 'ORDER_DISCOUNT_PERCENT').length;
+            if (statGifts) statGifts.textContent = promos.filter(p => p.promo_type === 'BUY_X_GET_Y').length;
+        }
+
+        /**
+         * Filter promotion table based on search input and dropdown filters
+         */
+        function filterPromotionsTable() {
+            const query = (document.getElementById('promo-search-input')?.value || '').toLowerCase().trim();
+            const typeFilter = document.getElementById('promo-type-filter')?.value || 'ALL';
+            const statusFilter = document.getElementById('promo-status-filter')?.value || 'ALL';
+
+            const filtered = allPromotionsList.filter(p => {
+                const matchesQuery = !query ||
+                    (p.code && p.code.toLowerCase().includes(query)) ||
+                    (p.name && p.name.toLowerCase().includes(query)) ||
+                    (p.description && p.description.toLowerCase().includes(query));
+
+                const matchesType = typeFilter === 'ALL' || p.promo_type === typeFilter;
+                const matchesStatus = statusFilter === 'ALL' ||
+                    (statusFilter === 'ACTIVE' && p.is_active) ||
+                    (statusFilter === 'INACTIVE' && !p.is_active);
+
+                return matchesQuery && matchesType && matchesStatus;
+            });
+
+            renderPromotionTable(filtered);
+        }
+
+        /**
+         * Render promotion table rows
+         */
+        function renderPromotionTable(promotions) {
+            const tbody = document.getElementById('promotion-table-body');
+            if (!tbody) return;
+
+            if (!promotions || promotions.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="9" class="px-4 py-8 text-center text-gray-400">
+                            <i data-lucide="tag" class="w-8 h-8 mx-auto mb-2 text-gray-300"></i>
+                            <p class="font-medium">ไม่พบรายการโปรโมชั่นที่ตรงกับเงื่อนไข</p>
+                        </td>
+                    </tr>
+                `;
+                initIcons();
+                return;
+            }
+
+            const rowsHtml = promotions.map((p, idx) => {
+                let typeBadge = '';
+                let conditionText = '';
+                let benefitText = '';
+
+                if (p.promo_type === 'ORDER_DISCOUNT_FIXED') {
+                    typeBadge = '<span class="bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded text-[11px]">ส่วนลด (บาท)</span>';
+                    conditionText = `ซื้อครบ <b>${formatCurrency(p.min_order_amount)}</b> บ.`;
+                    benefitText = `<span class="font-bold text-blue-700">ลดทันที ${formatCurrency(p.discount_value)} บ.</span>`;
+                } else if (p.promo_type === 'ORDER_DISCOUNT_PERCENT') {
+                    typeBadge = '<span class="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded text-[11px]">ส่วนลด (%)</span>';
+                    conditionText = `ซื้อครบ <b>${formatCurrency(p.min_order_amount)}</b> บ.`;
+                    const maxCap = p.max_discount_amount ? ` (สูงสุด ${formatCurrency(p.max_discount_amount)} บ.)` : '';
+                    benefitText = `<span class="font-bold text-emerald-700">ลด ${p.discount_value}%${maxCap}</span>`;
+                } else if (p.promo_type === 'BUY_X_GET_Y') {
+                    typeBadge = '<span class="bg-purple-100 text-purple-800 font-bold px-2 py-0.5 rounded text-[11px]">ซื้อแถมสินค้า</span>';
+                    const prodDesc = p.condition_product_code ? `สินค้า <b>${escapeHtml(p.condition_product_code)}</b>` : 'สินค้าใดก็ได้';
+                    conditionText = `ซื้อ ${prodDesc} ครบ <b>${p.condition_qty}</b> ชิ้น`;
+                    benefitText = `<span class="font-bold text-purple-700">แถมฟรี ${escapeHtml(p.reward_product_name || p.reward_product_code)} (${p.reward_qty} ชิ้น)</span>`;
+                }
+
+                const dateRange = (p.start_date || p.end_date)
+                    ? `<span class="text-[11px] text-gray-600">${p.start_date || 'เริ่ม'} ถึง ${p.end_date || 'ไม่จำกัด'}</span>`
+                    : '<span class="text-[11px] text-gray-400">ตลอดระยะเวลา</span>';
+
+                const statusBtn = p.is_active
+                    ? `<button type="button" onclick="togglePromotionActive(${p.id}, true)" class="px-2.5 py-1 text-[11px] font-bold rounded-md bg-emerald-100 text-emerald-800 hover:bg-emerald-200 transition">เปิดใช้งาน</button>`
+                    : `<button type="button" onclick="togglePromotionActive(${p.id}, false)" class="px-2.5 py-1 text-[11px] font-bold rounded-md bg-gray-100 text-gray-600 hover:bg-gray-200 transition">ปิดใช้งาน</button>`;
+
+                return `
+                    <tr class="hover:bg-gray-50/80 transition">
+                        <td class="px-4 py-3 text-center text-gray-400 font-medium">${idx + 1}</td>
+                        <td class="px-4 py-3 font-mono font-bold text-indigo-700">${escapeHtml(p.code)}</td>
+                        <td class="px-4 py-3">
+                            <div class="font-bold text-gray-900">${escapeHtml(p.name)}</div>
+                            ${p.description ? `<div class="text-[11px] text-gray-500 mt-0.5">${escapeHtml(p.description)}</div>` : ''}
+                        </td>
+                        <td class="px-4 py-3">${typeBadge}</td>
+                        <td class="px-4 py-3 text-gray-700">${conditionText}</td>
+                        <td class="px-4 py-3">${benefitText}</td>
+                        <td class="px-4 py-3">${dateRange}</td>
+                        <td class="px-4 py-3 text-center">${statusBtn}</td>
+                        <td class="px-4 py-3 text-center">
+                            <div class="inline-flex items-center gap-1.5">
+                                <button type="button" onclick="openPromotionModal(${p.id})" class="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded" title="แก้ไข">
+                                    <i data-lucide="edit-2" class="w-4 h-4"></i>
+                                </button>
+                                <button type="button" onclick="deletePromotion(${p.id})" class="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded" title="ลบ">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            tbody.innerHTML = rowsHtml;
+            initIcons();
+        }
+
+        /**
+         * Open create / edit promotion modal
+         */
+        function openPromotionModal(promoId = null) {
+            const modal = document.getElementById('promotion-modal');
+            const titleEl = document.getElementById('promotion-modal-title');
+            const editIdEl = document.getElementById('promo-edit-id');
+
+            if (!modal) return;
+
+            if (promoId) {
+                const promo = allPromotionsList.find(p => p.id === promoId);
+                if (!promo) return;
+
+                if (titleEl) titleEl.textContent = 'แก้ไขโปรโมชั่น: ' + promo.code;
+                if (editIdEl) editIdEl.value = promo.id;
+
+                document.getElementById('promo-input-code').value = promo.code;
+                document.getElementById('promo-input-code').disabled = true; // Don't change code
+                document.getElementById('promo-input-type').value = promo.promo_type;
+                document.getElementById('promo-input-name').value = promo.name;
+                document.getElementById('promo-input-desc').value = promo.description || '';
+                document.getElementById('promo-input-min-order').value = promo.min_order_amount || 0;
+                document.getElementById('promo-input-discount-val').value = promo.discount_value || 0;
+                document.getElementById('promo-input-max-disc').value = promo.max_discount_amount || '';
+                document.getElementById('promo-input-cond-product').value = promo.condition_product_code || '';
+                document.getElementById('promo-input-cond-qty').value = promo.condition_qty || 1;
+                document.getElementById('promo-input-reward-code').value = promo.reward_product_code || '';
+                document.getElementById('promo-input-reward-name').value = promo.reward_product_name || '';
+                document.getElementById('promo-input-reward-qty').value = promo.reward_qty || 1;
+                document.getElementById('promo-input-start-date').value = promo.start_date || '';
+                document.getElementById('promo-input-end-date').value = promo.end_date || '';
+                document.getElementById('promo-input-active').checked = !!promo.is_active;
+            } else {
+                if (titleEl) titleEl.textContent = 'สร้างโปรโมชั่นใหม่';
+                if (editIdEl) editIdEl.value = '';
+
+                document.getElementById('promo-input-code').value = '';
+                document.getElementById('promo-input-code').disabled = false;
+                document.getElementById('promo-input-type').value = 'ORDER_DISCOUNT_FIXED';
+                document.getElementById('promo-input-name').value = '';
+                document.getElementById('promo-input-desc').value = '';
+                document.getElementById('promo-input-min-order').value = '0';
+                document.getElementById('promo-input-discount-val').value = '0';
+                document.getElementById('promo-input-max-disc').value = '';
+                document.getElementById('promo-input-cond-product').value = '';
+                document.getElementById('promo-input-cond-qty').value = '1';
+                document.getElementById('promo-input-reward-code').value = '';
+                document.getElementById('promo-input-reward-name').value = '';
+                document.getElementById('promo-input-reward-qty').value = '1';
+                document.getElementById('promo-input-start-date').value = '';
+                document.getElementById('promo-input-end-date').value = '';
+                document.getElementById('promo-input-active').checked = true;
+            }
+
+            onPromoTypeChange();
+            modal.classList.remove('hidden');
+            initIcons();
+        }
+
+        /**
+         * Close promotion modal
+         */
+        function closePromotionModal() {
+            const modal = document.getElementById('promotion-modal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        /**
+         * Update modal fields according to selected promo_type
+         */
+        function onPromoTypeChange() {
+            const type = document.getElementById('promo-input-type')?.value || 'ORDER_DISCOUNT_FIXED';
+            const discFields = document.getElementById('promo-discount-fields');
+            const giftFields = document.getElementById('promo-gift-fields');
+            const maxDiscBox = document.getElementById('promo-box-max-discount');
+            const discValLabel = document.getElementById('promo-label-discount-value');
+
+            if (type === 'BUY_X_GET_Y') {
+                if (discFields) discFields.classList.add('hidden');
+                if (giftFields) giftFields.classList.remove('hidden');
+            } else {
+                if (discFields) discFields.classList.remove('hidden');
+                if (giftFields) giftFields.classList.add('hidden');
+
+                if (type === 'ORDER_DISCOUNT_PERCENT') {
+                    if (discValLabel) discValLabel.textContent = 'เปอร์เซ็นต์ส่วนลด (%)';
+                    if (maxDiscBox) maxDiscBox.classList.remove('hidden');
+                } else {
+                    if (discValLabel) discValLabel.textContent = 'มูลค่าส่วนลด (บาท)';
+                    if (maxDiscBox) maxDiscBox.classList.add('hidden');
+                }
+            }
+            initIcons();
+        }
+
+        /**
+         * Save promotion (Create or Update)
+         */
+        async function savePromotion() {
+            const editId = document.getElementById('promo-edit-id')?.value;
+            const code = (document.getElementById('promo-input-code')?.value || '').trim().toUpperCase();
+            const name = (document.getElementById('promo-input-name')?.value || '').trim();
+            const promoType = document.getElementById('promo-input-type')?.value;
+
+            if (!code || !name) {
+                alert('กรุณาระบุรหัสและชื่อโปรโมชั่นให้ครบถ้วน');
+                return;
+            }
+
+            const payload = {
+                code: code,
+                name: name,
+                description: document.getElementById('promo-input-desc')?.value || '',
+                promo_type: promoType,
+                min_order_amount: parseFloat(document.getElementById('promo-input-min-order')?.value) || 0,
+                discount_value: parseFloat(document.getElementById('promo-input-discount-val')?.value) || 0,
+                max_discount_amount: document.getElementById('promo-input-max-disc')?.value ? parseFloat(document.getElementById('promo-input-max-disc').value) : null,
+                condition_product_code: (document.getElementById('promo-input-cond-product')?.value || '').trim().toUpperCase(),
+                condition_qty: parseInt(document.getElementById('promo-input-cond-qty')?.value) || 1,
+                reward_product_code: (document.getElementById('promo-input-reward-code')?.value || '').trim().toUpperCase(),
+                reward_product_name: (document.getElementById('promo-input-reward-name')?.value || '').trim(),
+                reward_qty: parseInt(document.getElementById('promo-input-reward-qty')?.value) || 1,
+                start_date: document.getElementById('promo-input-start-date')?.value || null,
+                end_date: document.getElementById('promo-input-end-date')?.value || null,
+                is_active: document.getElementById('promo-input-active')?.checked
+            };
+
+            const submitBtn = document.getElementById('promo-submit-btn');
+            const origHtml = submitBtn ? submitBtn.innerHTML : '';
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i data-lucide="loader" class="w-4 h-4 animate-spin"></i> กำลังบันทึก...';
+            }
+
+            try {
+                let res;
+                if (editId) {
+                    res = await fetchApi(`/api/promotions/${editId}`, 'PUT', payload);
+                } else {
+                    res = await fetchApi('/api/promotions', 'POST', payload);
+                }
+
+                if (res && (res.success || res.id)) {
+                    showToast(editId ? 'แก้ไขโปรโมชั่นเรียบร้อยแล้ว' : 'สร้างโปรโมชั่นเรียบร้อยแล้ว', 'success');
+                    closePromotionModal();
+                    await loadPromotions();
+                } else {
+                    alert(res?.error || 'ไม่สามารถบันทึกโปรโมชั่นได้');
+                }
+            } catch (err) {
+                console.error('Error saving promotion:', err);
+                alert('เกิดข้อผิดพลาดในการบันทึกโปรโมชั่น');
+            } finally {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = origHtml;
+                }
+                initIcons();
+            }
+        }
+
+        /**
+         * Toggle active status of a promotion
+         */
+        async function togglePromotionActive(id, currentStatus) {
+            try {
+                const res = await fetchApi(`/api/promotions/${id}`, 'PUT', { is_active: !currentStatus });
+                if (res && (res.success || res.id)) {
+                    showToast(`เปลี่ยนสถานะโปรโมชั่นเป็น ${!currentStatus ? 'เปิดใช้งาน' : 'ปิดใช้งาน'} แล้ว`, 'success');
+                    await loadPromotions();
+                }
+            } catch (err) {
+                console.error('Error toggling promotion status:', err);
+            }
+        }
+
+        /**
+         * Delete promotion
+         */
+        async function deletePromotion(id) {
+            const promo = allPromotionsList.find(p => p.id === id);
+            const promoName = promo ? promo.name : `ID ${id}`;
+            if (!confirm(`คุณต้องการลบโปรโมชั่น "${promoName}" ใช่หรือไม่?`)) {
+                return;
+            }
+
+            try {
+                const res = await fetchApi(`/api/promotions/${id}`, 'DELETE');
+                if (res && res.success) {
+                    showToast(res.message || 'ลบโปรโมชั่นเรียบร้อยแล้ว', 'success');
+                    await loadPromotions();
+                } else {
+                    alert(res?.error || 'ไม่สามารถลบโปรโมชั่นได้');
+                }
+            } catch (err) {
+                console.error('Error deleting promotion:', err);
+                alert('เกิดข้อผิดพลาดในการลบโปรโมชั่น');
             }
         }
 

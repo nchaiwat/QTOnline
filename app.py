@@ -92,6 +92,7 @@ from models import (
     POItem,
     Comment,
     Notification,
+    Promotion,
     CiamSetting,
     CiamAuditLog,
     LoginLog,
@@ -1432,6 +1433,10 @@ def manage_pos():
                 accessToken=str(uuid.uuid4()),
                 discount_percent_1=float(data.get("discountPercent1", 0.0)),
                 discount_percent_2=float(data.get("discountPercent2", 0.0)),
+                promotion_id=data.get("promotionId"),
+                promotion_name=data.get("promotionName"),
+                promotion_discount=float(data.get("promotionDiscount", 0.0)),
+                customer_ref_no=data.get("customerRefNo"),
             )
             item_list = data.get("items", [])
             product_ids = [it["productId"] for it in item_list if it.get("productId")]
@@ -1445,13 +1450,14 @@ def manage_pos():
                 new_po.items.append(
                     POItem(
                         productId=item.get("productId"),
-                        productCode=prod.productCode if prod else None,
+                        productCode=prod.productCode if prod else item.get("productCode"),
                         name=item["name"],
                         qty=item["qty"],
                         price=item["price"],
                         recommendedPrice=item.get("recommendedPrice", 0),
                         discount=item.get("discount", 0),
                         total=item["total"],
+                        is_gift=bool(item.get("isGift", False)),
                         imageUrl=prod.imageUrl if prod else None,
                     )
                 )
@@ -1583,6 +1589,16 @@ def manage_po(id):
         if "discountPercent2" in data:
             po.discount_percent_2 = float(data.get("discountPercent2", 0.0))
 
+        # Update Promotion & Customer Ref
+        if "promotionId" in data:
+            po.promotion_id = data.get("promotionId")
+        if "promotionName" in data:
+            po.promotion_name = data.get("promotionName")
+        if "promotionDiscount" in data:
+            po.promotion_discount = float(data.get("promotionDiscount", 0.0))
+        if "customerRefNo" in data:
+            po.customer_ref_no = data.get("customerRefNo")
+
         # Update Items (if provided)
         if "items" in data:
             # Clear existing items
@@ -1602,13 +1618,14 @@ def manage_po(id):
                 po.items.append(
                     POItem(
                         productId=item.get("productId"),
-                        productCode=prod.productCode if prod else None,
+                        productCode=prod.productCode if prod else item.get("productCode"),
                         name=item["name"],
                         qty=item["qty"],
                         price=item["price"],
                         recommendedPrice=item.get("recommendedPrice", 0),
                         discount=item.get("discount", 0),
                         total=item["total"],
+                        is_gift=bool(item.get("isGift", False)),
                         imageUrl=prod.imageUrl if prod else None,
                     )
                 )
@@ -2431,6 +2448,230 @@ def get_notifications():
         return jsonify({"error": str(e)}), 500
 
 
+# ---------------------------------------------------------------------------
+# Promotion Management & Evaluation APIs
+# ---------------------------------------------------------------------------
+@app.route("/api/promotions", methods=["GET", "POST"])
+@login_required
+def handle_promotions():
+    if request.method == "GET":
+        active_only = request.args.get("active_only", "false").lower() in ("true", "1", "yes")
+        is_admin = current_user.role in ["Administrator", "Sale Admin"]
+        
+        query = Promotion.query
+        if active_only or not is_admin:
+            query = query.filter_by(is_active=True)
+            today = now_bangkok().date()
+            query = query.filter(
+                or_(Promotion.start_date.is_(None), Promotion.start_date <= today),
+                or_(Promotion.end_date.is_(None), Promotion.end_date >= today)
+            )
+        
+        promos = query.order_by(Promotion.id.desc()).all()
+        return jsonify([p.to_dict() for p in promos])
+
+    if request.method == "POST":
+        if current_user.role not in ["Administrator", "Sale Admin"]:
+            return jsonify({"error": "เฉพาะ Admin หรือ Sale Admin เท่านั้นที่มีสิทธิ์จัดการโปรโมชั่น"}), 403
+
+        data = request.json or {}
+        code = (data.get("code") or "").strip().upper()
+        name = (data.get("name") or "").strip()
+        if not code or not name:
+            return jsonify({"error": "กรุณาระบุรหัสและชื่อโปรโมชั่น"}), 400
+
+        existing = Promotion.query.filter_by(code=code).first()
+        if existing:
+            return jsonify({"error": f"รหัสโปรโมชั่น '{code}' มีอยู่ในระบบแล้ว"}), 400
+
+        try:
+            start_d = _parse_date(data.get("start_date")) if data.get("start_date") else None
+            end_d = _parse_date(data.get("end_date")) if data.get("end_date") else None
+
+            promo = Promotion(
+                code=code,
+                name=name,
+                description=data.get("description", ""),
+                promo_type=data.get("promo_type", "ORDER_DISCOUNT_FIXED"),
+                min_order_amount=float(data.get("min_order_amount", 0.0) or 0.0),
+                discount_value=float(data.get("discount_value", 0.0) or 0.0),
+                max_discount_amount=float(data["max_discount_amount"]) if data.get("max_discount_amount") else None,
+                condition_product_code=(data.get("condition_product_code") or "").strip(),
+                condition_qty=int(data.get("condition_qty", 1) or 1),
+                reward_product_code=(data.get("reward_product_code") or "").strip(),
+                reward_product_name=(data.get("reward_product_name") or "").strip(),
+                reward_qty=int(data.get("reward_qty", 1) or 1),
+                start_date=start_d,
+                end_date=end_d,
+                is_active=bool(data.get("is_active", True)),
+                created_by=current_user.id
+            )
+            db.session.add(promo)
+            db.session.commit()
+            return jsonify({"success": True, "promotion": promo.to_dict()}), 201
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/promotions/<int:promo_id>", methods=["GET", "PUT", "DELETE"])
+@login_required
+def handle_single_promotion(promo_id):
+    promo = Promotion.query.get(promo_id)
+    if not promo:
+        return jsonify({"error": "Promotion not found"}), 404
+
+    if request.method == "GET":
+        return jsonify(promo.to_dict())
+
+    if current_user.role not in ["Administrator", "Sale Admin"]:
+        return jsonify({"error": "เฉพาะ Admin หรือ Sale Admin เท่านั้นที่มีสิทธิ์จัดการโปรโมชั่น"}), 403
+
+    if request.method == "DELETE":
+        try:
+            db.session.delete(promo)
+            db.session.commit()
+            return jsonify({"success": True, "message": "ลบโปรโมชั่นเรียบร้อยแล้ว"})
+        except Exception as e:
+            db.session.rollback()
+            try:
+                promo.is_active = False
+                db.session.commit()
+                return jsonify({"success": True, "message": "ปิดการใช้งานโปรโมชั่นเรียบร้อยแล้ว"})
+            except:
+                return jsonify({"error": str(e)}), 500
+
+    if request.method == "PUT":
+        data = request.json or {}
+        try:
+            if "name" in data:
+                promo.name = data["name"].strip()
+            if "description" in data:
+                promo.description = data["description"]
+            if "promo_type" in data:
+                promo.promo_type = data["promo_type"]
+            if "min_order_amount" in data:
+                promo.min_order_amount = float(data["min_order_amount"] or 0.0)
+            if "discount_value" in data:
+                promo.discount_value = float(data["discount_value"] or 0.0)
+            if "max_discount_amount" in data:
+                promo.max_discount_amount = float(data["max_discount_amount"]) if data["max_discount_amount"] else None
+            if "condition_product_code" in data:
+                promo.condition_product_code = (data["condition_product_code"] or "").strip()
+            if "condition_qty" in data:
+                promo.condition_qty = int(data["condition_qty"] or 1)
+            if "reward_product_code" in data:
+                promo.reward_product_code = (data["reward_product_code"] or "").strip()
+            if "reward_product_name" in data:
+                promo.reward_product_name = (data["reward_product_name"] or "").strip()
+            if "reward_qty" in data:
+                promo.reward_qty = int(data["reward_qty"] or 1)
+            if "start_date" in data:
+                promo.start_date = _parse_date(data["start_date"]) if data["start_date"] else None
+            if "end_date" in data:
+                promo.end_date = _parse_date(data["end_date"]) if data["end_date"] else None
+            if "is_active" in data:
+                promo.is_active = bool(data["is_active"])
+
+            promo.updated_at = now_bangkok()
+            db.session.commit()
+            return jsonify({"success": True, "promotion": promo.to_dict()})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/promotions/evaluate", methods=["POST"])
+@login_required
+def evaluate_promotions():
+    """
+    Evaluates eligible promotions for a given quotation based on subtotal and items.
+    Used by QT Create/Edit page in both Auto and Manual modes.
+    """
+    data = request.json or {}
+    subtotal = float(data.get("subtotal", 0.0) or 0.0)
+    items = data.get("items", [])
+
+    today = now_bangkok().date()
+    promos = Promotion.query.filter_by(is_active=True).filter(
+        or_(Promotion.start_date.is_(None), Promotion.start_date <= today),
+        or_(Promotion.end_date.is_(None), Promotion.end_date >= today)
+    ).all()
+
+    eligible = []
+    qty_by_code = {}
+    total_qty = 0
+    for it in items:
+        if it.get("isGift"):
+            continue
+        code = (it.get("productCode") or "").strip().upper()
+        q = int(it.get("qty", 0) or 0)
+        total_qty += q
+        if code:
+            qty_by_code[code] = qty_by_code.get(code, 0) + q
+
+    for p in promos:
+        is_match = False
+        benefit_text = ""
+        calc_discount = 0.0
+        free_gift = None
+
+        if p.promo_type == "ORDER_DISCOUNT_FIXED":
+            if subtotal >= (p.min_order_amount or 0.0):
+                is_match = True
+                calc_discount = min(float(p.discount_value or 0.0), subtotal)
+                benefit_text = f"ส่วนลดท้ายบิล {calc_discount:,.2f} บาท"
+
+        elif p.promo_type == "ORDER_DISCOUNT_PERCENT":
+            if subtotal >= (p.min_order_amount or 0.0):
+                is_match = True
+                disc = subtotal * (float(p.discount_value or 0.0) / 100.0)
+                if p.max_discount_amount and p.max_discount_amount > 0:
+                    disc = min(disc, float(p.max_discount_amount))
+                calc_discount = disc
+                benefit_text = f"ส่วนลด {p.discount_value}% (-{calc_discount:,.2f} บาท)"
+
+        elif p.promo_type == "BUY_X_GET_Y":
+            cond_code = (p.condition_product_code or "").strip().upper()
+            cond_qty = int(p.condition_qty or 1)
+            matching_qty = qty_by_code.get(cond_code, 0) if cond_code else total_qty
+
+            if matching_qty >= cond_qty:
+                is_match = True
+                reward_times = matching_qty // cond_qty
+                total_reward_qty = reward_times * int(p.reward_qty or 1)
+                free_gift = {
+                    "productCode": p.reward_product_code or "FREE-GIFT",
+                    "name": p.reward_product_name or f"ของแถมจากโปร {p.name}",
+                    "qty": total_reward_qty,
+                    "price": 0.0,
+                    "isGift": True
+                }
+                benefit_text = f"แถมฟรี {free_gift['name']} จำนวน {total_reward_qty} ชิ้น"
+
+        if is_match:
+            eligible.append({
+                "id": p.id,
+                "code": p.code,
+                "name": p.name,
+                "promo_type": p.promo_type,
+                "description": p.description,
+                "calculated_discount": calc_discount,
+                "free_gift": free_gift,
+                "benefit_text": benefit_text,
+                "score": calc_discount + (100.0 if free_gift else 0.0)
+            })
+
+    eligible.sort(key=lambda x: x["score"], reverse=True)
+    best_promotion = eligible[0] if eligible else None
+
+    return jsonify({
+        "success": True,
+        "eligible_promotions": eligible,
+        "best_promotion": best_promotion
+    })
+
+
 # --- CSV Import & Template Routes ---
 
 
@@ -2657,13 +2898,18 @@ def _generate_pdf_bytes(po, is_draft=True):
     )
 
     # 2. Price Difference Discount (Recommended - Cost)
-    total_cost_base = sum(i.price * i.qty for i in po.items)
+    non_gift_items = [i for i in po.items if not getattr(i, "is_gift", False)]
+    total_cost_base = sum(i.price * i.qty for i in non_gift_items)
     price_diff_discount = total_recommended - total_cost_base
 
-    # 3. Bill Discount (2-Step on Cost Base)
+    # Promotion Discount (Deducted before Step 1 & Step 2)
+    promo_discount = float(po.promotion_discount or 0.0)
+    cost_after_promo = max(0.0, total_cost_base - promo_discount)
+
+    # 3. Bill Discount (2-Step on Cost Base after Promo)
     disc1_percent = po.discount_percent_1 or 0.0
-    disc1_amount = total_cost_base * (disc1_percent / 100.0)
-    total_after_1 = total_cost_base - disc1_amount
+    disc1_amount = cost_after_promo * (disc1_percent / 100.0)
+    total_after_1 = cost_after_promo - disc1_amount
 
     disc2_percent = po.discount_percent_2 or 0.0
     disc2_amount = total_after_1 * (disc2_percent / 100.0)
@@ -2672,10 +2918,10 @@ def _generate_pdf_bytes(po, is_draft=True):
     bill_discount_total = disc1_amount + disc2_amount
 
     # 4. Total After All Discounts
-    total_after_discount = total_after_2  # Should equal Recommended - Diff - BillDisc
+    total_after_discount = total_after_2
 
     # 5. VAT 7%
-    vat_amount = total_after_discount * 0.07
+    vat_amount = round(total_after_discount * 0.07, 2)
 
     # 6. Grand Total
     grand_total = total_after_discount + vat_amount
@@ -2683,6 +2929,7 @@ def _generate_pdf_bytes(po, is_draft=True):
     totals_summary = {
         "subtotal_recommended": total_recommended,
         "price_diff_discount": price_diff_discount,
+        "promotion_discount": promo_discount,
         "bill_discount_total": bill_discount_total,
         "total_after_discount": total_after_discount,
         "vat": vat_amount,
@@ -2876,13 +3123,18 @@ def customer_portal_view(token):
         )
 
         # 2. Product Discount (Recommended - Cost)
-        total_cost_base = sum((i.price or 0.0) * (i.qty or 0) for i in po.items)
+        non_gift_items = [i for i in po.items if not getattr(i, "is_gift", False)]
+        total_cost_base = sum((i.price or 0.0) * (i.qty or 0) for i in non_gift_items)
         price_diff_discount = total_recommended - total_cost_base
 
-        # 3. Bill Discount (2-Step on Cost Base)
+        # Promotion Discount (Deducted before Step 1 & Step 2)
+        promo_discount = float(po.promotion_discount or 0.0)
+        cost_after_promo = max(0.0, total_cost_base - promo_discount)
+
+        # 3. Bill Discount (2-Step on Cost Base after Promo)
         disc1_percent = po.discount_percent_1 or 0.0
-        disc1_amount = total_cost_base * (disc1_percent / 100.0)
-        total_after_1 = total_cost_base - disc1_amount
+        disc1_amount = cost_after_promo * (disc1_percent / 100.0)
+        total_after_1 = cost_after_promo - disc1_amount
 
         disc2_percent = po.discount_percent_2 or 0.0
         disc2_amount = total_after_1 * (disc2_percent / 100.0)
@@ -2906,6 +3158,7 @@ def customer_portal_view(token):
         totals = {
             "subtotal": total_recommended,
             "product_discount": price_diff_discount,
+            "promotion_discount": promo_discount,
             "bill_discount": bill_discount_total,
             "after_discount": total_after_discount,
             "vat": vat_amount,
@@ -3514,10 +3767,23 @@ with app.app_context():
                 "sap_created_by": "INTEGER",
                 "sap_sync_status": "VARCHAR(20)",
                 "sap_sync_error": "TEXT",
+                "promotion_id": "INTEGER",
+                "promotion_name": "VARCHAR(255)",
+                "promotion_discount": "NUMERIC(15, 2) DEFAULT 0.0",
+                "customer_ref_no": "VARCHAR(100)",
+                "sap_remarks": "TEXT",
             }
             for col, dtype in po_new_columns.items():
                 if col.lower() not in existing_po_cols:
                     conn.execute(text(f'ALTER TABLE purchase_orders ADD COLUMN "{col}" {dtype};'))
+
+            # Check po_items columns (is_gift)
+            res_po_items = conn.execute(
+                text("SELECT column_name FROM information_schema.columns WHERE table_name='po_items';")
+            )
+            existing_po_item_cols = [row[0].lower() for row in res_po_items]
+            if "is_gift" not in existing_po_item_cols:
+                conn.execute(text('ALTER TABLE po_items ADD COLUMN is_gift BOOLEAN DEFAULT FALSE;'))
 
             # 2. Check users columns (use_ad_auth, email, telegram_chat_id)
             res_user = conn.execute(
@@ -3544,6 +3810,45 @@ with app.app_context():
 
             conn.commit()
             print("DEBUG: Schema is up to date.")
+
+        # Seed sample promotions if table is empty
+        try:
+            if Promotion.query.count() == 0:
+                p1 = Promotion(
+                    code="PROMO-20K-500",
+                    name="ซื้อสินค้าครบ 20,000 บาท ลดทันที 500 บาท",
+                    description="เมื่อมียอดสั่งซื้อรวมตั้งแต่ 20,000 บาทขึ้นไป รับส่วนลดท้ายบิล 500 บาททันที",
+                    promo_type="ORDER_DISCOUNT_FIXED",
+                    min_order_amount=20000.0,
+                    discount_value=500.0,
+                    is_active=True
+                )
+                p2 = Promotion(
+                    code="PROMO-50K-5PCT",
+                    name="ซื้อสินค้าครบ 50,000 บาท ลดพิเศษ 5%",
+                    description="เมื่อมียอดสั่งซื้อรวมตั้งแต่ 50,000 บาทขึ้นไป รับส่วนลดพิเศษ 5%",
+                    promo_type="ORDER_DISCOUNT_PERCENT",
+                    min_order_amount=50000.0,
+                    discount_value=5.0,
+                    is_active=True
+                )
+                p3 = Promotion(
+                    code="PROMO-BUY5-GET1",
+                    name="ซื้อสินค้าครบ 5 ชิ้น แถมฟรีมุ้งลวดพรีเมียม 1 ชิ้น",
+                    description="เมื่อสั่งซื้อสินค้าในใบเสนอราคาครบ 5 ชิ้นขึ้นไป รับฟรีมุ้งลวดกันแมลง 1 ชิ้น",
+                    promo_type="BUY_X_GET_Y",
+                    condition_qty=5,
+                    reward_product_code="GIFT-SCREEN",
+                    reward_product_name="มุ้งลวดกันแมลงเกรดพรีเมียม (Free Gift)",
+                    reward_qty=1,
+                    is_active=True
+                )
+                db.session.add_all([p1, p2, p3])
+                db.session.commit()
+                print("DEBUG: Seeded 3 default promotions.")
+        except Exception as promo_err:
+            db.session.rollback()
+            print(f"DEBUG: Could not seed promotions: {promo_err}")
 
         # [NEW] ตรวจสอบและสร้าง Admin เริ่มต้นถ้ายังไม่มีข้อมูล
         if not User.query.first():
@@ -5096,7 +5401,7 @@ def update_my_sap_profile():
     }), 200
 
 
-def _sync_to_sap_b1(po, user):
+def _sync_to_sap_b1(po, user, customer_ref_no=None, comments=None):
     """
     Helper to create Sales Order in SAP B1 Service Layer.
     Returns (success: bool, doc_num: str, doc_entry: int, message: str, is_simulation: bool)
@@ -5156,11 +5461,15 @@ def _sync_to_sap_b1(po, user):
         doc_lines = []
         for item in po.items:
             # คำนวณ Discount % สำหรับ SAP B1 (ช่อง "Discount %" บน DocumentLines)
+            # ข้อ 2: ส่วนลดใน ItemCode ใช้สำหรับส่งเข้า SAP B1 เท่านั้น
             item_discount = 0.0
-            if item.discount is not None and float(item.discount) > 0:
+            prod = item.product
+            if not prod and item.productCode:
+                prod = Product.query.filter_by(productCode=item.productCode).first()
+            if prod and getattr(prod, "discountPercent", None) is not None and float(prod.discountPercent or 0.0) > 0:
+                item_discount = float(prod.discountPercent)
+            elif item.discount is not None and float(item.discount) > 0:
                 item_discount = float(item.discount)
-            elif item.product and getattr(item.product, "discountPercent", None) is not None:
-                item_discount = float(item.product.discountPercent or 0.0)
 
             line_data = {
                 "ItemCode": item.productCode or f"GEN-{item.id}",
@@ -5175,13 +5484,18 @@ def _sync_to_sap_b1(po, user):
                 line_data["CostingCode2"] = default_dept
             doc_lines.append(line_data)
 
+        # ข้อ 3 & 4: กำหนด Customer Ref. No. และ Remarks ที่ส่งเข้า SAP B1
+        final_customer_ref = (customer_ref_no or po.customer_ref_no or po.poNumber or "").strip()
+        default_comment = f"Created from QT-Online {po.poNumber} by {user.fullName}"
+        final_comments = (comments or po.sap_remarks or default_comment).strip()
+
         order_payload = json.dumps({
             "CardCode": po.customerId,
             "CardName": po.customerName or po.get_customer_name(),
             "DocDueDate": due_date,
             "DocDate": now_bangkok().strftime("%Y-%m-%d"),
-            "NumAtCard": po.poNumber,
-            "Comments": f"Created from QT-Online {po.poNumber} by {user.fullName}",
+            "NumAtCard": final_customer_ref,
+            "Comments": final_comments,
             "DocumentLines": doc_lines
         }).encode("utf-8")
 
@@ -5200,6 +5514,11 @@ def _sync_to_sap_b1(po, user):
             resp_body = json.loads(order_resp.read().decode("utf-8"))
             doc_num = str(resp_body.get("DocNum") or resp_body.get("DocEntry"))
             doc_entry = int(resp_body.get("DocEntry", 0))
+
+            # บันทึกข้อมูลที่ส่งเข้า SAP สำเร็จลงใน PO
+            po.customer_ref_no = final_customer_ref
+            po.sap_remarks = final_comments
+
             return True, doc_num, doc_entry, "สร้าง Sales Order บน SAP B1 สำเร็จ", False
 
     except urllib.error.HTTPError as e:
@@ -5277,14 +5596,26 @@ def get_sap_so_preview(po_id):
     items_preview = []
     for idx, item in enumerate(po.items):
         price = item.recommendedPrice if (item.recommendedPrice and item.recommendedPrice > 0) else (item.price or 0.0)
+        prod = item.product
+        if not prod and item.productCode:
+            prod = Product.query.filter_by(productCode=item.productCode).first()
+        item_discount = 0.0
+        if prod and getattr(prod, "discountPercent", None) is not None and float(prod.discountPercent or 0.0) > 0:
+            item_discount = float(prod.discountPercent)
+        elif item.discount is not None and float(item.discount) > 0:
+            item_discount = float(item.discount)
+
         items_preview.append({
             "index": idx + 1,
             "product_code": item.productCode or "N/A",
             "name": item.name,
             "qty": item.qty,
             "unit_price": price,
+            "discount_percent": item_discount,
             "line_total": item.qty * price
         })
+
+    default_comments = po.sap_remarks or f"Created from QT-Online {po.poNumber} by {current_user.fullName}"
 
     return jsonify({
         "success": True,
@@ -5297,6 +5628,8 @@ def get_sap_so_preview(po_id):
         "card_name": po.customerName or po.get_customer_name(),
         "delivery_date": delivery_date_str,
         "doc_date": doc_date_str,
+        "customer_ref_no": po.customer_ref_no or po.poNumber,
+        "default_comments": default_comments,
         "items": items_preview,
         "subtotal": subtotal,
         "discount_percent_1": po.discount_percent_1 or 0.0,
@@ -5336,11 +5669,18 @@ def create_sap_so_api(po_id):
             "doc_entry": po.sap_doc_entry
         }), 400
 
+    # อ่านข้อมูล Customer Ref. No. และ Remarks จาก Client
+    data = request.get_json(silent=True) or {}
+    customer_ref_no = (data.get("customer_ref_no") or "").strip()
+    comments = (data.get("comments") or "").strip()
+
     now = now_bangkok()
     time_str = now.strftime("%d/%m/%Y %H:%M:%S")
     user_display = f"{current_user.fullName} ({current_user.username})"
 
-    success, doc_num, doc_entry, msg, is_sim = _sync_to_sap_b1(po, current_user)
+    success, doc_num, doc_entry, msg, is_sim = _sync_to_sap_b1(
+        po, current_user, customer_ref_no=customer_ref_no, comments=comments
+    )
     if not success:
         po.sap_sync_status = "FAILED"
         po.sap_sync_error = msg

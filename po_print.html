@@ -385,6 +385,17 @@
                     -{{ "{:,.2f}".format(totals_summary.price_diff_discount) }}</td>
             </tr>
 
+            <!-- Promotion Discount -->
+            {% if totals_summary.promotion_discount and totals_summary.promotion_discount > 0 %}
+            <tr>
+                <td style="border: none !important;"></td>
+                <td style="text-align: right; font-style: italic; color: #4338ca; border-left: 2px solid #000;">
+                    หักส่วนลดโปรโมชั่น ({{ po.promotion_name or 'Promotion' }})</td>
+                <td style="text-align: right; font-style: italic; color: #4338ca; border-right: 2px solid #000;">
+                    -{{ "{:,.2f}".format(totals_summary.promotion_discount) }}</td>
+            </tr>
+            {% endif %}
+
             <!-- 3. Bill Discount (2 Step Total) -->
             <tr>
                 <td style="border: none !important;"></td>

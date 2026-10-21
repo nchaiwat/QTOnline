@@ -382,6 +382,62 @@ class Product(db.Model):
         return self.to_dict()
 
 
+
+class Promotion(db.Model):
+    __tablename__ = "promotions"
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    name = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    promo_type = db.Column(db.String(50), nullable=False, default="ORDER_DISCOUNT_FIXED")
+    # Types:
+    # 1. ORDER_DISCOUNT_FIXED: ส่วนลดท้ายบิลเป็นจำนวนเงิน (บาท) เช่น ซื้อครบ 20,000 ลด 500 บาท
+    # 2. ORDER_DISCOUNT_PERCENT: ส่วนลดท้ายบิลเป็นเปอร์เซ็นต์ (%) เช่น ซื้อครบ 50,000 ลด 5%
+    # 3. BUY_X_GET_Y: ซื้อสินค้าเงื่อนไขครบ X แถมสินค้า Y (เช่น ซื้อประตู 5 บาน แถมมุ้งลวด 1 บาน)
+
+    min_order_amount = db.Column(db.Float, default=0.0)
+    discount_value = db.Column(db.Float, default=0.0)
+    max_discount_amount = db.Column(db.Float, nullable=True)
+
+    condition_product_code = db.Column(db.String(100), nullable=True)
+    condition_qty = db.Column(db.Integer, default=1)
+    reward_product_code = db.Column(db.String(100), nullable=True)
+    reward_product_name = db.Column(db.String(255), nullable=True)
+    reward_qty = db.Column(db.Integer, default=1)
+
+    start_date = db.Column(db.Date, nullable=True)
+    end_date = db.Column(db.Date, nullable=True)
+    is_active = db.Column(db.Boolean, default=True, index=True)
+
+    created_at = db.Column(db.DateTime, default=now_bangkok)
+    updated_at = db.Column(db.DateTime, default=now_bangkok, onupdate=now_bangkok)
+    created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+
+    creator = db.relationship("User", foreign_keys=[created_by], viewonly=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "code": self.code,
+            "name": self.name,
+            "description": self.description or "",
+            "promo_type": self.promo_type,
+            "min_order_amount": float(self.min_order_amount or 0.0),
+            "discount_value": float(self.discount_value or 0.0),
+            "max_discount_amount": float(self.max_discount_amount) if self.max_discount_amount is not None else None,
+            "condition_product_code": self.condition_product_code or "",
+            "condition_qty": int(self.condition_qty or 1),
+            "reward_product_code": self.reward_product_code or "",
+            "reward_product_name": self.reward_product_name or "",
+            "reward_qty": int(self.reward_qty or 1),
+            "start_date": self.start_date.strftime("%Y-%m-%d") if self.start_date else None,
+            "end_date": self.end_date.strftime("%Y-%m-%d") if self.end_date else None,
+            "is_active": bool(self.is_active),
+            "created_at": ensure_bangkok(self.created_at).strftime("%d-%m-%Y %H:%M") if self.created_at else "",
+            "creator_name": self.creator.fullName if self.creator else "-"
+        }
+
+
 class PurchaseOrder(db.Model):
     __tablename__ = "purchase_orders"
     __table_args__ = (
@@ -408,6 +464,11 @@ class PurchaseOrder(db.Model):
     # NEW: Multi-step Discount
     discount_percent_1 = db.Column(db.Float, default=0.0)
     discount_percent_2 = db.Column(db.Float, default=0.0)
+
+    # NEW: Promotion Fields
+    promotion_id = db.Column(db.Integer, db.ForeignKey("promotions.id"), nullable=True)
+    promotion_name = db.Column(db.String(255), nullable=True)
+    promotion_discount = db.Column(db.Float, default=0.0)
 
     # Cancellation Info
     cancelReason = db.Column(db.Text)
@@ -443,7 +504,10 @@ class PurchaseOrder(db.Model):
     sap_created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     sap_sync_status = db.Column(db.String(20), nullable=True)
     sap_sync_error = db.Column(db.Text, nullable=True)
+    customer_ref_no = db.Column(db.String(100), nullable=True)
+    sap_remarks = db.Column(db.Text, nullable=True)
 
+    promotion_rel = db.relationship("Promotion", foreign_keys=[promotion_id], viewonly=True)
     items = db.relationship(
         "POItem", backref="po", lazy=True, cascade="all, delete-orphan"
     )
@@ -674,14 +738,24 @@ class PurchaseOrder(db.Model):
             # NEW: Calculated Breakdown
             "discountPercent1": self.discount_percent_1 or 0.0,
             "discountPercent2": self.discount_percent_2 or 0.0,
+            # NEW: Promotion & SAP Ref Info
+            "promotionId": self.promotion_id,
+            "promotionName": self.promotion_name,
+            "promotionDiscount": float(self.promotion_discount or 0.0),
+            "customerRefNo": self.customer_ref_no or self.poNumber,
+            "sapRemarks": self.sap_remarks or "",
         }
 
         # Calculate values dynamically (VAT-exclusive logic)
         subtotal = sum(item.total for item in self.items)
         
+        # Promotion Discount (Deducted before Step 1 & Step 2)
+        promo_disc = float(self.promotion_discount or 0.0)
+        subtotal_after_promo = max(0.0, subtotal - promo_disc)
+
         # 1. Discount Step 1
-        disc1_amount = subtotal * ((self.discount_percent_1 or 0.0) / 100.0)
-        total_after_1 = subtotal - disc1_amount
+        disc1_amount = subtotal_after_promo * ((self.discount_percent_1 or 0.0) / 100.0)
+        total_after_1 = subtotal_after_promo - disc1_amount
 
         # 2. Discount Step 2
         disc2_amount = total_after_1 * ((self.discount_percent_2 or 0.0) / 100.0)
@@ -693,6 +767,8 @@ class PurchaseOrder(db.Model):
 
         res.update({
             "subtotal": subtotal,
+            "promotionDiscount": promo_disc,
+            "subtotalAfterPromo": subtotal_after_promo,
             "discountAmount1": disc1_amount,
             "totalAfterDiscount1": total_after_1,
             "discountAmount2": disc2_amount,
@@ -743,6 +819,8 @@ class PurchaseOrder(db.Model):
             "sapDocNum": self.sap_doc_num,
             "sapDocEntry": self.sap_doc_entry,
             "sapSyncStatus": self.sap_sync_status,
+            "customerRefNo": self.customer_ref_no or self.poNumber,
+            "promotionName": self.promotion_name,
         }
 
 
@@ -760,6 +838,7 @@ class POItem(db.Model):
     discount = db.Column(db.Float, default=0.0)
     total = db.Column(db.Float, default=0.0)
     imageUrl = db.Column(db.Text)
+    is_gift = db.Column(db.Boolean, default=False)
     product = db.relationship(
         "Product",
         primaryjoin="POItem.productId == Product.id",
@@ -806,6 +885,7 @@ class POItem(db.Model):
             "recommendedPrice": self.recommendedPrice or 0.0,
             "discount": self.discount or 0.0,
             "total": self.total,
+            "isGift": bool(self.is_gift),
             "imageUrl": build_product_image_url(img),
         }
 
