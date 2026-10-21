@@ -99,52 +99,127 @@ def allowed_image_file(filename):
 import threading
 
 # --- Telegram Notification ---
+def _get_telegram_config():
+    """Retrieve Telegram configuration from SystemSetting (ORM or direct DB) with fallback to env."""
+    bot_token = None
+    group_id = None
+    api_base = None
+    enabled = True
+
+    # 1. Try SQLAlchemy SystemSetting model (works when inside Flask application context)
+    try:
+        from models import SystemSetting
+        val_enabled = SystemSetting.get_value('telegram_enabled', None)
+        if val_enabled is not None:
+            enabled = bool(val_enabled)
+        bot_token = SystemSetting.get_value('telegram_bot_token')
+        group_id = SystemSetting.get_value('telegram_group_id')
+        api_base = SystemSetting.get_value('telegram_api_base_url')
+    except Exception:
+        pass
+
+    # 2. If running in background thread without Flask context, query DB directly via psycopg2
+    if not bot_token or not group_id:
+        try:
+            import psycopg2
+            from psycopg2.extras import DictCursor
+            db_url = os.environ.get("DATABASE_URL")
+            conn = None
+            if db_url and "postgresql" in db_url:
+                conn = psycopg2.connect(db_url)
+            else:
+                db_name = os.environ.get("POSTGRES_DB", "po_online_db")
+                db_user = os.environ.get("POSTGRES_USER", "postgres")
+                db_pass = os.environ.get("POSTGRES_PASSWORD", "")
+                db_host = os.environ.get("POSTGRES_HOST", "localhost")
+                db_port = os.environ.get("POSTGRES_PORT", "5432")
+                conn = psycopg2.connect(dbname=db_name, user=db_user, password=db_pass, host=db_host, port=db_port)
+            
+            with conn:
+                with conn.cursor(cursor_factory=DictCursor) as cur:
+                    cur.execute("SELECT key, value FROM system_settings WHERE category = 'telegram' OR key LIKE 'telegram_%'")
+                    rows = {r["key"]: r["value"] for r in cur.fetchall()}
+                    if not bot_token and "telegram_bot_token" in rows:
+                        bot_token = rows["telegram_bot_token"]
+                    if not group_id and "telegram_group_id" in rows:
+                        group_id = rows["telegram_group_id"]
+                    if not api_base and "telegram_api_base_url" in rows:
+                        api_base = rows["telegram_api_base_url"]
+                    if "telegram_enabled" in rows:
+                        enabled = str(rows["telegram_enabled"]).strip().lower() in ("true", "1", "yes")
+            conn.close()
+        except Exception:
+            pass
+
+    # 3. Fallback to environment variables
+    bot_token = bot_token or os.environ.get('TELEGRAM_BOT_TOKEN', '7709463579:AAH_vx3gY0TdoGk-pSLuhPB7ctwqyNDS7oA')
+    group_id = group_id or os.environ.get('TELEGRAM_GROUP_ID', '-5241471050')
+    api_base = (api_base or os.environ.get('TELEGRAM_API_BASE_URL', 'https://api.telegram.org')).rstrip('/')
+
+    return enabled, bot_token, group_id, api_base
+
+
 def _send_telegram_worker(message, custom_bot_token=None, custom_group_id=None, custom_api_base=None):
     try:
-        bot_token = custom_bot_token
-        group_id = custom_group_id
-        api_base = custom_api_base
-        
+        enabled, bot_token, group_id, api_base = _get_telegram_config()
+        if custom_bot_token:
+            bot_token = custom_bot_token
+        if custom_group_id:
+            group_id = custom_group_id
+        if custom_api_base:
+            api_base = custom_api_base.rstrip('/')
+
+        if not enabled and not custom_bot_token:
+            return
+
         if not bot_token or not group_id:
-            try:
-                from models import SystemSetting
-                enabled = SystemSetting.get_value('telegram_enabled', True)
-                if not enabled and not custom_bot_token:
-                    return
-                if not bot_token:
-                    bot_token = SystemSetting.get_value('telegram_bot_token')
-                if not group_id:
-                    group_id = SystemSetting.get_value('telegram_group_id')
-                if not api_base:
-                    api_base = SystemSetting.get_value('telegram_api_base_url')
-            except Exception:
-                pass
-        
-        bot_token = bot_token or os.environ.get('TELEGRAM_BOT_TOKEN', '8214911655:AAG5RKU6m75AOc3Wws0FqVBqn1CicDLsVWI')
-        group_id = group_id or os.environ.get('TELEGRAM_GROUP_ID', '-5241471050')
-        api_base = (api_base or os.environ.get('TELEGRAM_API_BASE_URL', 'https://api.telegram.org')).rstrip('/')
-        
+            print("[Telegram] Bot token or Group ID missing, skipping notification.")
+            return
+
         url = f"{api_base}/bot{bot_token}/sendMessage"
-        
         payload = {
             "chat_id": group_id,
             "text": message,
             "parse_mode": "HTML"
         }
-        
+
         req = urllib.request.Request(
             url,
             data=json.dumps(payload).encode('utf-8'),
             headers={'Content-Type': 'application/json'}
         )
-        urllib.request.urlopen(req, timeout=8)
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            pass
+    except urllib.error.HTTPError as e:
+        try:
+            err_body = e.read().decode('utf-8')
+            print(f"[Telegram Error HTTP {e.code}]: {err_body}")
+        except Exception:
+            print(f"[Telegram Error HTTP {e.code}]: {e.reason}")
     except Exception as e:
-        print(f"Telegram Notification Failed: {e}")
+        print(f"[Telegram Notification Failed]: {e}")
 
-def send_telegram_msg(message):
+
+def send_telegram_msg(message, custom_bot_token=None, custom_group_id=None, custom_api_base=None):
     """Send Telegram message asynchronously in a background thread to avoid blocking HTTP requests."""
     try:
-        thread = threading.Thread(target=_send_telegram_worker, args=(message,), daemon=True)
+        # Pre-resolve configuration from active app context if available
+        enabled, bot_token, group_id, api_base = _get_telegram_config()
+        if custom_bot_token:
+            bot_token = custom_bot_token
+        if custom_group_id:
+            group_id = custom_group_id
+        if custom_api_base:
+            api_base = custom_api_base
+
+        if not enabled and not custom_bot_token:
+            return
+
+        thread = threading.Thread(
+            target=_send_telegram_worker,
+            args=(message, bot_token, group_id, api_base),
+            daemon=True
+        )
         thread.start()
     except Exception as e:
         print(f"Failed to spawn Telegram notification thread: {e}")

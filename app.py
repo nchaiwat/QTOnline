@@ -2270,6 +2270,16 @@ def get_product_detail(key):
                 prod.inStock = float(data["inStock"])
             if "itemCost" in data:
                 prod.itemCost = float(data["itemCost"])
+            if "discountPercent" in data and data["discountPercent"] is not None:
+                try:
+                    prod.discountPercent = float(data["discountPercent"])
+                except (ValueError, TypeError):
+                    prod.discountPercent = 0.0
+            elif "discount" in data and data["discount"] is not None:
+                try:
+                    prod.discountPercent = float(data["discount"])
+                except (ValueError, TypeError):
+                    prod.discountPercent = 0.0
 
             # Handle Date
             if "productionDate" in data and data["productionDate"]:
@@ -2989,6 +2999,9 @@ def sign_customer_po(token):
         .first_or_404()
     )
 
+    if po.status == "Draft":
+        return jsonify({"error": "เอกสารฉบับร่างไม่สามารถลงนามได้ (Draft quotation cannot be signed)"}), 400
+
     # Check link expiration (15 days)
     from utils import ensure_bangkok, now_bangkok
     expired = False
@@ -3509,6 +3522,17 @@ with app.app_context():
                 conn.execute(text('ALTER TABLE users ADD COLUMN email VARCHAR(150);'))
             if "telegram_chat_id" not in existing_user_cols:
                 conn.execute(text('ALTER TABLE users ADD COLUMN telegram_chat_id VARCHAR(100);'))
+
+            # 3. Check products columns (discountPercent)
+            res_prod = conn.execute(
+                text("SELECT column_name FROM information_schema.columns WHERE table_name='products';")
+            )
+            existing_prod_cols = [row[0] for row in res_prod]
+            if "discountPercent" not in existing_prod_cols:
+                if "discountpercent" in existing_prod_cols:
+                    conn.execute(text('ALTER TABLE products RENAME COLUMN discountpercent TO "discountPercent";'))
+                else:
+                    conn.execute(text('ALTER TABLE products ADD COLUMN "discountPercent" NUMERIC(5, 2) DEFAULT 0.0;'))
 
             conn.commit()
             print("DEBUG: Schema is up to date.")
@@ -5123,11 +5147,19 @@ def _sync_to_sap_b1(po, user):
 
         doc_lines = []
         for item in po.items:
+            # คำนวณ Discount % สำหรับ SAP B1 (ช่อง "Discount %" บน DocumentLines)
+            item_discount = 0.0
+            if item.discount is not None and float(item.discount) > 0:
+                item_discount = float(item.discount)
+            elif item.product and getattr(item.product, "discountPercent", None) is not None:
+                item_discount = float(item.product.discountPercent or 0.0)
+
             line_data = {
                 "ItemCode": item.productCode or f"GEN-{item.id}",
                 "ItemDescription": item.name,
                 "Quantity": float(item.qty),
                 "UnitPrice": float(item.recommendedPrice or item.price or 0.0),
+                "DiscountPercent": item_discount,
             }
             if default_bu:
                 line_data["CostingCode"] = default_bu

@@ -74,6 +74,7 @@ PRODUCT_CSV_COLUMNS = [
     "Item Group",
     "Recommended Price (Ex.VAT)",
     "Item Cost (Ex.VAT)",
+    "Discount (%)",
     "In Stock",
     "Inactive",
 ]
@@ -334,6 +335,7 @@ class Product(db.Model):
     itemGroup = db.Column(db.String(200))
     inactive = db.Column(db.Boolean, default=False)
     itemCost = db.Column(db.Numeric(18, 2))
+    discountPercent = db.Column(db.Numeric(5, 2), default=0.0)
 
     def to_dict(self):
         try:
@@ -357,6 +359,12 @@ class Product(db.Model):
                 "itemGroup": self.itemGroup or "",
                 "itemCost": (
                     float(self.itemCost) if self.itemCost is not None else 0.0
+                ),
+                "discountPercent": (
+                    float(self.discountPercent) if self.discountPercent is not None else 0.0
+                ),
+                "discount": (
+                    float(self.discountPercent) if self.discountPercent is not None else 0.0
                 ),
                 "inactive": bool(self.inactive),
                 "inStock": _decimal_to_str(self.inStock),
@@ -1152,6 +1160,18 @@ def _assign_product_fields(product: Product, row: dict):
     if cost_price is not None:
         product.itemCost = float(cost_price)
         
+    discount = (
+        _parse_decimal(row.get("Discount (%)"))
+        if row.get("Discount (%)") is not None
+        else (
+            _parse_decimal(row.get("Discount %"))
+            if row.get("Discount %") is not None
+            else _parse_decimal(row.get("Discount"))
+        )
+    )
+    if discount is not None:
+        product.discountPercent = float(discount)
+
     product.inStock = _parse_decimal(row.get("In Stock"))
     
     ia = _parse_bool(row.get("Inactive"))
@@ -1239,9 +1259,11 @@ def _update_product_from_payload(product: Product, payload: dict | None):
             pb = _parse_bool(str(payload[f]))
             if pb is not None:
                 setattr(product, f, pb)
-    for f in ["unitPrice", "inStock", "itemCost"]:
+    for f in ["unitPrice", "inStock", "itemCost", "discountPercent"]:
         if f in payload:
             setattr(product, f, _parse_decimal(payload[f]))
+    if "discount" in payload and "discountPercent" not in payload:
+        setattr(product, "discountPercent", _parse_decimal(payload["discount"]))
     if "productionDate" in payload:
         pd = _parse_date(payload["productionDate"])
         if pd:
@@ -1382,6 +1404,7 @@ def get_template_csv(type_name):
                 "Item Group": p.itemGroup,
                 "Recommended Price (Ex.VAT)": p.unitPrice,
                 "Item Cost (Ex.VAT)": p.itemCost,
+                "Discount (%)": float(p.discountPercent) if p.discountPercent is not None else 0.0,
                 "In Stock": p.inStock,
                 "Inactive": "Yes" if p.inactive else "No",
             })

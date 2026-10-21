@@ -214,6 +214,14 @@
             </div>
             {% endif %}
         </div>
+        {% elif po.status == 'Draft' %}
+        <div class="text-center py-5 border rounded bg-light">
+            <div class="mb-3">
+                <span class="badge bg-warning text-dark fs-5 px-3 py-2">📄 ฉบับร่าง (Draft Quotation)</span>
+            </div>
+            <h4 class="text-secondary">เอกสารนี้เป็นฉบับร่างสำหรับตรวจสอบรายละเอียดเบื้องต้น</h4>
+            <p class="text-muted mb-0">ยังไม่เปิดให้ลงนามดิจิทัลจนกว่าฝ่ายขายจะเสนออนุมัติเอกสารเรียบร้อยแล้ว<br><small>(Preview Only - Digital signature is disabled for Draft)</small></p>
+        </div>
         {% else %}
         <div id="signature-section">
             <h4 class="mb-3">ลงนามรับสินค้า / Customer Signature</h4>

@@ -1,11 +1,32 @@
 # Project Handoff Document - QT-Online
 
-**Date:** 2026-09-11  
+**Date:** 2026-10-21  
 **Repository:** `https://github.com/nchaiwat/QTOnline.git` (`main` branch)  
 **Production Server:** VPS `srv832658` (`qol.windowasia.com`)  
-**Latest Commits:**
-- `bc7f8a5`: perf: enable nginx gzip, keepalive upstream, sqlalchemy pool_pre_ping, and batch dom render
-- `cde07f5`: perf: major performance overhaul for dashboard, save QT, and customer management
+
+---
+
+## 📌 สรุปการอัปเดตล่าสุด (2026-10-21)
+
+### 1. แก้ไขระบบ Telegram Bot Token ให้ดึงจาก System Settings ใน Database
+- **ปัญหาเดิม:** การแจ้งเตือน Telegram ใน Background Thread ทำงานนอก Flask Context ทำให้เรียก `SystemSetting.get_value()` ล้มเหลวและ Fallback ไปใช้ Token เก่าใน `.env` ที่หมดอายุ/ถูกยกเลิก ส่งผลให้ไม่มีข้อความเข้า Group Chat
+- **การแก้ไข:**
+  - ปรับปรุง `utils.py`: ฟังก์ชัน `_get_telegram_config()` ดึงค่าจาก Flask Context หรือตรงจาก DB ผ่าน Connection Pool และใน `send_telegram_msg()` ทำการ Pre-resolve ค่า Bot Token และ Chat ID ล่วงหน้าก่อนส่งเข้า Background Daemon Thread
+  - อัปเดต Token ใน `.env` สำรองให้ตรงกับค่าปัจจุบันของระบบ
+
+### 2. เพิ่มฟิลด์ Discount (%) ใน Product Detail และไฟล์ Excel/CSV Upload/Download
+- **Product Detail Modal:** เพิ่มช่องกรอก `Discount (%)` ในหน้าต่างแก้ไขข้อมูลสินค้า อนุญาตให้ Sale Admin และ Administrator กำหนด % ส่วนลดได้
+- **Excel/CSV Template:** เพิ่มคอลัมน์ `Discount (%)` ในโครงสร้าง `PRODUCT_CSV_COLUMNS` และในระบบ Export/Download Template (`get_template_csv`)
+- **Import/Upload:** รองรับการอ่านคอลัมน์ `Discount (%)`, `Discount %`, หรือ `Discount` จากไฟล์ Excel/CSV อัปเดตลงตาราง `products."discountPercent"` โดยอัตโนมัติ
+- **UI Product Table & Search:** แสดงคอลัมน์ Discount (%) ในตารางสินค้า และแสดง Badge ส่วนลดในหน้ารายการค้นหาสินค้า พร้อมนำค่าส่วนลดเริ่มต้นไปใส่ในช่องส่วนลดของใบ QT อัตโนมัติ
+
+### 3. ส่งค่า Discount % เข้าช่อง "Discount %" บน SAP Business One Sales Order
+- ในฟังก์ชัน `_sync_to_sap_b1()` ใน [app.py](file:///d:/Python/PO-Online/app.py): ส่งค่าส่วนลดของแต่ละไอเทมเข้าฟิลด์ `DiscountPercent` ใน `DocumentLines` ของ SAP Business One Service Layer ตรงตามช่อง "Discount %" ของ SAP B1
+
+### 4. เพิ่มปุ่ม "Show QR" สำหรับ Draft QT และหน้า Customer Portal แบบ Preview Only
+- **หน้าจัดการ QT (`app.html`):** ในสถานะ `Draft` เพิ่มปุ่ม **"Show QR"** เคียงข้างปุ่ม "Print Draft" เพื่อให้ฝ่ายขายสามารถกดดู QR Code และ Copy ลิงก์ส่งให้ลูกค้าตรวจความถูกต้องได้
+- **หน้าจอลูกค้า (`customer_portal.html`):** หากเอกสารเป็นสถานะ `Draft` ระบบจะแสดงป้ายเตือน "📄 ฉบับร่าง (Draft Quotation)" เพื่อแจ้งว่าเอกสารนี้เปิดให้ตรวจสอบความถูกต้องเบื้องต้นเท่านั้น และปิดซ่อนส่วนลงนาม (Signature Section) ลูกค้าจะไม่สามารถเซ็นเอกสารในสถานะ Draft ได้
+- **Backend Security (`app.py`):** ใน Endpoint `/api/p/<token>/sign` เพิ่มเงื่อนไขตรวจสอบว่าหาก `po.status == 'Draft'` จะปฏิเสธการเซ็นและส่ง Error 400 ทันที
 
 ---
 

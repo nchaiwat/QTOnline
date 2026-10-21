@@ -1481,6 +1481,12 @@
                             <!-- 3. Sale Actions (for Draft) -->
                             <div id="po-sale-draft-actions"
                                 class="po-action-section border-t pt-6 mt-6 flex justify-end space-x-3">
+                                <!-- *** NEW: Show QR Button for Draft *** -->
+                                <button
+                                    class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow"
+                                    onclick="showQRCode()">
+                                    <i data-lucide="qr-code" class="w-5 h-5 mr-1 inline-block"></i> Show QR
+                                </button>
                                 <!-- *** NEW: Added Print Draft Button *** -->
                                 <button
                                     class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg shadow"
@@ -2917,6 +2923,13 @@
                                         class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                                 </div>
                                 <div>
+                                    <label for="product-form-discount"
+                                        class="block text-sm font-medium text-gray-700 mb-1">Discount (%)</label>
+                                    <input id="product-form-discount" type="number" step="0.01" min="0" max="100"
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="0.00">
+                                </div>
+                                <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
                                     <label class="inline-flex items-center space-x-2 mt-1">
                                         <input id="product-form-inactive" type="checkbox"
@@ -3778,7 +3791,8 @@
             { id: 'product-form-item-group', key: 'itemGroup' },
             { id: 'product-form-in-stock', key: 'inStock' },
             { id: 'product-form-unit-price', key: 'unitPrice' },
-            { id: 'product-form-item-cost', key: 'itemCost' }
+            { id: 'product-form-item-cost', key: 'itemCost' },
+            { id: 'product-form-discount', key: 'discountPercent' }
         ];
 
         const PRODUCT_BOOLEAN_FIELDS = [
@@ -6942,6 +6956,7 @@
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item Group</th>
                             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">ราคาแนะนำขาย (ExVat)</th>
                             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">ราคาทุน (ExVat)</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Discount (%)</th>
                             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">In Stock</th>
                             <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
                             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -6953,7 +6968,7 @@
             productRows = Array.isArray(products) ? products : [];
 
             if (!products || products.length === 0) {
-                const colSpan = (currentUser && currentUser.role === 'Uploader') ? 6 : 9;
+                const colSpan = (currentUser && currentUser.role === 'Uploader') ? 6 : 10;
                 tableBody.innerHTML = `
                     <tr>
                         <td colspan="${colSpan}" class="px-3 py-4 text-center text-gray-500">ไม่พบข้อมูลสินค้า</td>
@@ -7053,6 +7068,11 @@
                         : NaN;
                     const inStock = Number.isFinite(inStockNumber) ? formatCurrency(inStockNumber) : '-';
 
+                    const discNumber = product.discountPercent !== null && product.discountPercent !== undefined && product.discountPercent !== ''
+                        ? parseFloat(product.discountPercent)
+                        : (product.discount ? parseFloat(product.discount) : 0);
+                    const discountDisplay = Number.isFinite(discNumber) && discNumber > 0 ? `${discNumber.toFixed(2)}%` : '-';
+
                     let actionButtons = `
                         <button type="button" class="inline-flex items-center px-3 py-1 bg-white border border-gray-300 rounded-lg text-blue-600 hover:text-blue-800 hover:border-blue-400 transition-colors product-view-button mr-2" data-product-code="">
                             <i data-lucide="eye" class="w-4 h-4 mr-1"></i> View
@@ -7079,6 +7099,7 @@
                         <td class="px-6 py-4 whitespace-nowrap text-gray-700">${escapeHtml(product.itemGroup || '-')}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-right text-gray-900">${price}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-right text-gray-700">${cost}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-purple-700 font-medium">${discountDisplay}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-right text-gray-700">${inStock}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-center">${statusBadge}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-right">
@@ -8126,6 +8147,15 @@
                 const description = escapeHtml(product.description || '');
                 const priceValue = Number.isFinite(product.price) ? product.price : parseFloat(product.price) || 0;
                 const costValue = Number.isFinite(product.itemCost) ? product.itemCost : parseFloat(product.itemCost) || 0;
+                const discountVal = Number.isFinite(product.discountPercent)
+                    ? product.discountPercent
+                    : (Number.isFinite(product.discount) ? product.discount : (parseFloat(product.discountPercent || product.discount) || 0));
+                const discountBadge = discountVal > 0
+                    ? `<div class="flex justify-between items-center text-purple-700">
+                            <span class="text-[10px] font-medium uppercase tracking-wider font-bold">Discount</span>
+                            <span class="font-bold text-xs bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded">${discountVal.toFixed(2)}%</span>
+                        </div>`
+                    : '';
 
                 const card = document.createElement('div');
                 card.className = 'border rounded-lg p-3 hover:shadow-lg transition flex flex-col';
@@ -8141,6 +8171,7 @@
                             <span class="text-[10px] font-medium uppercase tracking-wider font-bold">ราคาทุน (Ex.VAT)</span>
                             <span class="font-bold text-lg">${formatCurrency(costValue)}</span>
                         </div>
+                        ${discountBadge}
                     </div>
                     <button class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">Select</button>
                 `;
@@ -8154,7 +8185,8 @@
                             product.name || '',
                             priceValue,
                             costValue,
-                            product.imageUrl || null
+                            product.imageUrl || null,
+                            discountVal
                         );
                     });
                 }
@@ -8182,14 +8214,18 @@
         }
 
         // 17. Select Product from Modal
-        function selectProduct(productId, code, name, price, cost, imageUrl) {
-            selectedProductData = { productId: productId, code: code, name: name, price: price, cost: cost, imageUrl: imageUrl };
+        function selectProduct(productId, code, name, price, cost, imageUrl, discountVal = 0) {
+            selectedProductData = { productId: productId, code: code, name: name, price: price, cost: cost, imageUrl: imageUrl, discount: discountVal };
 
             const cleanName = cleanProductName(name, code);
             const displayHtml = code ? `<span class="font-bold">${escapeHtml(code)}</span> - ${escapeHtml(cleanName)}` : escapeHtml(name);
             document.getElementById('selected-product-name').innerHTML = displayHtml;
             // Use cost for the calculation price
             document.getElementById('selected-product-price').textContent = formatCurrency(selectedProductData.cost);
+            const discInput = document.getElementById('product-discount');
+            if (discInput) {
+                discInput.value = discountVal || 0;
+            }
             const selectedProductImage = document.getElementById('selected-product-image');
             if (selectedProductImage) {
                 if (imageUrl) {
