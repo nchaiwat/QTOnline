@@ -522,11 +522,11 @@
                     <li id="nav-product-list"><a href="#" class="top-nav-link"
                             onclick="showPage('page-product-list')"><i data-lucide="package"
                                 class="mr-2 w-5 h-5"></i>Products</a></li>
+                    <li id="nav-promotion-list" class="nav-role-sale_admin"><a href="#" class="top-nav-link"
+                            onclick="showPage('page-promotion-list')"><i data-lucide="tag" class="mr-2 w-5 h-5"></i>Promotions</a></li>
                     <li id="nav-user-management" class="nav-role-admin"><a href="#" class="top-nav-link"
                             onclick="showPage('page-user-list')"><i data-lucide="users" class="mr-2 w-5 h-5"></i>User
                             Management</a></li>
-                    <li id="nav-promotion-list" class="nav-role-admin"><a href="#" class="top-nav-link"
-                            onclick="showPage('page-promotion-list')"><i data-lucide="tag" class="mr-2 w-5 h-5"></i>Promotions</a></li>
                     <li id="nav-settings" class="nav-role-admin"><a href="#" class="top-nav-link"
                             onclick="showPage('page-settings')"><i data-lucide="settings" class="mr-2 w-5 h-5"></i>Settings</a></li>
                 </ul>
@@ -547,12 +547,12 @@
                     <li id="mobile-nav-product-list"><a href="#" class="top-nav-link"
                             onclick="showPage('page-product-list'); toggleMobileMenu();"><i data-lucide="package"
                                 class="mr-2 w-5 h-5"></i>Products</a></li>
+                    <li id="mobile-nav-promotion-list" class="nav-role-sale_admin"><a href="#" class="top-nav-link"
+                            onclick="showPage('page-promotion-list'); toggleMobileMenu();"><i data-lucide="tag"
+                                class="mr-2 w-5 h-5"></i>Promotions</a></li>
                     <li id="mobile-nav-user-management" class="nav-role-admin"><a href="#" class="top-nav-link"
                             onclick="showPage('page-user-list'); toggleMobileMenu();"><i data-lucide="users"
                                 class="mr-2 w-5 h-5"></i>User Management</a></li>
-                    <li id="mobile-nav-promotion-list" class="nav-role-admin"><a href="#" class="top-nav-link"
-                            onclick="showPage('page-promotion-list'); toggleMobileMenu();"><i data-lucide="tag"
-                                class="mr-2 w-5 h-5"></i>Promotions</a></li>
                     <li id="mobile-nav-settings" class="nav-role-admin"><a href="#" class="top-nav-link"
                             onclick="showPage('page-settings'); toggleMobileMenu();"><i data-lucide="settings"
                                 class="mr-2 w-5 h-5"></i>Settings</a></li>
@@ -1170,8 +1170,8 @@
                             <!-- JS will render item cards here -->
                         </div>
 
-                        <!-- Promotion Section (Auto vs Manual Toggle) -->
-                        <div class="mb-6 p-4 rounded-xl border border-indigo-100 bg-gradient-to-r from-indigo-50/60 via-purple-50/40 to-blue-50/40 shadow-xs">
+                        <!-- Promotion Section -->
+                        <div id="po-promotion-section-card" class="mb-6 p-4 rounded-xl border border-indigo-100 bg-gradient-to-r from-indigo-50/60 via-purple-50/40 to-blue-50/40 shadow-xs">
                             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-indigo-100/80">
                                 <div class="flex items-center gap-2.5">
                                     <div class="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-xs">
@@ -1179,26 +1179,23 @@
                                     </div>
                                     <div>
                                         <h5 class="font-bold text-gray-800 text-sm">การใช้โปรโมชั่น (Promotion Campaign)</h5>
-                                        <p class="text-xs text-gray-500">เลือกรูปแบบการใช้โปรโมชั่นสำหรับใบเสนอราคานี้</p>
+                                        <p class="text-xs text-gray-500">แคมเปญส่วนลดท้ายบิล และของแถมตามเงื่อนไข (ใช้ได้ 1 โปรโมชั่นต่อใบ)</p>
                                     </div>
                                 </div>
-                                <!-- Toggle Auto vs Manual -->
-                                <div class="inline-flex p-1 bg-white border border-gray-200 rounded-xl shadow-xs self-start sm:self-auto">
-                                    <button type="button" id="promo-mode-auto-btn" onclick="setPromotionMode('auto')" class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 bg-indigo-600 text-white shadow-xs">
-                                        <i data-lucide="zap" class="w-3.5 h-3.5"></i>
-                                        <span>Auto (ระบบเลือกให้อัตโนมัติ)</span>
-                                    </button>
-                                    <button type="button" id="promo-mode-manual-btn" onclick="setPromotionMode('manual')" class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 text-gray-600 hover:text-gray-900">
-                                        <i data-lucide="hand" class="w-3.5 h-3.5"></i>
-                                        <span>Manual (เลือกเอง)</span>
-                                    </button>
+                                <!-- System Mode Badge (Set by Administrator) -->
+                                <div id="po-promo-system-mode-badge" class="px-3 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700 flex items-center gap-1.5 shadow-2xs self-start sm:self-auto">
+                                    <i data-lucide="zap" class="w-3.5 h-3.5"></i>
+                                    <span>⚡ โหมด Auto (ระบบเลือกให้อัตโนมัติเมื่อถึงเกณฑ์)</span>
                                 </div>
                             </div>
 
-                            <!-- Manual Mode Selector (Visible when mode === 'manual') -->
+                            <!-- Manual Mode Selector (Visible when system mode === 'manual') -->
                             <div id="promo-manual-dropdown-box" class="hidden pt-3">
-                                <label class="block text-xs font-semibold text-gray-700 mb-1.5">เลือกโปรโมชั่นที่ต้องการใช้จากรายการที่เข้าเกณฑ์:</label>
-                                <select id="po-manual-promo-select" class="w-full md:w-auto min-w-[320px] text-xs px-3 py-2 bg-white border border-gray-300 rounded-lg font-medium text-gray-800 focus:ring-2 focus:ring-indigo-500" onchange="onManualPromotionSelectChange()">
+                                <label for="po-manual-promo-select" class="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                                    <span>เลือกโปรโมชั่นที่ต้องการใช้จากรายการที่เข้าเงื่อนไข:</span>
+                                    <span class="text-[11px] text-purple-700 font-semibold bg-purple-50 px-2 py-0.5 rounded border border-purple-200">ใช้ได้ 1 โปรโมชั่น</span>
+                                </label>
+                                <select id="po-manual-promo-select" class="w-full text-xs px-3 py-2 bg-white border border-gray-300 rounded-lg font-medium text-gray-800 focus:ring-2 focus:ring-indigo-500 shadow-xs" onchange="onManualPromotionSelectChange()">
                                     <option value="">-- ไม่ใช้โปรโมชั่น (No Promotion) --</option>
                                 </select>
                             </div>
@@ -1983,6 +1980,47 @@
                                 <i data-lucide="plus-circle" class="w-4 h-4"></i>
                                 <span>+ เพิ่มโปรโมชั่นใหม่</span>
                             </button>
+                        </div>
+                    </div>
+
+                    <!-- System Promotion Master Settings (Admin Only) -->
+                    <div class="bg-gradient-to-r from-indigo-50/90 via-white to-purple-50/90 border border-indigo-100 rounded-2xl p-5 mb-6 shadow-xs">
+                        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                                    <i data-lucide="sliders" class="w-5 h-5"></i>
+                                </div>
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <h4 class="text-sm font-bold text-gray-900">การตั้งค่าระบบโปรโมชั่น (Promotion System Settings)</h4>
+                                        <span id="promo-sys-role-badge" class="text-[10px] bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-full">Administrator</span>
+                                    </div>
+                                    <p class="text-xs text-gray-500 mt-0.5">เปิด/ปิดการใช้งานระบบโปรโมชั่น และตั้งค่ารูปแบบการเลือกโปรโมชั่นสำหรับผู้สร้างใบเสนอราคา</p>
+                                </div>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-3 self-start lg:self-auto">
+                                <!-- Master ON/OFF Switch -->
+                                <div class="flex items-center gap-2.5 bg-white px-3.5 py-2 rounded-xl border border-gray-200 shadow-2xs">
+                                    <span class="text-xs font-semibold text-gray-700">สถานะระบบ:</span>
+                                    <button type="button" id="system-promo-toggle-btn" onclick="toggleSystemPromotionEnabled()" class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-emerald-500" title="เปิด/ปิด การใช้งานระบบโปรโมชั่น">
+                                        <span id="system-promo-toggle-dot" class="inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-5"></span>
+                                    </button>
+                                    <span id="system-promo-status-label" class="text-xs font-bold text-emerald-700">เปิดใช้งาน (ON)</span>
+                                </div>
+
+                                <!-- Global Mode: Auto vs Manual -->
+                                <div class="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-gray-200 shadow-2xs">
+                                    <span class="text-xs font-semibold text-gray-600 px-2">โหมดการเลือก:</span>
+                                    <button type="button" id="sys-mode-auto-btn" onclick="saveSystemPromotionMode('auto')" class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 bg-indigo-600 text-white shadow-xs">
+                                        <i data-lucide="zap" class="w-3.5 h-3.5"></i>
+                                        <span>⚡ Auto (ระบบเลือกให้อัตโนมัติ)</span>
+                                    </button>
+                                    <button type="button" id="sys-mode-manual-btn" onclick="saveSystemPromotionMode('manual')" class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 text-gray-600 hover:text-gray-900">
+                                        <i data-lucide="hand" class="w-3.5 h-3.5"></i>
+                                        <span>🖐️ Manual (เลือกเองจาก Dropdown)</span>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -4433,8 +4471,8 @@
             if (currentUser.role === 'Uploader') {
                 // Hide everything except Products
                 const idsToHide = [
-                    'nav-dashboard', 'nav-po-list', 'nav-customer-list', 'nav-user-management', 'nav-settings',
-                    'mobile-nav-dashboard', 'mobile-nav-po-list', 'mobile-nav-customer-list', 'mobile-nav-user-management', 'mobile-nav-settings'
+                    'nav-dashboard', 'nav-po-list', 'nav-customer-list', 'nav-promotion-list', 'nav-user-management', 'nav-settings',
+                    'mobile-nav-dashboard', 'mobile-nav-po-list', 'mobile-nav-customer-list', 'mobile-nav-promotion-list', 'mobile-nav-user-management', 'mobile-nav-settings'
                 ];
                 idsToHide.forEach(id => {
                     const el = document.getElementById(id);
@@ -11540,35 +11578,26 @@
         // =========================================================================
 
         /**
-         * Switch between 'auto' and 'manual' promotion modes on Create/Edit QT page
+         * Update UI for Create PO based on system promotion mode ('auto' or 'manual')
          */
-        function setPromotionMode(mode, triggerEvaluation = true) {
-            currentPromoMode = mode;
-            const autoBtn = document.getElementById('promo-mode-auto-btn');
-            const manualBtn = document.getElementById('promo-mode-manual-btn');
+        function updatePromotionCreatePOUI(mode) {
+            const modeBadge = document.getElementById('po-promo-system-mode-badge');
             const manualBox = document.getElementById('promo-manual-dropdown-box');
 
             if (mode === 'auto') {
-                if (autoBtn) {
-                    autoBtn.className = 'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 bg-indigo-600 text-white shadow-xs';
-                }
-                if (manualBtn) {
-                    manualBtn.className = 'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 text-gray-600 hover:text-gray-900';
+                if (modeBadge) {
+                    modeBadge.className = 'px-3 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700 flex items-center gap-1.5 shadow-2xs self-start sm:self-auto';
+                    modeBadge.innerHTML = '<i data-lucide="zap" class="w-3.5 h-3.5"></i><span>⚡ โหมด Auto (ระบบเลือกให้อัตโนมัติเมื่อถึงเกณฑ์)</span>';
                 }
                 if (manualBox) manualBox.classList.add('hidden');
             } else {
-                if (manualBtn) {
-                    manualBtn.className = 'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 bg-indigo-600 text-white shadow-xs';
-                }
-                if (autoBtn) {
-                    autoBtn.className = 'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 text-gray-600 hover:text-gray-900';
+                if (modeBadge) {
+                    modeBadge.className = 'px-3 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-700 flex items-center gap-1.5 shadow-2xs self-start sm:self-auto';
+                    modeBadge.innerHTML = '<i data-lucide="hand" class="w-3.5 h-3.5"></i><span>🖐️ โหมด Manual (เลือกโปรโมชั่นจาก Dropdown)</span>';
                 }
                 if (manualBox) manualBox.classList.remove('hidden');
             }
-
-            if (triggerEvaluation) {
-                evaluateQuotationPromotions();
-            }
+            initIcons();
         }
 
         let isEvaluatingPromo = false;
@@ -11602,10 +11631,24 @@
                 });
 
                 if (res && res.success) {
+                    const promoSection = document.getElementById('po-promotion-section-card');
+                    if (res.enabled === false) {
+                        // Promotion system is OFF
+                        if (promoSection) promoSection.classList.add('hidden');
+                        applyPromotionState(null, 'auto');
+                        return;
+                    }
+
+                    if (promoSection) promoSection.classList.remove('hidden');
+
+                    const systemMode = res.selection_mode || 'auto';
+                    currentPromoMode = systemMode;
+                    updatePromotionCreatePOUI(systemMode);
+
                     eligiblePromotionsList = res.eligible_promotions || [];
                     updateManualPromotionSelectOptions();
 
-                    if (currentPromoMode === 'auto') {
+                    if (systemMode === 'auto') {
                         applyPromotionState(res.best_promotion, 'auto');
                     } else {
                         // Manual Mode: check if currently selected promo is still eligible
@@ -11644,14 +11687,14 @@
 
             if (eligiblePromotionsList && eligiblePromotionsList.length > 0) {
                 eligiblePromotionsList.forEach(p => {
-                    optionsHtml += `<option value="${p.id}">${escapeHtml(p.name)} [${escapeHtml(p.benefit_text)}]</option>`;
+                    optionsHtml += `<option value="${p.id}">🏷️ ${escapeHtml(p.name)} [${escapeHtml(p.benefit_text)}]</option>`;
                 });
             } else {
-                optionsHtml += '<option value="" disabled>(ไม่พบโปรโมชั่นที่เข้าเกณฑ์ในขณะนี้)</option>';
+                optionsHtml += '<option value="" disabled>(ยังไม่เข้าเงื่อนไขโปรโมชั่นใดๆ ในขณะนี้)</option>';
             }
 
             selectEl.innerHTML = optionsHtml;
-            if (currentAppliedPromotion && currentAppliedPromotion.id) {
+            if (currentAppliedPromotion && currentAppliedPromotion.id && eligiblePromotionsList.some(p => String(p.id) === String(currentAppliedPromotion.id))) {
                 selectEl.value = String(currentAppliedPromotion.id);
             } else if (currentVal && eligiblePromotionsList.some(p => String(p.id) === String(currentVal))) {
                 selectEl.value = currentVal;
@@ -11895,14 +11938,18 @@
         }
 
         // =========================================================================
-        // PROMOTION MANAGEMENT CRUD (Admin / Sale Admin)
+        // PROMOTION MANAGEMENT CRUD & MASTER SETTINGS (Admin / Sale Admin)
         // =========================================================================
 
+        let currentSystemPromoEnabled = true;
+        let currentSystemPromoMode = 'auto';
+
         /**
-         * Load all promotions from API and render
+         * Load all promotions and system settings from API
          */
         async function loadPromotions() {
             try {
+                loadPromotionSystemSettings();
                 const res = await fetchApi('/api/promotions');
                 if (Array.isArray(res)) {
                     allPromotionsList = res;
@@ -11911,6 +11958,132 @@
                 }
             } catch (err) {
                 console.error('Error loading promotions:', err);
+            }
+        }
+
+        /**
+         * Load promotion system settings (master ON/OFF and mode)
+         */
+        async function loadPromotionSystemSettings() {
+            try {
+                const res = await fetchApi('/api/promotions/settings', 'GET');
+                if (res && res.success) {
+                    currentSystemPromoEnabled = !!res.promotion_system_enabled;
+                    currentSystemPromoMode = res.promotion_selection_mode || 'auto';
+                    updatePromotionSystemSettingsUI(res.is_admin);
+                }
+            } catch (err) {
+                console.error('Error loading promotion system settings:', err);
+            }
+        }
+
+        /**
+         * Update UI for Master Promotion Settings Card
+         */
+        function updatePromotionSystemSettingsUI(isAdmin = false) {
+            const toggleBtn = document.getElementById('system-promo-toggle-btn');
+            const toggleDot = document.getElementById('system-promo-toggle-dot');
+            const statusLabel = document.getElementById('system-promo-status-label');
+            const autoBtn = document.getElementById('sys-mode-auto-btn');
+            const manualBtn = document.getElementById('sys-mode-manual-btn');
+            const roleBadge = document.getElementById('promo-sys-role-badge');
+
+            if (roleBadge) {
+                if (currentUser && currentUser.role === 'Administrator') {
+                    roleBadge.textContent = 'Administrator (ปรับแต่งได้)';
+                    roleBadge.className = 'text-[10px] bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-full';
+                } else {
+                    roleBadge.textContent = 'ดูการตั้งค่า (View Only)';
+                    roleBadge.className = 'text-[10px] bg-gray-100 text-gray-600 font-bold px-2 py-0.5 rounded-full';
+                }
+            }
+
+            if (toggleBtn && toggleDot && statusLabel) {
+                if (currentSystemPromoEnabled) {
+                    toggleBtn.className = 'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-emerald-500';
+                    toggleDot.className = 'inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-5';
+                    statusLabel.textContent = 'เปิดใช้งาน (ON)';
+                    statusLabel.className = 'text-xs font-bold text-emerald-700';
+                } else {
+                    toggleBtn.className = 'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-gray-300';
+                    toggleDot.className = 'inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-0';
+                    statusLabel.textContent = 'ปิดใช้งาน (OFF)';
+                    statusLabel.className = 'text-xs font-bold text-gray-500';
+                }
+            }
+
+            if (autoBtn && manualBtn) {
+                if (currentSystemPromoMode === 'auto') {
+                    autoBtn.className = 'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 bg-indigo-600 text-white shadow-xs';
+                    manualBtn.className = 'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 text-gray-600 hover:text-gray-900';
+                } else {
+                    manualBtn.className = 'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 bg-indigo-600 text-white shadow-xs';
+                    autoBtn.className = 'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 text-gray-600 hover:text-gray-900';
+                }
+            }
+            initIcons();
+        }
+
+        /**
+         * Toggle promotion system enabled (Admin only)
+         */
+        async function toggleSystemPromotionEnabled() {
+            if (currentUser && currentUser.role !== 'Administrator') {
+                if (window.Swal) Swal.fire('ไม่มีสิทธิ์', 'เฉพาะ Administrator เท่านั้นที่สามารถเปลี่ยนการตั้งค่าระบบโปรโมชั่นได้', 'warning');
+                else alert('เฉพาะ Administrator เท่านั้นที่สามารถเปลี่ยนการตั้งค่าระบบโปรโมชั่นได้');
+                return;
+            }
+            const nextVal = !currentSystemPromoEnabled;
+            try {
+                const res = await fetchApi('/api/promotions/settings', 'POST', {
+                    promotion_system_enabled: nextVal
+                });
+                if (res && res.success) {
+                    currentSystemPromoEnabled = !!res.promotion_system_enabled;
+                    updatePromotionSystemSettingsUI(true);
+                    if (window.Swal) {
+                        Swal.fire({
+                            icon: 'success',
+                            title: nextVal ? 'เปิดใช้งานระบบโปรโมชั่นแล้ว' : 'ปิดใช้งานระบบโปรโมชั่นแล้ว',
+                            text: nextVal ? 'ระบบจะเริ่มคำนวณโปรโมชั่นในใบเสนอราคาตามโหมดที่กำหนด' : 'ระบบจะไม่นำโปรโมชั่นมาคำนวณในใบเสนอราคา',
+                            timer: 1600,
+                            showConfirmButton: false
+                        });
+                    }
+                }
+            } catch (err) {
+                console.error('Error saving promotion enabled setting:', err);
+            }
+        }
+
+        /**
+         * Save promotion mode: auto vs manual (Admin only)
+         */
+        async function saveSystemPromotionMode(mode) {
+            if (currentUser && currentUser.role !== 'Administrator') {
+                if (window.Swal) Swal.fire('ไม่มีสิทธิ์', 'เฉพาะ Administrator เท่านั้นที่สามารถเปลี่ยนการตั้งค่าระบบโปรโมชั่นได้', 'warning');
+                else alert('เฉพาะ Administrator เท่านั้นที่สามารถเปลี่ยนการตั้งค่าระบบโปรโมชั่นได้');
+                return;
+            }
+            try {
+                const res = await fetchApi('/api/promotions/settings', 'POST', {
+                    promotion_selection_mode: mode
+                });
+                if (res && res.success) {
+                    currentSystemPromoMode = res.promotion_selection_mode;
+                    updatePromotionSystemSettingsUI(true);
+                    if (window.Swal) {
+                        Swal.fire({
+                            icon: 'success',
+                            title: mode === 'auto' ? 'เปลี่ยนเป็นโหมด Auto สำเร็จ' : 'เปลี่ยนเป็นโหมด Manual สำเร็จ',
+                            text: mode === 'auto' ? 'ระบบจะประเมินและเลือกโปรโมชั่นที่คุ้มค่าที่สุดให้อัตโนมัติ' : 'หน้าสร้างใบเสนอราคาจะมี Dropdown ให้ผู้ใช้เลือกโปรโมชั่นที่เข้าเงื่อนไขเอง',
+                            timer: 1600,
+                            showConfirmButton: false
+                        });
+                    }
+                }
+            } catch (err) {
+                console.error('Error saving promotion mode setting:', err);
             }
         }
 

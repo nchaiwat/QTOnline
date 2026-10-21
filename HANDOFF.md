@@ -69,6 +69,21 @@
   - มีปุ่มเคลียร์ '✕' สำหรับช่อง **Customer Ref. No.** อยู่ภายในช่อง Input เพื่อให้ผู้ใช้งานกดล้างค่าเริ่มต้น (ที่ดึงมาจากเลขที่ QT) ได้ในคลิกเดียวแล้วพิมพ์เลขอ้างอิงจริงของลูกค้า
   - มีปุ่มเคลียร์ '✕' สำหรับช่อง **Remarks** เพื่อให้ล้างข้อความ Default ได้ทันที
 - **จัดวางฝั่งขวาอย่างลงตัว:** ย้าย Customer Ref. No. และสรุปยอดเงิน (Financial Summary Card) ซ้อนกันอย่างเป็นระเบียบทางฝั่งขวา ทำให้ Popup สวยงาม ได้สัดส่วน และใช้งานง่าย
+
+### 8. ปรับปรุงตำแหน่งเมนูโปรโมชั่น และระบบตั้งค่า Master ON/OFF และโหมด Auto/Manual
+- **ย้ายเมนู Promotions ไปอยู่หลัง Products:**
+  - ย้ายเมนู `Promotions` ใน Navigation Bar ทั้งแบบ Desktop และ Mobile ให้อยู่ถัดจาก `Products` ทันที (`Dashboard -> QT Management -> Customers -> Products -> Promotions -> User Management -> Settings`)
+  - กำหนดสิทธิ์ให้ `Sale Admin` เข้าใช้งานเมนู Promotions ได้ (`nav-role-sale_admin`) ในขณะที่ `User Management` และ `Settings` ยังคงจำกัดสิทธิ์เฉพาะ `Administrator` เท่านั้น
+- **การตั้งค่า Master Promotion Settings (เฉพาะ Administrator):**
+  - เพิ่มการ์ดตั้งค่าระบบโปรโมชั่นในหน้า `Promotion Management`:
+    1. **Master Switch (เปิด/ปิด ระบบโปรโมชั่น):** บันทึกใน `SystemSetting` (`promotion_system_enabled`) เมื่อปิดใช้งาน ระบบจะไม่นำโปรโมชั่นมาคำนวณและซ่อนกล่องโปรโมชั่นในหน้าสร้าง QT
+    2. **โหมดการเลือก (Auto vs Manual):** บันทึกใน `SystemSetting` (`promotion_selection_mode`) เพื่อให้ Administrator เป็นผู้กำหนดว่าทั้งระบบจะทำงานแบบ Auto หรือ Manual
+  - เพิ่ม REST API `/api/promotions/settings` (GET/POST) พร้อม Role Check สำหรับผู้ดูแลระบบ
+- **ปรับหน้าสร้างใบเสนอราคา (Create QT):**
+  - นำปุ่มสลับ Auto/Manual ออกจากหน้าสร้าง QT โดยโหมดการทำงานจะถูกควบคุมจากระบบส่วนกลางที่ Admin กำหนดไว้
+  - **กรณีระบบเป็นแบบ Auto:** ผู้ใช้ไม่ต้องทำอะไร เมื่อสินค้าและยอดสั่งซื้อถึงเกณฑ์ ระบบจะตรวจจับและเลือกโปรโมชั่นที่คุ้มค่าที่สุดให้ลูกค้าอัตโนมัติ
+  - **กรณีระบบเป็นแบบ Manual:** แสดง Dropdown รายการโปรโมชั่นที่เข้าเงื่อนไขให้ผู้ใช้เลือกเองได้ 1 โปรโมชั่นต่อใบเสนอราคา (หรือเลือกไม่ใช้)
+- **เงื่อนไขโปรโมชั่น 1 ใบเสนอราคาใช้ได้เพียง 1 โปรโมชั่นเท่านั้น (Mutually Exclusive)**
     - ยอดส่วนลดโปรโมชั่นถูกนำมาหักลดก่อนการคำนวณส่วนลด Step 1 และ Step 2 ตามสูตร: `Subtotal -> Less: Promotion Discount -> Less: Discount Step 1 (%) -> Less: Discount Step 2 (%) -> Add: VAT 7% -> Grand Total`
   - **Promotion Management Page (`#page-promotion-list`):** หน้าจอสำหรับ Administrator และ Sale Admin มีสถิติรวม ค้นหา กรองประเภท และฟอร์มสร้าง/แก้ไข/เปิด-ปิดโปรโมชั่น
   - **Consistency Across All Surfaces:** อัปเดตการแสดงผลส่วนลดโปรโมชั่นและของแถมในหน้า QT Detail (`viewPO`), แม่แบบพิมพ์ PDF ([po_print.html](po_print.html)), และหน้าจอลูกค้า ([customer_portal.html](customer_portal.html))

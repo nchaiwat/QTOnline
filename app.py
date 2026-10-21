@@ -2581,13 +2581,63 @@ def handle_single_promotion(promo_id):
             return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/promotions/settings", methods=["GET", "POST"])
+@login_required
+def handle_promotion_settings():
+    if request.method == "GET":
+        enabled_val = SystemSetting.get_value("promotion_system_enabled", "true")
+        mode_val = SystemSetting.get_value("promotion_selection_mode", "auto")
+        return jsonify({
+            "success": True,
+            "promotion_system_enabled": str(enabled_val).lower() in ("true", "1", "yes"),
+            "promotion_selection_mode": mode_val if mode_val in ["auto", "manual"] else "auto",
+            "is_admin": current_user.role == "Administrator"
+        })
+
+    if request.method == "POST":
+        if current_user.role != "Administrator":
+            return jsonify({"error": "เฉพาะ Administrator เท่านั้นที่มีสิทธิ์ตั้งค่าระบบโปรโมชั่น"}), 403
+
+        data = request.json or {}
+        if "promotion_system_enabled" in data:
+            is_en = bool(data["promotion_system_enabled"])
+            SystemSetting.set_value("promotion_system_enabled", "true" if is_en else "false", description="เปิด/ปิดการใช้งานระบบโปรโมชั่น", category="promotion", data_type="boolean")
+        if "promotion_selection_mode" in data:
+            mode = str(data["promotion_selection_mode"]).strip().lower()
+            if mode not in ["auto", "manual"]:
+                mode = "auto"
+            SystemSetting.set_value("promotion_selection_mode", mode, description="โหมดการเลือกโปรโมชั่น (auto/manual)", category="promotion", data_type="string")
+
+        db.session.commit()
+        return jsonify({
+            "success": True,
+            "promotion_system_enabled": str(SystemSetting.get_value("promotion_system_enabled", "true")).lower() in ("true", "1", "yes"),
+            "promotion_selection_mode": SystemSetting.get_value("promotion_selection_mode", "auto")
+        })
+
+
 @app.route("/api/promotions/evaluate", methods=["POST"])
 @login_required
 def evaluate_promotions():
     """
     Evaluates eligible promotions for a given quotation based on subtotal and items.
-    Used by QT Create/Edit page in both Auto and Manual modes.
+    Checks master system ON/OFF and selection mode configured by Administrator.
     """
+    # 1. ตรวจสอบการเปิด/ปิดระบบโปรโมชั่นและโหมดที่ตั้งค่าไว้
+    is_promo_system_enabled = str(SystemSetting.get_value("promotion_system_enabled", "true")).lower() in ("true", "1", "yes")
+    selection_mode = SystemSetting.get_value("promotion_selection_mode", "auto")
+    if selection_mode not in ["auto", "manual"]:
+        selection_mode = "auto"
+
+    if not is_promo_system_enabled:
+        return jsonify({
+            "success": True,
+            "enabled": False,
+            "selection_mode": selection_mode,
+            "eligible_promotions": [],
+            "best_promotion": None
+        })
+
     data = request.json or {}
     subtotal = float(data.get("subtotal", 0.0) or 0.0)
     items = data.get("items", [])
@@ -2667,6 +2717,8 @@ def evaluate_promotions():
 
     return jsonify({
         "success": True,
+        "enabled": True,
+        "selection_mode": selection_mode,
         "eligible_promotions": eligible,
         "best_promotion": best_promotion
     })
