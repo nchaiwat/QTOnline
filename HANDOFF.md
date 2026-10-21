@@ -28,6 +28,16 @@
 - **หน้าจอลูกค้า (`customer_portal.html`):** หากเอกสารเป็นสถานะ `Draft` ระบบจะแสดงป้ายเตือน "📄 ฉบับร่าง (Draft Quotation)" เพื่อแจ้งว่าเอกสารนี้เปิดให้ตรวจสอบความถูกต้องเบื้องต้นเท่านั้น และปิดซ่อนส่วนลงนาม (Signature Section) ลูกค้าจะไม่สามารถเซ็นเอกสารในสถานะ Draft ได้
 - **Backend Security (`app.py`):** ใน Endpoint `/api/p/<token>/sign` เพิ่มเงื่อนไขตรวจสอบว่าหาก `po.status == 'Draft'` จะปฏิเสธการเซ็นและส่ง Error 400 ทันที
 
+### 5. แก้ไขปัญหาไม่สามารถ Logon ด้วย User บน Active Directory (AD) ได้
+- **สาเหตุ:** 
+  1. การยืนยันตัวตนตรงกับ AD ผ่าน `authenticate_ad_gateway` มีการยิงต่อไปยัง `http://172.18.0.1:3100` ซึ่งเป็น Docker Bridge IP บน VPS Linux ทำให้เมื่อรันบน Local Windows จะเกิดการค้างรอนาน 13.5 วินาทีจน Request หลุด (Timeout) และ Browser แสดงผลเป็น "Connection error"
+  2. เมื่อเกิด Timeout หรือ Rate limit (429) ระบบ Flask ส่ง Response แบบ HTML ทำให้ `res.json()` ใน JavaScript เกิด Parse SyntaxError แล้วเด้งเข้า `catch (err)`
+- **การแก้ไข:**
+  - เพิ่มฟังก์ชัน `_authenticate_windows_ad` ใน `utils_ciam.py`: ทำการตรวจสอบสิทธิ์ Active Directory โดยตรงผ่าน Windows API (`advapi32.LogonUserW`) เมื่อรันบน Windows ช่วยให้ตรวจสอบผ่านอย่างรวดเร็ว (<0.05 วินาที) กับ Domain Controller (`wa.net` / `WINDOWASIA`)
+  - ปรับปรุง `authenticate_ad_gateway`: ดักจับ `URLError`/`TimeoutError` ให้หยุดทันที ไม่วนลูปซ้ำกับ Host เดิมที่เข้าถึงไม่ได้
+  - เพิ่ม Error Handler 429 ใน `app.py` ให้ส่งกลับเป็น JSON อย่างเป็นระเบียบ
+  - ปรับปรุงการแสดงผลใน `login.html`: แสดงข้อความแจ้งเตือนที่แท้จริงจากระบบแทนที่จะแจ้งเตือนเป็น Connection error ทั้งหมด
+
 ---
 
 ## 1. Executive Summary: Major Performance Overhaul

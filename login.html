@@ -539,19 +539,32 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password, website })
                 });
-                const data = await res.json();
 
-                if (data.success) {
+                let data = null;
+                try {
+                    data = await res.json();
+                } catch (jsonErr) {
+                    if (res.status === 429) {
+                        data = { error: 'คำขอถี่เกินไป กรุณารอสักครู่ (Too Many Requests)' };
+                    } else if (res.status >= 500) {
+                        data = { error: `เซิร์ฟเวอร์ขัดข้องชั่วคราว (${res.status})` };
+                    } else {
+                        data = { error: 'เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์' };
+                    }
+                }
+
+                if (data && data.success) {
                     window.location.href = '/';
                 } else {
-                    let errMsg = data.error || 'Login failed';
+                    let errMsg = (data && data.error) ? data.error : 'Login failed';
                     alert.textContent = errMsg;
                     alert.style.display = 'block';
                     btn.disabled = false;
                     btn.innerHTML = originalHtml;
                 }
             } catch (err) {
-                alert.textContent = 'Connection error';
+                console.error('Login error:', err);
+                alert.textContent = err.message || 'Connection error';
                 alert.style.display = 'block';
                 btn.disabled = false;
                 btn.innerHTML = originalHtml;

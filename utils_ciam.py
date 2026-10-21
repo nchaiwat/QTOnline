@@ -11,6 +11,7 @@ import time
 import base64
 import hashlib
 import secrets
+import socket
 import urllib.request
 import urllib.error
 import urllib.parse
@@ -316,14 +317,50 @@ def exchange_oauth_code(code: str, redirect_uri: str, code_verifier: str = None)
     except Exception as e:
         raise ValueError(f"CIAM Token Exchange Connection Error: {str(e)}")
 
+def _authenticate_windows_ad(username: str, password: str) -> bool:
+    """
+    Authenticate against Windows Active Directory directly when running on a domain-joined
+    Windows machine (Local development / Windows server) via LogonUserW.
+    """
+    if os.name != "nt":
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+        advapi32 = ctypes.windll.advapi32
+        kernel32 = ctypes.windll.kernel32
+        token = wintypes.HANDLE()
+        # Try wa.net, WINDOWASIA, and current default domain
+        for domain in ["wa.net", "WINDOWASIA", None]:
+            res = advapi32.LogonUserW(username, domain, password, 3, 0, ctypes.byref(token))
+            if res:
+                if token:
+                    kernel32.CloseHandle(token)
+                return True
+    except Exception as e:
+        print(f"Windows AD auth error: {e}")
+    return False
+
+
 # --- Active Directory Direct Gateway Authentication ---
 def authenticate_ad_gateway(username: str, password: str) -> bool:
     """
     Authenticate user credentials against internal Active Directory Gateway
     (ciam_ad_gateway_url) for direct login at Spoke when use_ad_auth=True.
+    Supports Windows AD Logon on Windows and AD Gateway API on Linux/Docker.
     """
     if not username or not password:
         return False
+
+    # 1. On Windows, attempt direct Windows Active Directory authentication first
+    if os.name == "nt":
+        try:
+            if _authenticate_windows_ad(username, password):
+                return True
+        except Exception:
+            pass
+
+    # 2. On Linux/VPS, call AD Gateway HTTP service
     cfg = get_ciam_config()
     gateway_url = (cfg.get("ciam_ad_gateway_url") or "").strip().rstrip("/")
     if not gateway_url:
@@ -348,7 +385,7 @@ def authenticate_ad_gateway(username: str, password: str) -> bool:
                 },
                 method="POST"
             )
-            with urllib.request.urlopen(req, timeout=3.5) as resp:
+            with urllib.request.urlopen(req, timeout=2.0) as resp:
                 if resp.status == 200:
                     data = json.loads(resp.read().decode("utf-8"))
                     if (
@@ -362,6 +399,9 @@ def authenticate_ad_gateway(username: str, password: str) -> bool:
                 # Explicit invalid credentials from AD
                 return False
             continue
+        except (urllib.error.URLError, TimeoutError, socket.timeout):
+            # Gateway host is down or unreachable; break immediately to avoid long blocking
+            break
         except Exception:
             continue
     return False

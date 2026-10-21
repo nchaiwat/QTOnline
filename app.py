@@ -339,6 +339,14 @@ login_manager.login_view = "login"  # Name of the login route
 login_manager.login_message_category = "info"
 
 
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    return jsonify({
+        "success": False,
+        "error": "คำขอถี่เกินไป กรุณารอสักครู่ (Too Many Requests)"
+    }), 429
+
+
 # FIX: Add user_loader callback for Flask-Login (Crucial for session management)
 @login_manager.user_loader
 def load_user(user_id):
