@@ -5484,10 +5484,10 @@ def _sync_to_sap_b1(po, user, customer_ref_no=None, comments=None):
                 line_data["CostingCode2"] = default_dept
             doc_lines.append(line_data)
 
-        # ข้อ 3 & 4: กำหนด Customer Ref. No. และ Remarks ที่ส่งเข้า SAP B1
+        # ข้อ 3 & 4: กำหนด Customer Ref. No. และ Remarks ที่ส่งเข้า SAP B1 (จำกัดสูงสุด 1,000 ตัวอักษร)
         final_customer_ref = (customer_ref_no or po.customer_ref_no or po.poNumber or "").strip()
         default_comment = f"Created from QT-Online {po.poNumber} by {user.fullName}"
-        final_comments = (comments or po.sap_remarks or default_comment).strip()
+        final_comments = (comments or po.sap_remarks or default_comment).strip()[:1000]
 
         order_payload = json.dumps({
             "CardCode": po.customerId,
@@ -5672,7 +5672,7 @@ def create_sap_so_api(po_id):
     # อ่านข้อมูล Customer Ref. No. และ Remarks จาก Client
     data = request.get_json(silent=True) or {}
     customer_ref_no = (data.get("customer_ref_no") or "").strip()
-    comments = (data.get("comments") or "").strip()
+    comments = (data.get("comments") or "").strip()[:1000]
 
     now = now_bangkok()
     time_str = now.strftime("%d/%m/%Y %H:%M:%S")

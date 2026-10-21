@@ -3831,7 +3831,7 @@
     <!-- SAP SO Create/Preview Modal -->
     <div id="sap-so-modal"
         class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center hidden p-4">
-        <div class="bg-white rounded-2xl shadow-2xl max-w-3xl w-full overflow-hidden transform transition-all max-h-[90vh] flex flex-col">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-5xl w-full overflow-hidden transform transition-all max-h-[92vh] flex flex-col">
             <!-- Modal Header -->
             <div class="px-6 py-4 bg-gradient-to-r from-emerald-700 to-teal-800 text-white flex justify-between items-center flex-shrink-0">
                 <div class="flex items-center gap-2.5">
@@ -3891,7 +3891,7 @@
                             <h4 class="text-xs font-bold uppercase tracking-wider text-gray-600">รายการสินค้าที่จะส่งเข้า SAP (Document Lines)</h4>
                             <span id="sap-so-item-count" class="text-xs text-gray-500">0 รายการ</span>
                         </div>
-                        <div class="border rounded-xl overflow-hidden max-h-52 overflow-y-auto">
+                        <div class="border rounded-xl overflow-hidden max-h-60 overflow-y-auto">
                             <table class="w-full text-xs">
                                 <thead class="bg-gray-100 text-gray-600 border-b sticky top-0">
                                     <tr>
@@ -3911,42 +3911,65 @@
                         </div>
                     </div>
 
-                    <!-- SAP SO Editable Input Fields (Customer Ref. No. & Remarks) -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5 bg-gray-50/80 p-3.5 rounded-xl border border-gray-200">
-                        <div>
-                            <label class="block text-xs font-bold text-gray-700 mb-1 flex items-center justify-between">
-                                <span>Customer Ref. No. (เลขที่ QT / PO ลูกค้า):</span>
-                                <span class="text-[10px] text-emerald-700 font-mono font-medium">SAP NumAtCard</span>
-                            </label>
-                            <input type="text" id="sap-so-customer-ref" class="w-full text-xs px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-medium text-gray-800" placeholder="เลขที่อ้างอิงลูกค้า หรือเว้นว่างเพื่อใช้เลขที่ QT">
+                    <!-- Lower Section: Remarks on Left (Large Box) & Customer Ref + Summary on Right -->
+                    <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-stretch">
+                        <!-- Left: Large Remarks Box (max 1000 chars with counter & clear button) -->
+                        <div class="md:col-span-7 bg-gray-50/80 p-3.5 rounded-xl border border-gray-200 flex flex-col justify-between">
+                            <div class="flex items-center justify-between mb-1.5">
+                                <label for="sap-so-remarks" class="text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                                    <span>หมายเหตุเอกสาร (Remarks):</span>
+                                    <span class="text-[10px] text-emerald-700 font-mono font-medium bg-emerald-100/70 px-1.5 py-0.5 rounded border border-emerald-200">SAP Comments</span>
+                                </label>
+                                <div class="flex items-center gap-2">
+                                    <span id="sap-so-remarks-count" class="text-[11px] text-gray-400 font-mono">0 / 1000</span>
+                                    <button type="button" onclick="clearSapSoRemarks()" class="inline-flex items-center gap-1 text-[11px] text-gray-500 hover:text-red-600 bg-white hover:bg-red-50 border border-gray-200 hover:border-red-200 px-2 py-0.5 rounded-md transition shadow-xs" title="ล้างข้อความหมายเหตุ">
+                                        <i data-lucide="x" class="w-3 h-3"></i> <span>ล้าง</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="flex-grow">
+                                <textarea id="sap-so-remarks" rows="5" maxlength="1000" oninput="updateSapSoRemarksCount()" class="w-full h-full min-h-[140px] text-xs p-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-medium text-gray-800 resize-none shadow-sm placeholder-gray-400 leading-relaxed" placeholder="ระบุหมายเหตุสำหรับส่งเข้า SAP B1 Comments (จำกัดสูงสุด 1,000 ตัวอักษร)"></textarea>
+                            </div>
                         </div>
-                        <div>
-                            <label class="block text-xs font-bold text-gray-700 mb-1 flex items-center justify-between">
-                                <span>หมายเหตุเอกสาร (Remarks):</span>
-                                <span class="text-[10px] text-emerald-700 font-mono font-medium">SAP Comments</span>
-                            </label>
-                            <input type="text" id="sap-so-remarks" class="w-full text-xs px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-medium text-gray-800" placeholder="ระบุหมายเหตุสำหรับส่งเข้า SAP B1 Comments">
-                        </div>
-                    </div>
 
-                    <!-- Financial Summary -->
-                    <div class="bg-emerald-50/60 rounded-xl p-4 border border-emerald-100 flex justify-end">
-                        <div class="w-full max-w-xs space-y-1.5 text-xs text-gray-700">
-                            <div class="flex justify-between">
-                                <span>รวมเป็นเงิน (Subtotal):</span>
-                                <span id="sap-so-subtotal" class="font-semibold">0.00</span>
+                        <!-- Right: Customer Ref No + Financial Summary Card -->
+                        <div class="md:col-span-5 flex flex-col gap-3">
+                            <!-- Customer Ref. No. -->
+                            <div class="bg-gray-50/80 p-3.5 rounded-xl border border-gray-200">
+                                <div class="flex items-center justify-between mb-1.5">
+                                    <label for="sap-so-customer-ref" class="text-xs font-bold text-gray-700">
+                                        Customer Ref. No. (เลขที่ QT / PO ลูกค้า):
+                                    </label>
+                                    <span class="text-[10px] text-emerald-700 font-mono font-medium bg-emerald-100/70 px-1.5 py-0.5 rounded border border-emerald-200">SAP NumAtCard</span>
+                                </div>
+                                <div class="relative">
+                                    <input type="text" id="sap-so-customer-ref" class="w-full text-xs pl-3 pr-8 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-medium text-gray-800 shadow-sm" placeholder="เลขที่อ้างอิงลูกค้า หรือเว้นว่างเพื่อใช้เลขที่ QT">
+                                    <button type="button" onclick="clearSapSoCustomerRef()" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 p-1 rounded-md transition hover:bg-gray-100" title="ล้างข้อมูล">
+                                        <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="flex justify-between text-red-600">
-                                <span>ส่วนลด (Discounts):</span>
-                                <span id="sap-so-discount">0.00</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span>ภาษีมูลค่าเพิ่ม (VAT 7%):</span>
-                                <span id="sap-so-vat" class="font-semibold">0.00</span>
-                            </div>
-                            <div class="flex justify-between pt-2 border-t border-emerald-200 text-sm font-bold text-gray-900">
-                                <span>จำนวนเงินสุทธิ (DocTotal):</span>
-                                <span id="sap-so-grand-total" class="text-emerald-700 font-extrabold text-base">0.00</span>
+
+                            <!-- Financial Summary -->
+                            <div class="bg-emerald-50/70 rounded-xl p-3.5 border border-emerald-100 flex-grow flex flex-col justify-center">
+                                <div class="space-y-1.5 text-xs text-gray-700">
+                                    <div class="flex justify-between">
+                                        <span>รวมเป็นเงิน (Subtotal):</span>
+                                        <span id="sap-so-subtotal" class="font-semibold">0.00</span>
+                                    </div>
+                                    <div class="flex justify-between text-red-600">
+                                        <span>ส่วนลด (Discounts):</span>
+                                        <span id="sap-so-discount">0.00</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span>ภาษีมูลค่าเพิ่ม (VAT 7%):</span>
+                                        <span id="sap-so-vat" class="font-semibold">0.00</span>
+                                    </div>
+                                    <div class="flex justify-between pt-2 border-t border-emerald-200 text-sm font-bold text-gray-900">
+                                        <span>จำนวนเงินสุทธิ (DocTotal):</span>
+                                        <span id="sap-so-grand-total" class="text-emerald-700 font-extrabold text-base">0.00</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -6480,17 +6503,20 @@
                 const custRefInput = document.getElementById('sap-so-customer-ref');
                 if (custRefInput) custRefInput.value = data.customer_ref_no || data.po_number || '';
                 const remarksInput = document.getElementById('sap-so-remarks');
-                if (remarksInput) remarksInput.value = data.default_comments || '';
+                if (remarksInput) {
+                    remarksInput.value = (data.default_comments || '').slice(0, 1000);
+                    updateSapSoRemarksCount();
+                }
 
                 // Items
                 const itemsBody = document.getElementById('sap-so-items-body');
-                itemsBody.innerHTML = '';
+                const itemsHtml = [];
                 (data.items || []).forEach(item => {
                     const sapDiscBadge = (item.discount_percent && Number(item.discount_percent) > 0)
                         ? `<span class="bg-purple-100 text-purple-800 font-bold px-1.5 py-0.5 rounded text-[11px]">${Number(item.discount_percent).toFixed(1)}%</span>`
                         : `<span class="text-gray-400 font-medium">-</span>`;
 
-                    itemsBody.innerHTML += `
+                    itemsHtml.push(`
                         <tr class="hover:bg-gray-50">
                             <td class="px-3 py-2 text-center text-gray-500">${item.index}</td>
                             <td class="px-3 py-2 font-mono font-medium text-blue-700">${escapeHtml(item.product_code)}</td>
@@ -6500,8 +6526,9 @@
                             <td class="px-2 py-2 text-center">${sapDiscBadge}</td>
                             <td class="px-3 py-2 text-right font-bold text-gray-900">${formatCurrency(item.line_total)}</td>
                         </tr>
-                    `;
+                    `);
                 });
+                itemsBody.innerHTML = itemsHtml.join('');
                 document.getElementById('sap-so-item-count').textContent = `${(data.items || []).length} รายการ`;
 
                 // Totals
@@ -6543,6 +6570,39 @@
                     alert('เกิดข้อผิดพลาด: ' + (err.message || 'ไม่สามารถโหลดข้อมูลได้'));
                 }
                 closeSapSoModal();
+            }
+        }
+
+        function clearSapSoCustomerRef() {
+            const input = document.getElementById('sap-so-customer-ref');
+            if (input) {
+                input.value = '';
+                input.focus();
+            }
+        }
+
+        function clearSapSoRemarks() {
+            const textarea = document.getElementById('sap-so-remarks');
+            if (textarea) {
+                textarea.value = '';
+                updateSapSoRemarksCount();
+                textarea.focus();
+            }
+        }
+
+        function updateSapSoRemarksCount() {
+            const textarea = document.getElementById('sap-so-remarks');
+            const counter = document.getElementById('sap-so-remarks-count');
+            if (textarea && counter) {
+                const len = textarea.value ? textarea.value.length : 0;
+                counter.textContent = `${len} / 1000`;
+                if (len >= 1000) {
+                    counter.className = 'text-[11px] text-red-600 font-mono font-bold';
+                } else if (len > 800) {
+                    counter.className = 'text-[11px] text-amber-600 font-mono font-semibold';
+                } else {
+                    counter.className = 'text-[11px] text-gray-400 font-mono';
+                }
             }
         }
 
@@ -6620,7 +6680,7 @@
             // 4. Send request to backend with Customer Ref No & Remarks
             try {
                 const customerRefNo = (document.getElementById('sap-so-customer-ref')?.value || '').trim();
-                const remarks = (document.getElementById('sap-so-remarks')?.value || '').trim();
+                const remarks = (document.getElementById('sap-so-remarks')?.value || '').trim().slice(0, 1000);
                 const res = await fetchApi(`/api/purchase-orders/${currentSapPOId}/create-sap-so`, 'POST', {
                     customer_ref_no: customerRefNo,
                     comments: remarks
