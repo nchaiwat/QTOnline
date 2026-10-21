@@ -62,6 +62,10 @@
   - **Promotion Management Page (`#page-promotion-list`):** หน้าจอสำหรับ Administrator และ Sale Admin มีสถิติรวม ค้นหา กรองประเภท และฟอร์มสร้าง/แก้ไข/เปิด-ปิดโปรโมชั่น
   - **Consistency Across All Surfaces:** อัปเดตการแสดงผลส่วนลดโปรโมชั่นและของแถมในหน้า QT Detail (`viewPO`), แม่แบบพิมพ์ PDF ([po_print.html](po_print.html)), และหน้าจอลูกค้า ([customer_portal.html](customer_portal.html))
 
+### 7. แก้ไขปัญหาหน้าจอขาวค้าง (Loading...) หลังอัปเดตฟังก์ชันโปรโมชั่น
+- **สาเหตุ:** พบ `SyntaxError: Unexpected token '}'` ใน `app.html` ที่ส่วนท้ายของฟังก์ชัน `renderPOTable()` มีเครื่องหมายปีกกาปิดและ `initIcons()` ซ้ำซ้อน ทำให้ Browser ไม่สามารถรันสคริปต์ได้ หน้าจอจึงค้างที่สถานะ `Loading...` และไม่แสดงเนื้อหา
+- **การแก้ไข:** ลบปีกกาปิดและคำสั่งซ้ำซ้อนออก พร้อมตรวจสอบความถูกต้องของไวยากรณ์ JavaScript ด้วย `node --check` ผ่านฉลุย 100%
+
 ---
 
 ## 1. Executive Summary: Major Performance Overhaul
