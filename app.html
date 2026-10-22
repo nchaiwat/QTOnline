@@ -5147,7 +5147,7 @@
                 currentAppliedPromotion = null;
             }
 
-            setPromotionMode(currentPromoMode, false);
+            updatePromotionCreatePOUI(currentPromoMode);
             resetItemForm();
             renderPOTable(); // Render items (or empty)
             evaluateQuotationPromotions(true);
@@ -11576,6 +11576,14 @@
         // =========================================================================
         // PROMOTION CAMPAIGN & BENEFIT SYSTEM (Auto & Manual Mode)
         // =========================================================================
+
+        /**
+         * Backward compatibility alias for setPromotionMode
+         */
+        function setPromotionMode(mode) {
+            currentPromoMode = mode || 'auto';
+            updatePromotionCreatePOUI(currentPromoMode);
+        }
 
         /**
          * Update UI for Create PO based on system promotion mode ('auto' or 'manual')

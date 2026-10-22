@@ -88,6 +88,12 @@
   - **Promotion Management Page (`#page-promotion-list`):** หน้าจอสำหรับ Administrator และ Sale Admin มีสถิติรวม ค้นหา กรองประเภท และฟอร์มสร้าง/แก้ไข/เปิด-ปิดโปรโมชั่น
   - **Consistency Across All Surfaces:** อัปเดตการแสดงผลส่วนลดโปรโมชั่นและของแถมในหน้า QT Detail (`viewPO`), แม่แบบพิมพ์ PDF ([po_print.html](po_print.html)), และหน้าจอลูกค้า ([customer_portal.html](customer_portal.html))
 
+### 9. แก้ไขปุ่ม Create New QT กดแล้วไม่มีการตอบสนอง (No Response)
+- **สาเหตุ:** ในขั้นตอนปรับปรุงระบบโปรโมชั่น มีการเปลี่ยนฟังก์ชันจัดการโหมดเป็น `updatePromotionCreatePOUI(mode)` แต่ในฟังก์ชัน `showCreatePOPage()` ยังคงมีการเรียกใช้ชื่อเดิมคือ `setPromotionMode(currentPromoMode, false)` ส่งผลให้เกิดข้อผิดพลาดใน JavaScript Console: `Uncaught (in promise) ReferenceError: setPromotionMode is not defined` ทำให้การทำงานของฟังก์ชันหยุดชะงักก่อนที่จะเรียก `showPage('page-po-create')` หน้าจอจึงไม่เปิด
+- **การแก้ไข:**
+  - เปลี่ยนการเรียกใน `showCreatePOPage()` เป็น `updatePromotionCreatePOUI(currentPromoMode)` โดยตรง
+  - เพิ่มฟังก์ชัน Alias `setPromotionMode(mode)` สำหรับ Backward Compatibility เพื่อป้องกันไม่ให้เกิด Error หากมีการเรียกใช้ในจุดอื่น
+
 ### 7. แก้ไขปัญหาหน้าจอขาวค้าง (Loading...) หลังอัปเดตฟังก์ชันโปรโมชั่น
 - **สาเหตุ:** พบ `SyntaxError: Unexpected token '}'` ใน `app.html` ที่ส่วนท้ายของฟังก์ชัน `renderPOTable()` มีเครื่องหมายปีกกาปิดและ `initIcons()` ซ้ำซ้อน ทำให้ Browser ไม่สามารถรันสคริปต์ได้ หน้าจอจึงค้างที่สถานะ `Loading...` และไม่แสดงเนื้อหา
 - **การแก้ไข:** ลบปีกกาปิดและคำสั่งซ้ำซ้อนออก พร้อมตรวจสอบความถูกต้องของไวยากรณ์ JavaScript ด้วย `node --check` ผ่านฉลุย 100%
