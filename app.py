@@ -2684,20 +2684,57 @@ def evaluate_promotions():
         elif p.promo_type == "BUY_X_GET_Y":
             cond_code = (p.condition_product_code or "").strip().upper()
             cond_qty = int(p.condition_qty or 1)
-            matching_qty = qty_by_code.get(cond_code, 0) if cond_code else total_qty
+            reward_code = (p.reward_product_code or "").strip().upper()
+            reward_name = (p.reward_product_name or "").strip()
+            reward_qty = int(p.reward_qty or 1)
 
-            if matching_qty >= cond_qty:
-                is_match = True
-                reward_times = matching_qty // cond_qty
-                total_reward_qty = reward_times * int(p.reward_qty or 1)
-                free_gift = {
-                    "productCode": p.reward_product_code or "FREE-GIFT",
-                    "name": p.reward_product_name or f"ของแถมจากโปร {p.name}",
-                    "qty": total_reward_qty,
-                    "price": 0.0,
-                    "isGift": True
-                }
-                benefit_text = f"แถมฟรี {free_gift['name']} จำนวน {total_reward_qty} ชิ้น"
+            # กรณีที่ 1: กำหนดรหัสสินค้าของแถมเฉพาะเจาะจง (เช่น ซื้อครบ 20 ชิ้น แถม ประตู DR-01)
+            if reward_code:
+                # ถ้าระบุ cond_code ให้ตรวจเฉพาะสินค้านั้น ถ้าไม่ระบุให้ตรวจยอดรวมสินค้าทั้งหมดในบิล
+                matching_qty = qty_by_code.get(cond_code, 0) if cond_code else total_qty
+                if matching_qty >= cond_qty:
+                    is_match = True
+                    reward_times = matching_qty // cond_qty
+                    total_reward_qty = reward_times * reward_qty
+                    free_gift = {
+                        "productCode": reward_code,
+                        "name": reward_name or f"ของแถมจากโปร {p.name}",
+                        "qty": total_reward_qty,
+                        "price": 0.0,
+                        "isGift": True
+                    }
+                    benefit_text = f"แถมฟรี {free_gift['name']} จำนวน {total_reward_qty} ชิ้น"
+
+            # กรณีที่ 2: ไม่ได้ระบุรหัสสินค้าของแถม (แปลว่าแถมสินค้าเดียวกันกับที่ซื้อ! เช่น ซื้อชนิดเดียวกันครบ 10 ชิ้น แถม 1 ชิ้น)
+            else:
+                qualifying_items = []
+                for it in items:
+                    if it.get("isGift"):
+                        continue
+                    it_code = (it.get("productCode") or "").strip().upper()
+                    it_qty = int(it.get("qty", 0) or 0)
+                    if (not cond_code or it_code == cond_code) and it_qty >= cond_qty:
+                        qualifying_items.append(it)
+
+                if qualifying_items:
+                    # เลือกสินค้าที่มีมูลค่าสูงสุดหรือยอดสั่งซื้อมากที่สุด
+                    qualifying_items.sort(key=lambda x: (float(x.get("price", 0) or 0), int(x.get("qty", 0) or 0)), reverse=True)
+                    best_match_item = qualifying_items[0]
+                    matched_qty = int(best_match_item.get("qty", 0) or 0)
+                    reward_times = matched_qty // cond_qty
+                    total_reward_qty = reward_times * reward_qty
+
+                    item_name = best_match_item.get("name") or best_match_item.get("productCode") or "สินค้า"
+                    clean_name = item_name.replace(" (ของแถมฟรี)", "").replace(" (แถมฟรี)", "")
+                    free_gift = {
+                        "productCode": best_match_item.get("productCode") or "FREE-GIFT",
+                        "name": f"{clean_name} (ของแถมฟรี)",
+                        "qty": total_reward_qty,
+                        "price": 0.0,
+                        "isGift": True
+                    }
+                    is_match = True
+                    benefit_text = f"แถมฟรี {clean_name} จำนวน {total_reward_qty} ชิ้น"
 
         if is_match:
             eligible.append({
