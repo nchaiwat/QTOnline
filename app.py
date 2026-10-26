@@ -2950,32 +2950,39 @@ def _generate_pdf_bytes(po, is_draft=True):
             if os.path.exists(lpath):
                 img_src = "file://" + lpath
 
-        # Use Recommended Price for Customer PDF
-        unit_price = (
-            item.recommendedPrice
-            if (item.recommendedPrice and item.recommendedPrice > 0)
-            else item.price
-        )
-        qty = item.qty or 0
-        discount = item.discount or 0.0
-
-        line_total = (unit_price * qty) * (1 - discount / 100.0)
-        current_subtotal += line_total
+        # Use Recommended Price for Customer PDF (Free Gift items must have 0.00 price)
+        is_item_gift = bool(getattr(item, "is_gift", False))
+        if is_item_gift:
+            unit_price = 0.0
+            line_total = 0.0
+        else:
+            unit_price = (
+                item.recommendedPrice
+                if (item.recommendedPrice and item.recommendedPrice > 0)
+                else item.price
+            )
+            qty = item.qty or 0
+            discount = item.discount or 0.0
+            line_total = (unit_price * qty) * (1 - discount / 100.0)
+            current_subtotal += line_total
 
         items_for_print.append(
             {
                 "index": idx,
                 "name": item.name,
+                "productCode": item.productCode or "",
                 "quantity": qty,
                 "unit_price": unit_price,
                 "discount": discount,
                 "total": line_total,
                 "image_src": img_src,
+                "is_gift": is_item_gift,
             }
         )
 
     # Calculations (Custom 6-Line Summary)
-    # 1. Subtotal (Recommended Price)
+    non_gift_items = [i for i in po.items if not getattr(i, "is_gift", False)]
+    # 1. Subtotal (Recommended Price on Non-Gift Items)
     total_recommended = sum(
         (
             i.recommendedPrice
@@ -2983,7 +2990,7 @@ def _generate_pdf_bytes(po, is_draft=True):
             else i.price
         )
         * i.qty
-        for i in po.items
+        for i in non_gift_items
     )
 
     # 2. Price Difference Discount (Recommended - Cost)
@@ -3200,7 +3207,8 @@ def customer_portal_view(token):
         }
 
         # CALCULATE TOTALS (6-Line Logic synchronized with PDF)
-        # 1. Total Recommended (Gross Subtotal)
+        # 1. Total Recommended (Gross Subtotal on Non-Gift items)
+        non_gift_items = [i for i in po.items if not getattr(i, "is_gift", False)]
         total_recommended = sum(
             (
                 i.recommendedPrice
@@ -3208,11 +3216,10 @@ def customer_portal_view(token):
                 else (i.price or 0.0)
             )
             * (i.qty or 0)
-            for i in po.items
+            for i in non_gift_items
         )
 
         # 2. Product Discount (Recommended - Cost)
-        non_gift_items = [i for i in po.items if not getattr(i, "is_gift", False)]
         total_cost_base = sum((i.price or 0.0) * (i.qty or 0) for i in non_gift_items)
         price_diff_discount = total_recommended - total_cost_base
 

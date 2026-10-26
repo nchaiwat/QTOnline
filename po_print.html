@@ -339,13 +339,28 @@
                 <!-- Description -->
                 <td class="col-l">
                     <strong>{{ item.productCode }}</strong> {{ item.name }}
+                    {% if item.is_gift %}
+                    <span style="display: inline-block; background-color: #ecfdf5; color: #047857; font-size: 9.5px; font-weight: bold; padding: 1px 4px; border-radius: 3px; border: 1px solid #a7f3d0; margin-left: 3px;">[🎁 ของแถมฟรี]</span>
+                    {% endif %}
                 </td>
                 <!-- Qty -->
                 <td class="col-c">{{ item.quantity }}</td>
                 <!-- Unit Price -->
-                <td class="col-r">{{ "{:,.2f}".format(item.unit_price) }}</td>
+                <td class="col-r">
+                    {% if item.is_gift %}
+                    <span style="color: #047857; font-weight: bold;">0.00</span>
+                    {% else %}
+                    {{ "{:,.2f}".format(item.unit_price) }}
+                    {% endif %}
+                </td>
                 <!-- Total -->
-                <td class="col-r">{{ "{:,.2f}".format(item.quantity * item.unit_price) }}</td>
+                <td class="col-r">
+                    {% if item.is_gift %}
+                    <span style="color: #047857; font-weight: bold;">0.00</span>
+                    {% else %}
+                    {{ "{:,.2f}".format(item.quantity * item.unit_price) }}
+                    {% endif %}
+                </td>
             </tr>
             {% endfor %}
 

@@ -135,7 +135,7 @@
                 </thead>
                 <tbody>
                     {% for item in po.items %}
-                    {% set display_price = item.recommendedPrice if (item.recommendedPrice and item.recommendedPrice > 0) else (item.price or 0.0) %}
+                    {% set display_price = 0.0 if item.is_gift else (item.recommendedPrice if (item.recommendedPrice and item.recommendedPrice > 0) else (item.price or 0.0)) %}
                     <tr>
                         <td class="text-center">{{ loop.index }}</td>
                         <td>
@@ -144,7 +144,10 @@
                                 <img src="{{ item.resolved_image_url }}" alt="{{ item.name }}" class="img-thumbnail" style="width: 50px; height: 50px; object-fit: contain; flex-shrink: 0;">
                                 {% endif %}
                                 <div>
-                                    {{ item.name }}
+                                    <span class="fw-semibold">{{ item.name }}</span>
+                                    {% if item.is_gift %}
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle ms-1">[🎁 ของแถมฟรี]</span>
+                                    {% endif %}
                                     {% if item.productCode %}
                                     <br><small class="text-muted">Code: {{ item.productCode }}</small>
                                     {% endif %}
@@ -152,8 +155,20 @@
                             </div>
                         </td>
                         <td class="text-center">{{ item.qty }}</td>
-                        <td class="money-col">{{ "{:,.2f}".format(display_price) }}</td>
-                        <td class="money-col">{{ "{:,.2f}".format(item.qty * display_price) }}</td>
+                        <td class="money-col">
+                            {% if item.is_gift %}
+                            <span class="text-success fw-bold">0.00</span>
+                            {% else %}
+                            {{ "{:,.2f}".format(display_price) }}
+                            {% endif %}
+                        </td>
+                        <td class="money-col">
+                            {% if item.is_gift %}
+                            <span class="text-success fw-bold">0.00</span>
+                            {% else %}
+                            {{ "{:,.2f}".format(item.qty * display_price) }}
+                            {% endif %}
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
