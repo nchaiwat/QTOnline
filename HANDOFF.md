@@ -1,12 +1,12 @@
 # Project Handoff Document - QT-Online
 
-**Date:** 2026-10-21  
+**Date:** 2026-10-27  
 **Repository:** `https://github.com/nchaiwat/QTOnline.git` (`main` branch)  
 **Production Server:** VPS `srv832658` (`qol.windowasia.com`)  
 
 ---
 
-## 📌 สรุปการอัปเดตล่าสุด (2026-10-21)
+## 📌 สรุปการอัปเดตล่าสุด (2026-10-27)
 
 ### 1. แก้ไขระบบ Telegram Bot Token ให้ดึงจาก System Settings ใน Database
 - **ปัญหาเดิม:** การแจ้งเตือน Telegram ใน Background Thread ทำงานนอก Flask Context ทำให้เรียก `SystemSetting.get_value()` ล้มเหลวและ Fallback ไปใช้ Token เก่าใน `.env` ที่หมดอายุ/ถูกยกเลิก ส่งผลให้ไม่มีข้อความเข้า Group Chat
@@ -235,13 +235,24 @@ docker stats --no-stream
 ---
 
 ## 5. สิ่งที่จะทำต่อใน Session ถัดไป (Next Session Tasks)
-1. **ทดสอบความเร็วบน Production จริงหลังเปิดใช้ Gzip + Index**:
-   - ทดสอบเปิดหน้า Dashboard, Customer Management, และ User Management
-   - สังเกตขนาด Transfer Size ใน Network Tab ของเบราว์เซอร์ (ต้องลดลงเหลือ ~45 KB สำหรับ HTML)
-2. **วิเคราะห์ทรัพยากรเครื่อง VPS (`free -h`)**:
-   - ตรวจสอบว่า RAM มีเหลือเพียงพอหรือไม่ หากมีการใช้ Swap สูง อาจพิจารณาปรับแต่ง Postgres Shared Buffers หรือ Gunicorn Worker RAM
-3. **ทดสอบการค้นหาและฟังก์ชันอื่นๆ**:
-   - ทดสอบการค้นหาลูกค้า, การเปิดดู Modal รายละเอียดลูกค้า, และการ Export Excel ในตารางต่างๆ
+1. **อัปเดต Telegram Bot Token ใหม่ในหน้า System Settings:**
+   - หลังจาก Bot Token เดิมถูก Revoke บน Telegram BotFather ให้ผู้ดูแลระบบนำ Token ตัวใหม่จาก `@BotFather` มาบันทึกในหน้าเว็บ `#page-settings` (หัวข้อ Telegram Notification)
+   - ทดสอบกด "Submit for Review" ในใบ QT เพื่อยืนยันว่ามีข้อความแจ้งเตือนเข้า Telegram Group ถูกต้องสมบูรณ์
+2. **Deploy โค้ดล่าสุดขึ้น VPS Hostinger (`srv832658`):**
+   - รันคำสั่งมาตรฐานบน Production:
+     ```bash
+     cd /var/www/QT-Online
+     git stash -u
+     git pull origin main
+     docker compose up -d --no-deps --build web
+     docker compose ps
+     ```
+3. **ทดสอบสร้าง Sales Order บน SAP Business One จริง:**
+   - ทดสอบเปิด Modal พรีวิวสร้าง Sales Order (`#sap-so-modal`) สำหรับใบเสนอราคาที่มีสินค้าของแถม
+   - ตรวจสอบว่าบรรทัดของแถมส่งเข้า SAP B1 ด้วย `UnitPrice = 0.00` และ `DiscountPercent = 0.00%` และบรรทัดสินค้าหลักส่ง `DiscountPercent` ตาม Product Master อย่างถูกต้อง
+4. **ตรวจสอบความสมบูรณ์ของ UI และเอกสารพิมพ์:**
+   - ตรวจสอบหน้า QT Detail (`app.html` ในส่วน `viewPO`) ว่าปุ่ม `Print Draft` เรียงตัวเสมอกับปุ่ม Action อื่นๆ ของ Admin
+   - ตรวจสอบใบพิมพ์ PDF ([po_print.html](po_print.html)) และหน้า [customer_portal.html](customer_portal.html) สำหรับรายการของแถมว่าแสดงป้าย `แถมจากโปร` และตัดข้อความซ้ำซ้อนอย่างสวยงาม
 
 ---
 
@@ -719,3 +730,26 @@ emote_addr) มาบันทึกลงในฟิลด์ details JSON ข
       - อัปเดตตาราง `system_settings` ในฐานข้อมูล Local ให้มีค่าเป็น `WA` และ `SA`
       - อัปเดตหน้าต่างตั้งค่าใน [app.html](file:///d:/Python/PO-Online/app.html) ทั้ง Placeholder และ Fallback Value ให้ตรงตามค่า `"WA"` และ `"SA"`
     - **ผลการทดสอบ:** ตรวจสอบไวยากรณ์และอัปเดตฐานข้อมูลสำเร็จเรียบร้อยแล้ว ทุกคำสั่งซื้อใหม่ที่ส่งไปยัง SAP B1 จะถูกลงบัญชีเป็น Business Unit = WA และ แผนก = SA ทันที
+
+32. **การปรับปรุงรายการของแถม (Free Gift), SAP SO DocumentLines, Telegram Diagnostics, และปุ่ม Print Draft (27 Oct 2026):**
+    - **1. ปรับ Badge ของแถมเป็น "แถมจากโปร" และตัดคำซ้ำซ้อน:**
+      - ตัด Emoji 🎁 และคำว่า `(ของแถมฟรี)` ออกจากหน้าจอทั้งหมด ได้แก่: หน้า QT Detail (`app.html`), หน้าสร้าง/แก้ไข QT, หน้าจอลูกค้า (`customer_portal.html`), และหน้าพิมพ์ PDF (`po_print.html`)
+      - เปลี่ยนป้ายเป็น Badge สีม่วงเรียบหรู **`แถมจากโปร`**
+      - ฟังก์ชัน `cleanProductName` คลีนข้อความซ้ำซ้อนและรหัสสินค้าที่ซ้ำหน้าชื่อสินค้าออก
+      - แสดงราคาต่อหน่วยและยอดรวมเป็น `0.00` บาทตัวอักษรปกติ
+    - **2. ปรับปรุงการส่งข้อมูลเข้า SAP Business One Service Layer:**
+      - **กรณีสินค้าของแถม (`is_gift`):** ส่ง `UnitPrice = 0.0` และ `DiscountPercent = 0.0` เสมอ เพื่อให้สอดคล้องกับการคีย์งานจริงในระบบ SAP Business One ที่สินค้าแถมจะต้องไม่มีราคาและไม่มีส่วนลด
+      - **กรณีสินค้าปกติ (Non-gift):** ส่งราคาตั้งต้น และดึงค่าส่วนลดจาก `Product.discountPercent` ส่งเข้าฟิลด์ `DiscountPercent` ใน `DocumentLines`
+      - แสดงผลใน Modal พรีวิวสร้าง SO (`#sap-so-modal`) ให้ตรงกัน
+    - **3. วินิจฉัยระบบ Telegram Notification:**
+      - ตรวจสอบพบสาเหตุที่ไม่มีแจ้งเตือนเกิดจาก Telegram API ตอบกลับ `HTTP Error 401: Unauthorized` เนื่องจาก Bot Token ปัจจุบันถูกเพิกถอนบน Telegram BotFather
+      - แก้ไขข้อความใน `app.py` สำหรับสถานะ Pending Review จาก `"w"` เป็น Emoji นาฬิกาทราย `"⏳"`
+      - แจ้งแนวทางแก้ไขให้ Admin นำ Bot Token ตัวใหม่มากรอกผ่านหน้า Settings
+    - **4. จัดระเบียบปุ่ม Print Draft ในหน้า QT Detail:**
+      - ย้ายปุ่ม `Print Draft` จาก Container ด้านบน (`#po-print-draft-section`) เข้ามาจัดเรียงในแถวเดียวกันกับปุ่ม Action อื่นๆ ของ Admin (`#po-admin-actions`)
+      - ซ่อนแถวเดิมด้านบนเมื่อเป็นหน้าต่าง Admin ทำให้ปุ่มทุกตัวเรียงตัวในแนวระนาบเดียวกัน ไม่แยกเป็น 2 แถว
+    - **ผลการทดสอบ:**
+      - ทดสอบรันเซิร์ฟเวอร์บน Local (Port 8080) ทำงานปกติ Health check `200 OK`
+      - ทดสอบไวยากรณ์ JavaScript ทุกบล็อกใน `app.html` ผ่าน Node.js 100%
+      - Commit และ Push ขึ้น GitHub (`main` - Commits `44c867b`, `782b29b`, `d4cabdf`) ครบถ้วน
+
