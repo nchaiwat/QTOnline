@@ -1536,7 +1536,7 @@ def manage_po(id):
                 elif new_status == "Changes Requested":
                     icon = "⚠️"
                 elif new_status == "Pending Review":
-                    icon = "w"
+                    icon = "⏳"
                 elif new_status == "Completed":
                     icon = "🏁"
 

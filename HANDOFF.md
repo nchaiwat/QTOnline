@@ -134,9 +134,13 @@
 - **ข้อ 1: รายการสินค้าของแถม (Free Gift / is_gift):**
   - ในฟังก์ชัน `_sync_to_sap_b1()` และ Endpoint `/api/purchase-orders/<id>/sap-preview`: ตรวจสอบ `is_item_gift` หากเป็นสินค้าของแถม จะบังคับให้ส่ง **`UnitPrice = 0.0`** (ไม่มีราคา) และ **`DiscountPercent = 0.0`** เสมอ
   - ใน Modal พรีวิวสร้าง SO บนหน้าเว็บ (`#sap-so-modal`): แสดงป้าย `แถมจากโปร`, แสดงราคา `0.00`, และแสดงส่วนลดเป็น `0.00%` ตรงตามรูปแบบการคีย์งานบน SAP Business One (แถวของแถมมีราคาและส่วนลดเป็น 0)
-- **ข้อ 2: รายการสินค้าทั่วไป (Non-gift Items):**
-  - แสดงและส่งค่าส่วนลดตามฟิลด์ `discountPercent` ของตาราง Product Master เข้าช่อง `DiscountPercent` ใน `DocumentLines` ของ SAP อย่างถูกต้อง (เช่น 20.00%)
-  - ส่งราคาตั้งต้น (`recommendedPrice` / `price`) ไปยัง `UnitPrice` เพื่อให้ SAP B1 นำไปคำนวณราคาหลังหักส่วนลด (Gross Price after Disc.) และยอดรวมได้อย่างถูกต้องแม่นยำ
+### 15. ตรวจสอบระบบ Telegram Notification และจัดระเบียบตำแหน่งปุ่ม Print Draft
+- **1. ตรวจสอบระบบ Telegram Notification:**
+  - **สาเหตุที่ไม่มีแจ้งเตือน:** ระบบส่งข้อความผ่าน Background Thread ตามปกติเมื่อมีการ Submit/เปลี่ยนสถานะ แต่ Telegram Server ส่งกลับข้อผิดพลาด `HTTP Error 401: Unauthorized` (`{"ok":false,"error_code":401,"description":"Unauthorized"}`) เนื่องจาก Telegram Bot Token ในระบบถูกเพิกถอนหรือหมดอายุบน Telegram BotFather
+  - **การแก้ไข:** แก้ไขไอคอนแจ้งเตือนสถานะ `Pending Review` จาก `"w"` เป็น `"⏳"` ใน `app.py` และแนะนำให้ผู้ดูแลระบบอัปเดต Token บอทตัวใหม่ผ่านหน้า System Settings (`#page-settings`) เมนู Telegram Settings
+- **2. จัดตำแหน่งปุ่ม Print Draft ในหน้า QT Detail (`app.html`):**
+  - **สาเหตุเดิม:** ปุ่ม `Print Draft` ถูกแยกอยู่ใน `<div>` คอนเทนเนอร์ `#po-print-draft-section` ต่างหากเหนือกล่องปุ่ม Action ของแอดมิน (`#po-admin-actions`) ทำให้ปุ่ม Print Draft ลอยอยู่แถวบนเพียงปุ่มเดียว
+  - **การแก้ไข:** ย้ายปุ่ม `Print Draft` เข้ามาอยู่ภายใน `#po-admin-actions` เรียงต่อกันในแถวเดียวกับปุ่ม `Edit QT`, `Request Changes`, `Approve QT`, และ `Cancel QT` อย่างสวยงามและเป็นระเบียบ
 
 ---
 

@@ -1504,6 +1504,11 @@
                             <div id="po-admin-actions"
                                 class="po-action-section border-t pt-6 mt-6 flex justify-end space-x-3">
                                 <button
+                                    class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg shadow inline-flex items-center"
+                                    onclick="printPO(true)">
+                                    <i data-lucide="printer" class="w-5 h-5 mr-1"></i> Print Draft
+                                </button>
+                                <button
                                     class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg shadow"
                                     onclick="editPO()">
                                     <i data-lucide="edit-2" class="w-5 h-5 mr-1 inline-block"></i> Edit QT
@@ -6331,7 +6336,7 @@
             document.getElementById('comment-box').style.display = 'block';
 
             if (printDraftSection) {
-                printDraftSection.style.display = (po.status === 'Pending Review') ? 'flex' : 'none';
+                printDraftSection.style.display = (!isAdminRole && po.status === 'Pending Review') ? 'flex' : 'none';
             }
 
             if (po.status === 'Pending Review') {
