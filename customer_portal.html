@@ -144,11 +144,15 @@
                                 <img src="{{ item.resolved_image_url }}" alt="{{ item.name }}" class="img-thumbnail" style="width: 50px; height: 50px; object-fit: contain; flex-shrink: 0;">
                                 {% endif %}
                                 <div>
-                                    <span class="fw-semibold">{{ item.name }}</span>
-                                    {% if item.is_gift %}
-                                    <span class="badge bg-success-subtle text-success border border-success-subtle ms-1">[🎁 ของแถมฟรี]</span>
+                                    {% set clean_item_name = item.name|replace(' (ของแถมฟรี)', '')|replace(' (แถมฟรี)', '')|replace('(ของแถมฟรี)', '')|replace('(แถมฟรี)', '')|trim %}
+                                    {% if item.productCode and clean_item_name.startswith(item.productCode) %}
+                                        {% set clean_item_name = clean_item_name[item.productCode|length:]|trim(' -:') %}
                                     {% endif %}
-                                    {% if item.productCode %}
+                                    {% if item.is_gift %}
+                                    <span class="badge text-purple-700 bg-purple-50 border border-purple-200 me-1" style="background-color: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; font-size: 11px;">แถมจากโปร</span>
+                                    {% endif %}
+                                    <span class="fw-semibold">{{ clean_item_name if clean_item_name else item.productCode }}</span>
+                                    {% if item.productCode and clean_item_name %}
                                     <br><small class="text-muted">Code: {{ item.productCode }}</small>
                                     {% endif %}
                                 </div>
@@ -157,14 +161,14 @@
                         <td class="text-center">{{ item.qty }}</td>
                         <td class="money-col">
                             {% if item.is_gift %}
-                            <span class="text-success fw-bold">0.00</span>
+                            0.00
                             {% else %}
                             {{ "{:,.2f}".format(display_price) }}
                             {% endif %}
                         </td>
                         <td class="money-col">
                             {% if item.is_gift %}
-                            <span class="text-success fw-bold">0.00</span>
+                            0.00
                             {% else %}
                             {{ "{:,.2f}".format(item.qty * display_price) }}
                             {% endif %}

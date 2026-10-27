@@ -2696,14 +2696,15 @@ def evaluate_promotions():
                     is_match = True
                     reward_times = matching_qty // cond_qty
                     total_reward_qty = reward_times * reward_qty
+                    clean_reward_name = (reward_name or f"{reward_code}").replace(" (ของแถมฟรี)", "").replace(" (แถมฟรี)", "").strip()
                     free_gift = {
                         "productCode": reward_code,
-                        "name": reward_name or f"ของแถมจากโปร {p.name}",
+                        "name": clean_reward_name,
                         "qty": total_reward_qty,
                         "price": 0.0,
                         "isGift": True
                     }
-                    benefit_text = f"แถมฟรี {free_gift['name']} จำนวน {total_reward_qty} ชิ้น"
+                    benefit_text = f"แถม {clean_reward_name} จำนวน {total_reward_qty} ชิ้น"
 
             # กรณีที่ 2: ไม่ได้ระบุรหัสสินค้าของแถม (แปลว่าแถมสินค้าเดียวกันกับที่ซื้อ! เช่น ซื้อชนิดเดียวกันครบ 10 ชิ้น แถม 1 ชิ้น)
             else:
@@ -2724,17 +2725,26 @@ def evaluate_promotions():
                     reward_times = matched_qty // cond_qty
                     total_reward_qty = reward_times * reward_qty
 
-                    item_name = best_match_item.get("name") or best_match_item.get("productCode") or "สินค้า"
-                    clean_name = item_name.replace(" (ของแถมฟรี)", "").replace(" (แถมฟรี)", "")
+                    item_code = best_match_item.get("productCode") or "FREE-GIFT"
+                    item_name = best_match_item.get("name")
+                    if not item_name or item_name == item_code:
+                        p_obj = Product.query.filter_by(productCode=item_code).first()
+                        if p_obj and p_obj.name:
+                            item_name = p_obj.name
+                        else:
+                            item_name = item_code
+
+                    clean_name = item_name.replace(" (ของแถมฟรี)", "").replace(" (แถมฟรี)", "").strip()
                     free_gift = {
-                        "productCode": best_match_item.get("productCode") or "FREE-GIFT",
-                        "name": f"{clean_name} (ของแถมฟรี)",
+                        "productCode": item_code,
+                        "name": clean_name,
                         "qty": total_reward_qty,
                         "price": 0.0,
-                        "isGift": True
+                        "isGift": True,
+                        "imageUrl": best_match_item.get("imageUrl") or ""
                     }
                     is_match = True
-                    benefit_text = f"แถมฟรี {clean_name} จำนวน {total_reward_qty} ชิ้น"
+                    benefit_text = f"แถม {clean_name} จำนวน {total_reward_qty} ชิ้น"
 
         if is_match:
             eligible.append({
@@ -2950,8 +2960,11 @@ def _generate_pdf_bytes(po, is_draft=True):
             if os.path.exists(lpath):
                 img_src = "file://" + lpath
 
-        # Use Recommended Price for Customer PDF (Free Gift items must have 0.00 price)
+        # Assign item qty and discount first to prevent variable leak from previous iteration
+        qty = item.qty or 0
+        discount = item.discount or 0.0
         is_item_gift = bool(getattr(item, "is_gift", False))
+
         if is_item_gift:
             unit_price = 0.0
             line_total = 0.0
@@ -2961,16 +2974,25 @@ def _generate_pdf_bytes(po, is_draft=True):
                 if (item.recommendedPrice and item.recommendedPrice > 0)
                 else item.price
             )
-            qty = item.qty or 0
-            discount = item.discount or 0.0
             line_total = (unit_price * qty) * (1 - discount / 100.0)
             current_subtotal += line_total
+
+        # Clean item name: remove (ของแถมฟรี) and prevent duplicate productCode prefix
+        raw_name = (item.name or "").replace(" (ของแถมฟรี)", "").replace(" (แถมฟรี)", "").strip()
+        pcode = item.productCode or ""
+        if pcode and raw_name.startswith(pcode):
+            raw_name = raw_name[len(pcode):].lstrip(" -").strip()
+
+        if not raw_name and pcode:
+            p_obj = Product.query.filter_by(productCode=pcode).first()
+            if p_obj and p_obj.name:
+                raw_name = p_obj.name
 
         items_for_print.append(
             {
                 "index": idx,
-                "name": item.name,
-                "productCode": item.productCode or "",
+                "name": raw_name or pcode,
+                "productCode": pcode,
                 "quantity": qty,
                 "unit_price": unit_price,
                 "discount": discount,

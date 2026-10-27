@@ -4286,14 +4286,23 @@
             }).format(value);
         }
 
-        // NEW: Helper to remove (Code) from name
+        // NEW: Helper to remove (Code) from name, as well as (ของแถมฟรี) / duplicate codes
         function cleanProductName(name, code) {
-            if (!name || !code) return name;
-            // Remove (Code) from the end of the name, handling potential whitespace
-            // Escape code for regex special characters
-            const escapedCode = code.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-            const regex = new RegExp(`\\s*\\(${escapedCode}\\)$`, 'i');
-            return name.replace(regex, '').trim();
+            if (!name) return '';
+            let result = name;
+            // Remove promotional tags like (ของแถมฟรี), (แถมฟรี), [ของแถมฟรี], [แถมฟรี]
+            result = result.replace(/\s*[\(\[](?:ของ)?แถมฟรี[\)\]]/gi, '').trim();
+            if (code) {
+                // Remove (Code) from the end of the name, handling potential whitespace
+                const escapedCode = code.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                const regex = new RegExp(`\\s*\\(${escapedCode}\\)$`, 'i');
+                result = result.replace(regex, '').trim();
+                // Also if result starts with code, strip leading code
+                if (result.toLowerCase().startsWith(code.toLowerCase())) {
+                    result = result.substring(code.length).replace(/^[\s\-:]+/, '').trim();
+                }
+            }
+            return result;
         }
 
         function escapeHtml(value) {
@@ -5254,8 +5263,8 @@
             poItems.forEach(item => {
                 const imageSrc = item.imageUrl || placeholderImage;
                 const cleanName = cleanProductName(item.name, item.productCode);
-                const giftBadge = item.isGift ? '<span class="bg-purple-100 text-purple-800 font-bold px-1.5 py-0.5 rounded text-[10px] mr-1.5">🎁 ของแถมฟรี</span>' : '';
-                const displayHtml = item.productCode ? `${giftBadge}<span class="font-bold">${escapeHtml(item.productCode)}</span> - ${escapeHtml(cleanName)}` : `${giftBadge}${escapeHtml(item.name)}`;
+                const giftBadge = item.isGift ? '<span class="bg-purple-100 text-purple-800 font-bold px-1.5 py-0.5 rounded text-[10px] mr-1.5">แถมจากโปร</span>' : '';
+                const displayHtml = item.productCode ? `${giftBadge}<span class="font-bold">${escapeHtml(item.productCode)}</span>${cleanName ? ' - ' + escapeHtml(cleanName) : ''}` : `${giftBadge}${escapeHtml(cleanName || item.name || item.productCode)}`;
 
                 const actionButtons = item.isGift
                     ? `<span class="text-[11px] text-purple-600 font-bold px-2 py-1 bg-purple-50 rounded">แถมจากโปร</span>`
@@ -6273,8 +6282,8 @@
                     const imageUrl = item.imageUrl || 'https://placehold.co/60x60/e2e8f0/64748b?text=No+Image';
                     const productCode = item.productCode || '';
                     const cleanName = cleanProductName(item.name, productCode);
-                    const giftBadge = item.isGift ? `<span class="bg-purple-100 text-purple-800 font-bold px-1.5 py-0.5 rounded text-[10px] mr-1.5">🎁 ของแถมฟรี</span>` : '';
-                    const displayHtml = productCode ? `${giftBadge}<span class="font-bold">${escapeHtml(productCode)}</span> - ${escapeHtml(cleanName)}` : `${giftBadge}${escapeHtml(item.name)}`;
+                    const giftBadge = item.isGift ? `<span class="bg-purple-100 text-purple-800 font-bold px-1.5 py-0.5 rounded text-[10px] mr-1.5">แถมจากโปร</span>` : '';
+                    const displayHtml = productCode ? `${giftBadge}<span class="font-bold">${escapeHtml(productCode)}</span>${cleanName ? ' - ' + escapeHtml(cleanName) : ''}` : `${giftBadge}${escapeHtml(cleanName || item.name || productCode)}`;
 
                     // Desktop Row
                     itemsTable.innerHTML += `
@@ -6293,7 +6302,7 @@
                     // Mobile Card
                     if (mobileItems) {
                         const cleanName = cleanProductName(item.name, productCode);
-                        const displayHtml = productCode ? `<span class="font-bold">${escapeHtml(productCode)}</span> - ${escapeHtml(cleanName)}` : escapeHtml(item.name);
+                        const displayHtml = productCode ? `${giftBadge}<span class="font-bold">${escapeHtml(productCode)}</span>${cleanName ? ' - ' + escapeHtml(cleanName) : ''}` : `${giftBadge}${escapeHtml(cleanName || item.name || productCode)}`;
                         mobileItems.innerHTML += `
                             <div class="bg-white p-4 rounded-lg shadow border border-gray-200 flex gap-4">
                                 <img src="${imageUrl}" alt="${item.name}" class="w-20 h-20 object-cover rounded-lg border flex-shrink-0" onclick="openImageModal('${imageUrl}', '${escapeHtml(item.name)}')" style="cursor: pointer;">
@@ -11672,6 +11681,8 @@
                     subtotal: subtotal,
                     items: nonGiftItems.map(i => ({
                         productCode: i.productCode,
+                        name: i.name,
+                        imageUrl: i.imageUrl,
                         qty: i.qty,
                         price: i.price,
                         discount: i.discount,
@@ -11789,7 +11800,7 @@
                     discount: 0,
                     total: 0,
                     isGift: true,
-                    imageUrl: ''
+                    imageUrl: (promo.free_gift && promo.free_gift.imageUrl) || ''
                 });
                 renderPOTableItemsOnly();
             } else if (hadGifts) {
@@ -11855,8 +11866,8 @@
             poItems.forEach(item => {
                 const imageSrc = item.imageUrl || placeholderImage;
                 const cleanName = cleanProductName(item.name, item.productCode);
-                const giftBadge = item.isGift ? '<span class="bg-purple-100 text-purple-800 font-bold px-1.5 py-0.5 rounded text-[10px] mr-1.5">🎁 ของแถมฟรี</span>' : '';
-                const displayHtml = item.productCode ? `${giftBadge}<span class="font-bold">${escapeHtml(item.productCode)}</span> - ${escapeHtml(cleanName)}` : `${giftBadge}${escapeHtml(item.name)}`;
+                const giftBadge = item.isGift ? '<span class="bg-purple-100 text-purple-800 font-bold px-1.5 py-0.5 rounded text-[10px] mr-1.5">แถมจากโปร</span>' : '';
+                const displayHtml = item.productCode ? `${giftBadge}<span class="font-bold">${escapeHtml(item.productCode)}</span>${cleanName ? ' - ' + escapeHtml(cleanName) : ''}` : `${giftBadge}${escapeHtml(cleanName || item.name || item.productCode)}`;
 
                 const actionButtons = item.isGift
                     ? `<span class="text-[11px] text-purple-600 font-bold px-2 py-1 bg-purple-50 rounded">แถมจากโปร</span>`
