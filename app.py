@@ -5578,22 +5578,39 @@ def _sync_to_sap_b1(po, user, customer_ref_no=None, comments=None):
 
         doc_lines = []
         for item in po.items:
-            # คำนวณ Discount % สำหรับ SAP B1 (ช่อง "Discount %" บน DocumentLines)
-            # ข้อ 2: ส่วนลดใน ItemCode ใช้สำหรับส่งเข้า SAP B1 เท่านั้น
-            item_discount = 0.0
-            prod = item.product
-            if not prod and item.productCode:
-                prod = Product.query.filter_by(productCode=item.productCode).first()
-            if prod and getattr(prod, "discountPercent", None) is not None and float(prod.discountPercent or 0.0) > 0:
-                item_discount = float(prod.discountPercent)
-            elif item.discount is not None and float(item.discount) > 0:
-                item_discount = float(item.discount)
+            is_item_gift = bool(getattr(item, "is_gift", False))
+
+            # คำนวณ UnitPrice และ Discount % สำหรับ SAP B1 (ช่อง "Discount %" บน DocumentLines)
+            # ข้อ 1: สินค้าที่แถม จะต้องไม่มีราคา (0.00) และ Discount จะเป็น 0.00
+            # ข้อ 2: สินค้าแต่ละชิ้น (ที่ไม่ใช่ของแถม) จะต้องแสดง Discount ตามในตาราง Product (Product.discountPercent)
+            if is_item_gift:
+                unit_price = 0.0
+                item_discount = 0.0
+            else:
+                unit_price = float(
+                    item.recommendedPrice
+                    if (item.recommendedPrice and item.recommendedPrice > 0)
+                    else (item.price or 0.0)
+                )
+                item_discount = 0.0
+                prod = item.product
+                if not prod and item.productCode:
+                    prod = Product.query.filter_by(productCode=item.productCode).first()
+                if prod and getattr(prod, "discountPercent", None) is not None and float(prod.discountPercent or 0.0) > 0:
+                    item_discount = float(prod.discountPercent)
+                elif item.discount is not None and float(item.discount) > 0:
+                    item_discount = float(item.discount)
+
+            clean_desc = (item.name or "").replace(" (ของแถมฟรี)", "").replace(" (แถมฟรี)", "").strip()
+            pcode = item.productCode or f"GEN-{item.id}"
+            if pcode and clean_desc.startswith(pcode):
+                clean_desc = clean_desc[len(pcode):].lstrip(" -:").strip()
 
             line_data = {
-                "ItemCode": item.productCode or f"GEN-{item.id}",
-                "ItemDescription": item.name,
+                "ItemCode": pcode,
+                "ItemDescription": clean_desc or pcode,
                 "Quantity": float(item.qty),
-                "UnitPrice": float(item.recommendedPrice or item.price or 0.0),
+                "UnitPrice": unit_price,
                 "DiscountPercent": item_discount,
             }
             if default_bu:
@@ -5713,24 +5730,42 @@ def get_sap_so_preview(po_id):
 
     items_preview = []
     for idx, item in enumerate(po.items):
-        price = item.recommendedPrice if (item.recommendedPrice and item.recommendedPrice > 0) else (item.price or 0.0)
-        prod = item.product
-        if not prod and item.productCode:
-            prod = Product.query.filter_by(productCode=item.productCode).first()
-        item_discount = 0.0
-        if prod and getattr(prod, "discountPercent", None) is not None and float(prod.discountPercent or 0.0) > 0:
-            item_discount = float(prod.discountPercent)
-        elif item.discount is not None and float(item.discount) > 0:
-            item_discount = float(item.discount)
+        is_item_gift = bool(getattr(item, "is_gift", False))
+
+        if is_item_gift:
+            price = 0.0
+            item_discount = 0.0
+            line_total = 0.0
+        else:
+            price = float(
+                item.recommendedPrice
+                if (item.recommendedPrice and item.recommendedPrice > 0)
+                else (item.price or 0.0)
+            )
+            item_discount = 0.0
+            prod = item.product
+            if not prod and item.productCode:
+                prod = Product.query.filter_by(productCode=item.productCode).first()
+            if prod and getattr(prod, "discountPercent", None) is not None and float(prod.discountPercent or 0.0) > 0:
+                item_discount = float(prod.discountPercent)
+            elif item.discount is not None and float(item.discount) > 0:
+                item_discount = float(item.discount)
+            line_total = float(item.qty) * price
+
+        clean_name = (item.name or "").replace(" (ของแถมฟรี)", "").replace(" (แถมฟรี)", "").strip()
+        pcode = item.productCode or "N/A"
+        if pcode and clean_name.startswith(pcode):
+            clean_name = clean_name[len(pcode):].lstrip(" -:").strip()
 
         items_preview.append({
             "index": idx + 1,
-            "product_code": item.productCode or "N/A",
-            "name": item.name,
+            "product_code": pcode,
+            "name": clean_name or pcode,
             "qty": item.qty,
             "unit_price": price,
             "discount_percent": item_discount,
-            "line_total": item.qty * price
+            "line_total": line_total,
+            "is_gift": is_item_gift
         })
 
     default_comments = po.sap_remarks or f"Created from QT-Online {po.poNumber} by {current_user.fullName}"
