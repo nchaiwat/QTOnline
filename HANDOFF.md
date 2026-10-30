@@ -34,6 +34,11 @@
   - ปรับปรุง [scripts/migrate_sap_and_telegram_settings.py](file:///d:/Python/PO-Online/scripts/migrate_sap_and_telegram_settings.py) ให้อัปเดตค่า `sap_b1_default_bu` ในตาราง `system_settings` จากเดิม `"WA"` เป็น `"SALE-DL"` โดยอัตโนมัติ
   - รันอัปเดตค่าจริงในฐานข้อมูล PostgreSQL เรียบร้อยแล้ว
 
+### 19. ปรับขนาดตัวอักษร Customer Code ในตาราง QT Management ให้มีขนาดเท่ากับคอลัมน์อื่น
+- **ปัญหาเดิม:** ในหน้าตาราง QT Management (`#page-po-list`) คอลัมน์ Customer Code ถูกกำหนดคลาส CSS เป็น `font-mono text-xs` ทำให้ตัวอักษรเล็กและเป็นฟอนต์ความกว้างคงที่ (Monospace) ซึ่งไม่เท่ากับคอลัมน์อื่นๆ เช่น QT Number หรือ Customer Name
+- **การแก้ไข:**
+  - ปรับปรุง [app.html](file:///d:/Python/PO-Online/app.html) ในฟังก์ชัน `renderPOTableList()` โดยเปลี่ยน `<td class="px-6 py-4 font-mono text-xs">` เป็น `<td class="px-6 py-4">` ให้ใช้ขนาดฟอนต์มาตรฐาน (`text-sm`) เสมอกับคอลัมน์อื่นๆ ทุกคอลัมน์ในแถวเดียวกัน
+
 ---
 
 ## 📌 สรุปการอัปเดตก่อนหน้า (2026-10-27)
