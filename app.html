@@ -4357,8 +4357,8 @@
                 document.getElementById('user-name').textContent = currentUser.fullName;
                 document.getElementById('user-role').textContent = currentUser.role;
 
-                // Check SAP B1 status and authentication for this user
-                checkUserSapStatus();
+                // Check SAP B1 status and authentication for this user (with feedback toast)
+                checkUserSapStatus(false, true);
 
                 // Show default page and render tables
                 showPage('page-dashboard');
@@ -10495,12 +10495,19 @@
         }
 
         // --- User Profile & SAP Account Management ---
-        async function checkUserSapStatus(refresh = false) {
+        async function checkUserSapStatus(refresh = false, showFeedback = false) {
             try {
                 const res = await fetchApi(`/api/me/sap-status?refresh=${refresh ? '1' : '0'}`);
                 if (res) {
                     window.userSapStatus = res;
                     updateTopSapIndicator();
+                    if (showFeedback && res.sap_enabled) {
+                        if (res.can_create_so) {
+                            showToast(`🟢 เชื่อมต่อ SAP B1 สำเร็จ (${res.sap_account})`, 'success', 3500);
+                        } else if (res.has_credentials && !res.login_valid) {
+                            showToast(`⚠️ การเข้าสู่ระบบ SAP B1 ไม่สำเร็จ: ${res.reason || 'กรุณาตรวจสอบรหัสผ่าน'}`, 'warning', 7000);
+                        }
+                    }
                 }
             } catch (err) {
                 console.error('Failed to check user SAP status:', err);
@@ -10665,12 +10672,9 @@
             }
 
             try {
-                const res = await fetchApi('/api/me/test-sap-login', {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        sap_account: sapAcc,
-                        sap_password: sapPwd
-                    })
+                const res = await fetchApi('/api/me/test-sap-login', 'POST', {
+                    sap_account: sapAcc,
+                    sap_password: sapPwd
                 });
 
                 if (res && res.success) {
@@ -10726,12 +10730,9 @@
             }
 
             try {
-                const res = await fetchApi('/api/me/sap-profile', {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        sap_account: sapAcc,
-                        sap_password: sapPwd
-                    })
+                const res = await fetchApi('/api/me/sap-profile', 'POST', {
+                    sap_account: sapAcc,
+                    sap_password: sapPwd
                 });
 
                 if (res && res.success) {
@@ -10978,15 +10979,27 @@
         // --- API Helper ---
         async function fetchApi(url, method = 'GET', body = null) {
             try {
+                let actualMethod = method;
+                let actualBody = body;
+
+                // Support fetch options object as 2nd parameter: fetchApi(url, { method: 'POST', body: ... })
+                if (typeof method === 'object' && method !== null) {
+                    actualMethod = method.method || 'GET';
+                    actualBody = method.body !== undefined ? method.body : null;
+                    if (typeof actualBody === 'string') {
+                        try { actualBody = JSON.parse(actualBody); } catch (e) {}
+                    }
+                }
+
                 const options = {
-                    method: method,
+                    method: actualMethod,
                 };
                 // Only set headers if NOT FormData
-                if (method !== 'GET' && !(body instanceof FormData)) {
+                if (actualMethod !== 'GET' && !(actualBody instanceof FormData)) {
                     options.headers = { 'Content-Type': 'application/json' };
-                    options.body = JSON.stringify(body);
-                } else if (body instanceof FormData) {
-                    options.body = body; // Let browser set Content-Type
+                    options.body = JSON.stringify(actualBody);
+                } else if (actualBody instanceof FormData) {
+                    options.body = actualBody; // Let browser set Content-Type
                 }
 
                 const response = await fetch(`${getBaseUrl()}${url}`, options);
@@ -10996,19 +11009,18 @@
                     return null;
                 }
                 if (!response.ok) {
-                    const errorData = await response.json();
+                    let errorData = null;
+                    try { errorData = await response.json(); } catch(e) {}
                     console.error("API Error:", response.status, errorData);
-                    // *** FIX: Use console.warn instead of alert ***
-                    console.warn(`Error: ${errorData.error || 'Unknown server error'}`);
-                    return null;
+                    console.warn(`Error: ${errorData?.error || errorData?.message || 'Unknown server error'}`);
+                    return errorData || null;
                 }
-                if (response.status === 204 || method === 'DELETE') { // No Content
+                if (response.status === 204 || actualMethod === 'DELETE') { // No Content
                     return { success: true };
                 }
                 return await response.json();
             } catch (error) {
                 console.error("Fetch API error:", error);
-                // *** FIX: Use console.warn instead of alert ***
                 console.warn(`Fetch Error: ${error.message}`);
                 return null;
             }
