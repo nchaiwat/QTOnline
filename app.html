@@ -7559,8 +7559,8 @@
                     const discountDisplay = Number.isFinite(discNumber) && discNumber > 0 ? `${discNumber.toFixed(2)}%` : '-';
 
                     let actionButtons = `
-                        <button type="button" class="inline-flex items-center px-3 py-1 bg-white border border-gray-300 rounded-lg text-blue-600 hover:text-blue-800 hover:border-blue-400 transition-colors product-view-button mr-2" data-product-code="">
-                            <i data-lucide="eye" class="w-4 h-4 mr-1"></i> View
+                        <button type="button" class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white border border-gray-300 text-gray-700 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition shadow-sm product-view-button mr-1.5" data-product-code="" title="ดูรายละเอียดสินค้า">
+                            <i data-lucide="eye" class="w-4 h-4"></i>
                         </button>
                     `;
 
@@ -8180,8 +8180,8 @@
                 const isSelected = selectedIds.customer.includes(String(customer.id));
 
                 let actionButtons = `
-                    <button type="button" onclick="openCustomerDetail('${safeCode}')" class="inline-flex items-center px-3 py-1 bg-white border border-gray-300 rounded-lg text-blue-600 hover:text-blue-800 hover:border-blue-400 transition-colors mr-2">
-                        <i data-lucide="eye" class="w-4 h-4 mr-1"></i> View
+                    <button type="button" onclick="openCustomerDetail('${safeCode}')" class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white border border-gray-300 text-gray-700 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition shadow-sm mr-1.5" title="ดูรายละเอียดลูกค้า">
+                        <i data-lucide="eye" class="w-4 h-4"></i>
                     </button>
                 `;
 

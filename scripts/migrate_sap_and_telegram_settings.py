@@ -73,7 +73,16 @@ def run_migration():
             else:
                 print(f"      - Exists setting: '{key}'")
         
-        db.session.commit()
+        # 4. Set default 20% discount on existing products without discount
+        print("[4/4] Updating existing products discount to 20% for SAP B1...")
+        try:
+            update_sql = 'UPDATE products SET "discountPercent" = 20.0 WHERE "discountPercent" IS NULL OR "discountPercent" = 0.0;'
+            result = db.session.execute(text(update_sql))
+            db.session.commit()
+            print(f"      - Updated {result.rowcount} products to 20.0% discount.")
+        except Exception as e:
+            print(f"      - Product discount update warning: {e}")
+
         print("=====================================================")
         print(" Migration completed successfully!                   ")
         print("=====================================================")

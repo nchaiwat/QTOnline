@@ -335,7 +335,7 @@ class Product(db.Model):
     itemGroup = db.Column(db.String(200))
     inactive = db.Column(db.Boolean, default=False)
     itemCost = db.Column(db.Numeric(18, 2))
-    discountPercent = db.Column(db.Numeric(5, 2), default=0.0)
+    discountPercent = db.Column(db.Numeric(5, 2), default=20.0)
 
     def to_dict(self):
         try:
@@ -1251,6 +1251,8 @@ def _assign_product_fields(product: Product, row: dict):
     )
     if discount is not None:
         product.discountPercent = float(discount)
+    elif product.discountPercent is None or float(product.discountPercent or 0.0) == 0.0:
+        product.discountPercent = 20.0
 
     product.inStock = _parse_decimal(row.get("In Stock"))
     
