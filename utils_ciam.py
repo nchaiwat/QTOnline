@@ -330,8 +330,8 @@ def _authenticate_windows_ad(username: str, password: str) -> bool:
         advapi32 = ctypes.windll.advapi32
         kernel32 = ctypes.windll.kernel32
         token = wintypes.HANDLE()
-        # Try wa.net, WINDOWASIA, and current default domain
-        for domain in ["wa.net", "WINDOWASIA", None]:
+        # Try wa, wa.net, WINDOWASIA, and current default domain
+        for domain in ["wa", "wa.net", "WINDOWASIA", None]:
             res = advapi32.LogonUserW(username, domain, password, 3, 0, ctypes.byref(token))
             if res:
                 if token:

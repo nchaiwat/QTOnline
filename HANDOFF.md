@@ -1,12 +1,25 @@
 # Project Handoff Document - QT-Online
 
-**Date:** 2026-10-27  
+**Date:** 2026-10-30  
 **Repository:** `https://github.com/nchaiwat/QTOnline.git` (`main` branch)  
 **Production Server:** VPS `srv832658` (`qol.windowasia.com`)  
 
 ---
 
-## 📌 สรุปการอัปเดตล่าสุด (2026-10-27)
+## 📌 สรุปการอัปเดตล่าสุด (2026-10-30)
+
+### 16. แก้ไขปัญหาการเข้าใช้งาน Local Server (พอร์ต 8080) และรองรับ Windows AD โดเมน "wa"
+- **ปัญหาเดิม:**
+  - เซิร์ฟเวอร์ Local บนพอร์ต 8080 ไม่ได้ทำงานอยู่ใน Background ทำให้เปิดเข้าลิงก์ `http://localhost:8080/` ไม่ได้ (Connection Refused)
+  - ในฟังก์ชัน `_authenticate_windows_ad` มีการระบุโดเมนสำหรับทดสอบสิทธิ์ AD เพียง `wa.net` และ `WINDOWASIA` แต่โดเมนจริงของเครื่องทำงาน Local คือ `wa` (จาก `whoami` -> `wa\chaiwat.n`) ส่งผลให้การ Logon ผ่าน Windows API อาจไม่ตรงโดเมน
+- **การแก้ไข:**
+  - ปรับปรุง `utils_ciam.py`: เพิ่มชื่อโดเมน `"wa"` เข้าในรายการโดเมนที่ทดสอบของ `_authenticate_windows_ad` ทำให้ผู้ใช้ `Chaiwat.N` สามารถยืนยันตัวตนเข้าสู่ระบบผ่าน Windows Active Directory ได้ทันที (<0.05 วินาที)
+  - เริ่มการทำงานของ Flask Development Server บนพอร์ต 8080 (`http://localhost:8080/`) ในสถานะ Background Daemon Process อย่างสมบูรณ์
+  - เชื่อมต่อและอัปเดต Migration ฐานข้อมูลใน Docker Container ให้รองรับทั้งพอร์ต 80 และพอร์ต 8080 เรียบร้อย
+
+---
+
+## 📌 สรุปการอัปเดตก่อนหน้า (2026-10-27)
 
 ### 1. แก้ไขระบบ Telegram Bot Token ให้ดึงจาก System Settings ใน Database
 - **ปัญหาเดิม:** การแจ้งเตือน Telegram ใน Background Thread ทำงานนอก Flask Context ทำให้เรียก `SystemSetting.get_value()` ล้มเหลวและ Fallback ไปใช้ Token เก่าใน `.env` ที่หมดอายุ/ถูกยกเลิก ส่งผลให้ไม่มีข้อความเข้า Group Chat
