@@ -278,24 +278,29 @@ docker stats --no-stream
 ---
 
 ## 5. สิ่งที่จะทำต่อใน Session ถัดไป (Next Session Tasks)
-1. **อัปเดต Telegram Bot Token ใหม่ในหน้า System Settings:**
-   - หลังจาก Bot Token เดิมถูก Revoke บน Telegram BotFather ให้ผู้ดูแลระบบนำ Token ตัวใหม่จาก `@BotFather` มาบันทึกในหน้าเว็บ `#page-settings` (หัวข้อ Telegram Notification)
-   - ทดสอบกด "Submit for Review" ในใบ QT เพื่อยืนยันว่ามีข้อความแจ้งเตือนเข้า Telegram Group ถูกต้องสมบูรณ์
-2. **Deploy โค้ดล่าสุดขึ้น VPS Hostinger (`srv832658`):**
-   - รันคำสั่งมาตรฐานบน Production:
+1. **Deploy โค้ดล่าสุดขึ้น VPS Hostinger (`srv832658`):**
+   - รันคำสั่ง Deploy พร้อม Full Backup ฐานข้อมูลก่อนการอัปเดต:
      ```bash
      cd /var/www/QT-Online
+     mkdir -p backups
+     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+     docker exec -t qt-online-db pg_dump -U WAUser qt_online_db > backups/db_backup_${TIMESTAMP}.sql
      git stash -u
      git pull origin main
      docker compose up -d --no-deps --build web
-     docker compose ps
+     docker compose restart nginx
+     docker compose exec web python scripts/migrate_sap_and_telegram_settings.py
      ```
-3. **ทดสอบสร้าง Sales Order บน SAP Business One จริง:**
-   - ทดสอบเปิด Modal พรีวิวสร้าง Sales Order (`#sap-so-modal`) สำหรับใบเสนอราคาที่มีสินค้าของแถม
-   - ตรวจสอบว่าบรรทัดของแถมส่งเข้า SAP B1 ด้วย `UnitPrice = 0.00` และ `DiscountPercent = 0.00%` และบรรทัดสินค้าหลักส่ง `DiscountPercent` ตาม Product Master อย่างถูกต้อง
-4. **ตรวจสอบความสมบูรณ์ของ UI และเอกสารพิมพ์:**
-   - ตรวจสอบหน้า QT Detail (`app.html` ในส่วน `viewPO`) ว่าปุ่ม `Print Draft` เรียงตัวเสมอกับปุ่ม Action อื่นๆ ของ Admin
-   - ตรวจสอบใบพิมพ์ PDF ([po_print.html](po_print.html)) และหน้า [customer_portal.html](customer_portal.html) สำหรับรายการของแถมว่าแสดงป้าย `แถมจากโปร` และตัดข้อความซ้ำซ้อนอย่างสวยงาม
+2. **ทดสอบสร้าง Sales Order บน SAP Business One จริง:**
+   - ทดสอบเปิด Modal พรีวิวสร้าง Sales Order (`#sap-so-modal`) สำหรับใบเสนอราคาที่มีสินค้า
+   - ตรวจสอบว่า Business Unit (CostingCode / Dimension 1) ถูกส่งเป็น `"SALE-DL"`
+   - ตรวจสอบว่าสินค้าหลักส่งส่วนลด `DiscountPercent = 20.00%` เข้า SAP B1
+   - ตรวจสอบว่ารายการของแถมส่งเข้า SAP B1 ด้วย `UnitPrice = 0.00` และ `DiscountPercent = 0.00%`
+3. **ตรวจสอบ UI บน VPS Production:**
+   - ตรวจสอบว่าปุ่ม Action View ในหน้า Products และ Customers แสดงเป็นไอคอนลูกตา 👁️ กะทัดรัดเรียบร้อยสวยงาม
+   - ตรวจสอบขนาดตัวอักษร Customer Code ในหน้า QT Management ว่ามีขนาดเท่ากับคอลัมน์อื่น
+4. **อัปเดต Telegram Bot Token ใหม่ในหน้า System Settings:**
+   - นำ Token ตัวใหม่จาก `@BotFather` มาบันทึกในหน้าเว็บ `#page-settings` (หัวข้อ Telegram Notification) หากต้องการเปิดใช้งานการแจ้งเตือน Telegram กลุ่ม
 
 ---
 
