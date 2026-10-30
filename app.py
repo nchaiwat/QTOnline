@@ -5228,7 +5228,7 @@ def get_sap_settings_api():
             "sap_b1_service_url": SystemSetting.get_value("sap_b1_service_url", "https://sap.windowasia.com:50000/b1s/v1"),
             "sap_b1_company_db": SystemSetting.get_value("sap_b1_company_db", "WINDOW_ASIA_LIVE"),
             "sap_b1_enabled": bool(SystemSetting.get_value("sap_b1_enabled", False)),
-            "sap_b1_default_bu": SystemSetting.get_value("sap_b1_default_bu", "WA"),
+            "sap_b1_default_bu": SystemSetting.get_value("sap_b1_default_bu", "SALE-DL"),
             "sap_b1_default_dept": SystemSetting.get_value("sap_b1_default_dept", "SA"),
         }
     }), 200
@@ -5573,7 +5573,7 @@ def _sync_to_sap_b1(po, user, customer_ref_no=None, comments=None):
 
         # 2. Prepare Order Payload
         due_date = po.deliveryDate.strftime("%Y-%m-%d") if po.deliveryDate else now_bangkok().strftime("%Y-%m-%d")
-        default_bu = SystemSetting.get_value("sap_b1_default_bu", "WA") or "WA"
+        default_bu = SystemSetting.get_value("sap_b1_default_bu", "SALE-DL") or "SALE-DL"
         default_dept = SystemSetting.get_value("sap_b1_default_dept", "SA") or "SA"
 
         doc_lines = []

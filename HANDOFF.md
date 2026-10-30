@@ -26,6 +26,14 @@
   - ปรับปรุง `testSapProfileConnection` และ `handleSaveProfileSap` ใน `app.html` ให้ส่ง Parameter เข้า `fetchApi` อย่างถูกต้อง ทำให้สามารถบันทึกรหัสผ่านและทดสอบเชื่อมต่อ SAP Service Layer ได้อย่างสมบูรณ์
   - เพิ่มพารามิเตอร์ `showFeedback` ให้กับ `checkUserSapStatus(false, true)` เมื่อระบบเริ่มต้นทำงาน (`initApp`) เพื่อแสดง Toast แจ้งเตือนสถานะการเชื่อมต่อ SAP B1 (เช่น `🟢 เชื่อมต่อ SAP B1 สำเร็จ` หรือ `⚠️ การเข้าสู่ระบบ SAP B1 ไม่สำเร็จ: [สาเหตุ]`) ให้ผู้ใช้ทราบทันทีตั้งแต่เข้าสู่ระบบ
 
+### 18. ปรับเปลี่ยน Business Unit (CostingCode) ที่ส่งเข้า SAP Business One จาก "WA" เป็น "SALE-DL"
+- **ความต้องการ:** ปรับเปลี่ยนค่า Business Unit (Dimension 1 / CostingCode) ใน DocumentLines ของ Sales Order ที่ยิงเข้า SAP B1 Service Layer จากเดิมที่เป็น `"WA"` ให้เป็น `"SALE-DL"`
+- **การแก้ไข:**
+  - ปรับค่า Default Fallback ใน Backend [app.py](file:///d:/Python/PO-Online/app.py) (`_sync_to_sap_b1` และ `get_sap_settings_api`) จาก `"WA"` เป็น `"SALE-DL"`
+  - ปรับหน้าตั้งค่าใน Frontend [app.html](file:///d:/Python/PO-Online/app.html) (เมนู Settings -> SAP B1 Integration) ให้แสดง Placeholder และ Default Value เป็น `"SALE-DL"`
+  - ปรับปรุง [scripts/migrate_sap_and_telegram_settings.py](file:///d:/Python/PO-Online/scripts/migrate_sap_and_telegram_settings.py) ให้อัปเดตค่า `sap_b1_default_bu` ในตาราง `system_settings` จากเดิม `"WA"` เป็น `"SALE-DL"` โดยอัตโนมัติ
+  - รันอัปเดตค่าจริงในฐานข้อมูล PostgreSQL เรียบร้อยแล้ว
+
 ---
 
 ## 📌 สรุปการอัปเดตก่อนหน้า (2026-10-27)

@@ -51,6 +51,8 @@ def run_migration():
             ("sap_b1_service_url", "https://sap.windowasia.com:50000/b1s/v1", "SAP Business One Service Layer API URL", "sap_b1", "string"),
             ("sap_b1_company_db", "WINDOW_ASIA_LIVE", "SAP B1 Company Database Name", "sap_b1", "string"),
             ("sap_b1_enabled", "false", "เปิด/ปิดการเชื่อมต่อระบบ SAP Business One API", "sap_b1", "boolean"),
+            ("sap_b1_default_bu", "SALE-DL", "SAP B1 Default Business Unit (CostingCode)", "sap_b1", "string"),
+            ("sap_b1_default_dept", "SA", "SAP B1 Default Department (CostingCode2)", "sap_b1", "string"),
 
             # AI Copilot (CIAM Spec v2.8.0)
             ("ai_copilot_enabled", "false", "เปิด/ปิดระบบผู้ช่วยอัจฉริยะ AI Copilot ประจำระบบ", "ai_copilot", "boolean"),
@@ -65,6 +67,9 @@ def run_migration():
             if not existing:
                 SystemSetting.set_value(key, val, description=desc, category=cat, data_type=dtype)
                 print(f"      - Created setting: '{key}' ({cat})")
+            elif key == "sap_b1_default_bu" and existing.value == "WA":
+                SystemSetting.set_value(key, "SALE-DL", description=desc, category=cat, data_type=dtype)
+                print(f"      - Updated setting: '{key}' to 'SALE-DL'")
             else:
                 print(f"      - Exists setting: '{key}'")
         
