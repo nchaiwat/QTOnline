@@ -49,6 +49,14 @@
 
 ---
 
+### 21. แก้ไขปัญหา Local Server ไม่สามารถ Start บน Windows Python 3.14 (WinError 10014)
+- **ปัญหาเดิม:** เมื่อรัน Flask บน Windows Local ด้วย Python 3.14 และกำหนด `debug=True` ตัว Reloader ของ Werkzeug จะเกิดข้อผิดพลาด `OSError: [WinError 10014] The system detected an invalid pointer address in attempting to use a pointer argument in a call` ในโมดูล Socket ทำให้เซิร์ฟเวอร์ Crash ทันทีที่สตาร์ท และเบราว์เซอร์แสดงผลเป็น `ERR_CONNECTION_REFUSED`
+- **การแก้ไข:**
+  - ปรับปรุง [app.py](file:///d:/Python/PO-Online/app.py): แก้ไขคำสั่งเริ่มต้นการทำงานเป็น `app.run(host="127.0.0.1", port=8080, debug=False)` เพื่อปิด Reloader socket monitoring ที่ขัดแย้งกับ Python 3.14 บน Windows และ Bind เข้า Localhost อย่างถูกต้อง
+  - สตาร์ทเซอร์วิส Background Daemon และทดสอบการเรียกใช้งานผ่าน `http://localhost:8080/health` และ `http://localhost:8080/` สำเร็จ (HTTP 200 OK)
+
+---
+
 ## 📌 สรุปการอัปเดตก่อนหน้า (2026-10-27)
 
 ### 1. แก้ไขระบบ Telegram Bot Token ให้ดึงจาก System Settings ใน Database

@@ -6590,4 +6590,4 @@ if __name__ == "__main__":
     print("----------------------------------------------------------------")
     # debug=True จะช่วย Auto-reload เมื่อแก้ไฟล์ code
     # FIX: Run on Port 8080 as requested for Docker environment
-    app.run(host="0.0.0.0", port=8080, debug=True)
+    app.run(host="127.0.0.1", port=8080, debug=False)
