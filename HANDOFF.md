@@ -55,6 +55,19 @@
   - ปรับปรุง [app.py](file:///d:/Python/PO-Online/app.py): แก้ไขคำสั่งเริ่มต้นการทำงานเป็น `app.run(host="127.0.0.1", port=8080, debug=False)` เพื่อปิด Reloader socket monitoring ที่ขัดแย้งกับ Python 3.14 บน Windows และ Bind เข้า Localhost อย่างถูกต้อง
   - สตาร์ทเซอร์วิส Background Daemon และทดสอบการเรียกใช้งานผ่าน `http://localhost:8080/health` และ `http://localhost:8080/` สำเร็จ (HTTP 200 OK)
 
+### 22. ตรวจสอบและวินิจฉัยปัญหาการเชื่อมต่อ SAP B1 Service Layer บน VPS เกิด HTTP Error 502 (Bad Gateway)
+- **อาการและข้อเท็จจริง:**
+  - บน Local (Development) สามารถเชื่อมต่อและยืนยันตัวตนกับ SAP B1 ได้ตามปกติผ่าน Internal IP: `https://192.168.12.17:50000/b1s/v2/Login` (เครือข่ายภายในองค์กร LAN/VPN)
+  - บน Production VPS (Hostinger) ได้รับข้อผิดพลาด `เข้าสู่ระบบ SAP ไม่สำเร็จ: SAP ปฏิเสธการเข้าสู่ระบบ: HTTP Error 502` เมื่อเรียกใช้งานผ่าน Public Domain: `https://sapb1.waapps.net/b1s/v2/Login`
+- **ผลการวิเคราะห์เชิงลึก (Cloudflare Diagnostic & Edge Investigation):**
+  - จากการจำลองยิง Request ตรงไปยัง `sapb1.waapps.net` พบ Response Header `Server: cloudflare`, `Server-Timing: cfEdge;dur=16, cfOrigin;dur=95` พร้อม Error Page: `Browser: Working`, `Cloudflare: Working`, `Host: Error (502 Bad Gateway)`
+  - ยืนยันว่าโค้ดและคอนฟิกของระบบ QT-Online ทั้งบน Local และ VPS ทำงานถูกต้อง 100% ไม่ได้มีการเปลี่ยนแปลงค่าที่ผิดพลาด
+  - สาเหตุที่แท้จริงเกิดจาก **Cloudflare Edge พยายามส่งต่อ Request ไปยัง Origin Server ภายในองค์กร (เครื่อง SAP หรือ Reverse Proxy/Cloudflare Tunnel) แต่ถูกปฏิเสธการเชื่อมต่อ หรือ Service ปลายทางหยุดทำงานภายใน 95ms**
+- **ข้อสรุปและแนวทางตรวจเช็คที่ระบบเครือข่ายองค์กร (Network/Infra Action Items):**
+  1. ตรวจสอบสถานะการทำงานของ Cloudflare Tunnel (`cloudflared` daemon) บนเซิร์ฟเวอร์ Gateway ฝั่งองค์กร ว่าหลุด/ดับหรือไม่
+  2. กรณีใช้ Port Forwarding: ตรวจสอบการเปลี่ยนแปลงของ Public WAN IP, การบล็อกพอร์ตของ Firewall หรือสถานะของ Reverse Proxy (Nginx/IIS/Apache) ตัวหน้าสุด
+  3. ตรวจสอบการตั้งค่า SSL/TLS Mode ใน Cloudflare Dashboard ให้สอดคล้องกับ Certificate ของ Origin Server ภายในองค์กร
+
 ---
 
 ## 📌 สรุปการอัปเดตก่อนหน้า (2026-10-27)
