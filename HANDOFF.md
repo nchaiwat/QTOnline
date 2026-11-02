@@ -68,6 +68,14 @@
   2. กรณีใช้ Port Forwarding: ตรวจสอบการเปลี่ยนแปลงของ Public WAN IP, การบล็อกพอร์ตของ Firewall หรือสถานะของ Reverse Proxy (Nginx/IIS/Apache) ตัวหน้าสุด
   3. ตรวจสอบการตั้งค่า SSL/TLS Mode ใน Cloudflare Dashboard ให้สอดคล้องกับ Certificate ของ Origin Server ภายในองค์กร
 
+### 23. อัปเดตและทดสอบระบบการส่ง Telegram Notification ด้วย Bot Token และ Group Chat ID ชุดใหม่สำเร็จ
+- **รายละเอียดการตั้งค่า:**
+  - ได้รับการอัปเดต Bot Token ใหม่ (`9163446372...`) และ Group Chat ID ใหม่ (`-5357130149`) เข้าสู่ตาราง `system_settings` ผ่านหน้าจอ System Settings เรียบร้อย
+- **ผลการทดสอบ:**
+  - ทดสอบการส่งแบบ Synchronous ผ่านฟังก์ชัน `test_telegram_sync`: ส่งข้อความทดสอบสำเร็จ ได้รับผลลัพธ์ `True` (ข้อความเด้งเข้ากลุ่ม Telegram สมบูรณ์)
+  - ทดสอบการส่งแบบ Asynchronous Background Daemon Thread ผ่าน `send_telegram_msg`: ทำงานราบรื่น ดึงค่าคอนฟิกจาก `SystemSetting` ได้อย่างถูกต้อง และส่งข้อความเข้ากลุ่มโดยไม่มี Error
+- **สถานะ:** ระบบแจ้งเตือน Telegram พร้อมใช้งานตามปกติในทุก Event (เช่น การส่ง QT ขออนุมัติ, การอนุมัติ, การปฏิเสธ, และการเซ็นชื่อดิจิทัล)
+
 ---
 
 ## 📌 สรุปการอัปเดตก่อนหน้า (2026-10-27)
