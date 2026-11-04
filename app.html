@@ -11699,6 +11699,7 @@
                 const res = await fetchApi('/api/promotions/evaluate', 'POST', {
                     subtotal: subtotal,
                     items: nonGiftItems.map(i => ({
+                        tempId: i.tempId,
                         productCode: i.productCode,
                         name: i.name,
                         imageUrl: i.imageUrl,
@@ -11807,19 +11808,42 @@
             const hadGifts = poItems.some(i => i.isGift);
             poItems = poItems.filter(i => !i.isGift);
 
-            if (promo && promo.free_gift) {
-                poItems.push({
-                    tempId: Date.now() + Math.random(),
-                    productId: null,
-                    productCode: promo.free_gift.productCode || 'FREE-GIFT',
-                    name: promo.free_gift.name || 'ของแถมโปรโมชั่น',
-                    qty: Number(promo.free_gift.qty) || 1,
-                    price: 0,
-                    recommendedPrice: 0,
-                    discount: 0,
-                    total: 0,
-                    isGift: true,
-                    imageUrl: (promo.free_gift && promo.free_gift.imageUrl) || ''
+            const gifts = (promo && (promo.free_gifts || (promo.free_gift ? [promo.free_gift] : []))) || [];
+
+            if (gifts.length > 0) {
+                gifts.forEach(g => {
+                    const giftItem = {
+                        tempId: Date.now() + Math.random(),
+                        productId: null,
+                        productCode: g.productCode || 'FREE-GIFT',
+                        name: g.name || 'ของแถมโปรโมชั่น',
+                        qty: Number(g.qty) || 1,
+                        price: 0,
+                        recommendedPrice: 0,
+                        discount: 0,
+                        total: 0,
+                        isGift: true,
+                        imageUrl: g.imageUrl || ''
+                    };
+
+                    let insertIndex = -1;
+                    if (g.targetTempId) {
+                        insertIndex = poItems.findIndex(it => it.tempId === g.targetTempId);
+                    }
+                    if (insertIndex === -1 && g.targetProductCode) {
+                        insertIndex = poItems.findIndex(it => !it.isGift && it.productCode && it.productCode.toUpperCase() === g.targetProductCode.toUpperCase());
+                    }
+
+                    if (insertIndex !== -1) {
+                        // Find position after target item and any existing gifts directly following it
+                        let nextIdx = insertIndex + 1;
+                        while (nextIdx < poItems.length && poItems[nextIdx].isGift) {
+                            nextIdx++;
+                        }
+                        poItems.splice(nextIdx, 0, giftItem);
+                    } else {
+                        poItems.push(giftItem);
+                    }
                 });
                 renderPOTableItemsOnly();
             } else if (hadGifts) {
@@ -11847,6 +11871,13 @@
                 if (benefitEl) {
                     if (promo.calculated_discount && promo.calculated_discount > 0) {
                         benefitEl.textContent = `-${formatCurrency(promo.calculated_discount)} บาท`;
+                    } else if (promo.free_gifts && promo.free_gifts.length > 0) {
+                        const totalQty = promo.free_gifts.reduce((sum, g) => sum + (Number(g.qty) || 1), 0);
+                        if (promo.free_gifts.length === 1) {
+                            benefitEl.textContent = `แถมฟรี ${promo.free_gifts[0].name} (${promo.free_gifts[0].qty} ชิ้น)`;
+                        } else {
+                            benefitEl.textContent = `แถมฟรี ${promo.free_gifts.length} รายการ (รวม ${totalQty} ชิ้น)`;
+                        }
                     } else if (promo.free_gift) {
                         benefitEl.textContent = `แถมฟรี ${promo.free_gift.name} (${promo.free_gift.qty} ชิ้น)`;
                     } else {

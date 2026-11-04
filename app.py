@@ -2665,6 +2665,7 @@ def evaluate_promotions():
         benefit_text = ""
         calc_discount = 0.0
         free_gift = None
+        free_gifts = []
 
         if p.promo_type == "ORDER_DISCOUNT_FIXED":
             if subtotal >= (p.min_order_amount or 0.0):
@@ -2697,13 +2698,16 @@ def evaluate_promotions():
                     reward_times = matching_qty // cond_qty
                     total_reward_qty = reward_times * reward_qty
                     clean_reward_name = (reward_name or f"{reward_code}").replace(" (ของแถมฟรี)", "").replace(" (แถมฟรี)", "").strip()
-                    free_gift = {
+                    gift_dict = {
                         "productCode": reward_code,
                         "name": clean_reward_name,
                         "qty": total_reward_qty,
                         "price": 0.0,
-                        "isGift": True
+                        "isGift": True,
+                        "targetProductCode": cond_code or None
                     }
+                    free_gift = gift_dict
+                    free_gifts = [gift_dict]
                     benefit_text = f"แถม {clean_reward_name} จำนวน {total_reward_qty} ชิ้น"
 
             # กรณีที่ 2: ไม่ได้ระบุรหัสสินค้าของแถม (แปลว่าแถมสินค้าเดียวกันกับที่ซื้อ! เช่น ซื้อชนิดเดียวกันครบ 10 ชิ้น แถม 1 ชิ้น)
@@ -2718,35 +2722,55 @@ def evaluate_promotions():
                         qualifying_items.append(it)
 
                 if qualifying_items:
-                    # เลือกสินค้าที่มีมูลค่าสูงสุดหรือยอดสั่งซื้อมากที่สุด
-                    qualifying_items.sort(key=lambda x: (float(x.get("price", 0) or 0), int(x.get("qty", 0) or 0)), reverse=True)
-                    best_match_item = qualifying_items[0]
-                    matched_qty = int(best_match_item.get("qty", 0) or 0)
-                    reward_times = matched_qty // cond_qty
-                    total_reward_qty = reward_times * reward_qty
+                    free_gifts = []
+                    benefit_items = []
 
-                    item_code = best_match_item.get("productCode") or "FREE-GIFT"
-                    item_name = best_match_item.get("name")
-                    if not item_name or item_name == item_code:
-                        p_obj = Product.query.filter_by(productCode=item_code).first()
-                        if p_obj and p_obj.name:
-                            item_name = p_obj.name
+                    for match_item in qualifying_items:
+                        matched_qty = int(match_item.get("qty", 0) or 0)
+                        reward_times = matched_qty // cond_qty
+                        if reward_times <= 0:
+                            continue
+                        total_reward_qty = reward_times * reward_qty
+
+                        item_code = match_item.get("productCode") or "FREE-GIFT"
+                        item_name = match_item.get("name")
+                        if not item_name or item_name == item_code:
+                            p_obj = Product.query.filter_by(productCode=item_code).first()
+                            if p_obj and p_obj.name:
+                                item_name = p_obj.name
+                            else:
+                                item_name = item_code
+
+                        clean_name = item_name.replace(" (ของแถมฟรี)", "").replace(" (แถมฟรี)", "").strip()
+                        gift_dict = {
+                            "productCode": item_code,
+                            "name": clean_name,
+                            "qty": total_reward_qty,
+                            "price": 0.0,
+                            "isGift": True,
+                            "targetTempId": match_item.get("tempId"),
+                            "targetProductCode": item_code,
+                            "imageUrl": match_item.get("imageUrl") or ""
+                        }
+                        free_gifts.append(gift_dict)
+                        benefit_items.append(f"{clean_name} ({total_reward_qty} ชิ้น)")
+
+                    if free_gifts:
+                        is_match = True
+                        free_gift = free_gifts[0]  # For backward-compatibility
+                        total_gift_units = sum(g["qty"] for g in free_gifts)
+                        if len(free_gifts) == 1:
+                            benefit_text = f"แถม {free_gifts[0]['name']} จำนวน {free_gifts[0]['qty']} ชิ้น"
                         else:
-                            item_name = item_code
-
-                    clean_name = item_name.replace(" (ของแถมฟรี)", "").replace(" (แถมฟรี)", "").strip()
-                    free_gift = {
-                        "productCode": item_code,
-                        "name": clean_name,
-                        "qty": total_reward_qty,
-                        "price": 0.0,
-                        "isGift": True,
-                        "imageUrl": best_match_item.get("imageUrl") or ""
-                    }
-                    is_match = True
-                    benefit_text = f"แถม {clean_name} จำนวน {total_reward_qty} ชิ้น"
+                            benefit_text = f"แถมฟรี {len(free_gifts)} รายการ รวม {total_gift_units} ชิ้น"
 
         if is_match:
+            gift_score = 0.0
+            if free_gifts:
+                gift_score = sum(100.0 * (g.get("qty") or 1) for g in free_gifts)
+            elif free_gift:
+                gift_score = 100.0 * (free_gift.get("qty") or 1)
+
             eligible.append({
                 "id": p.id,
                 "code": p.code,
@@ -2755,8 +2779,9 @@ def evaluate_promotions():
                 "description": p.description,
                 "calculated_discount": calc_discount,
                 "free_gift": free_gift,
+                "free_gifts": free_gifts,
                 "benefit_text": benefit_text,
-                "score": calc_discount + (100.0 if free_gift else 0.0)
+                "score": calc_discount + gift_score
             })
 
     eligible.sort(key=lambda x: x["score"], reverse=True)

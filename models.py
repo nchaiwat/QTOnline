@@ -509,7 +509,7 @@ class PurchaseOrder(db.Model):
 
     promotion_rel = db.relationship("Promotion", foreign_keys=[promotion_id], viewonly=True)
     items = db.relationship(
-        "POItem", backref="po", lazy=True, cascade="all, delete-orphan"
+        "POItem", backref="po", lazy=True, cascade="all, delete-orphan", order_by="POItem.id"
     )
     comments = db.relationship(
         "Comment", backref="po", lazy=True, cascade="all, delete-orphan"
