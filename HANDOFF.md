@@ -1,12 +1,26 @@
 # Project Handoff Document - QT-Online
 
-**Date:** 2026-10-30  
+**Date:** 2026-11-04  
 **Repository:** `https://github.com/nchaiwat/QTOnline.git` (`main` branch)  
 **Production Server:** VPS `srv832658` (`qol.windowasia.com`)  
 
 ---
 
-## 📌 สรุปการอัปเดตล่าสุด (2026-10-30)
+## 📌 สรุปสถานะระบบและงานคงค้างสำหรับ Session ถัดไป (Checkpoint: 2026-11-04)
+- **สถานะ Git:** ล่าสุดที่ `origin/main` (`commit: 1c29d37`) ไม่มีไฟล์ค้าง
+- **สถานะ Local Development Server:** รันเป็น Background Daemon อยู่บน `http://localhost:8080/` (Health Check: `200 OK`)
+- **การเปลี่ยนแปลงและฟีเจอร์ที่ทำสำเร็จในรอบนี้ (Updates 21 - 24):**
+  1. **Update 21:** แก้ไขปัญหา Local Server Crash บน Windows Python 3.14 (WinError 10014) จาก Werkzeug Reloader
+  2. **Update 22:** ตรวจสอบและวินิจฉัยปัญหาการเชื่อมต่อ SAP B1 บน VPS ที่เกิด 502 Bad Gateway จากการเชื่อมต่อ Cloudflare Edge ไปยัง Origin Gateway
+  3. **Update 23:** อัปเดตและทดสอบ Bot Token & Group ID ใหม่ของระบบ Telegram Notification ส่งข้อความทดสอบและแจ้งเตือนสำเร็จ 100%
+  4. **Update 24:** ปรับปรุงระบบโปรโมชั่น Buy X Get Y (แถมสินค้าชนิดเดียวกัน) ให้แถมครบทุกชนิดที่เข้าเงื่อนไข และจัดเรียงแถวของแถมต่อท้ายสินค้าชนิดเดียวกันทันที
+- **สิ่งที่จะทำต่อในรอบถัดไป:**
+  1. ทดสอบการสร้าง/บันทึกใบเสนอราคาจริงที่มีสินค้าแถมหลายชนิดร่วมกับโปรโมชั่นในหน้า UI Create/Edit QT
+  2. ตรวจสอบการเชื่อมต่อ SAP B1 Service Layer บน VPS เมื่อทีม Network ตรวจสอบ Cloudflare Tunnel / Origin Gateway เรียบร้อยแล้ว
+
+---
+
+## 📌 สรุปประวัติการอัปเดตระบบ
 
 ### 16. แก้ไขปัญหาการเข้าใช้งาน Local Server (พอร์ต 8080) และรองรับ Windows AD โดเมน "wa"
 - **ปัญหาเดิม:**
